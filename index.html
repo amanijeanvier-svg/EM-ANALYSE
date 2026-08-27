@@ -319,6 +319,10 @@ input{font-family:inherit;}
 .chip .x{cursor:pointer; color:var(--text-faint); font-size:12px; padding:2px 4px;}
 .chip .x:hover{color:var(--red);}
 .empty-hint{font-size:11px; color:var(--text-faint); font-style:italic;}
+.paste-hint{font-size:10.5px; color:var(--text-faint); margin:4px 2px 8px; line-height:1.4;}
+.auto-fill-btn{background:var(--panel2,#0d0f16); border:1px solid var(--line); border-radius:8px; color:var(--gold); font-size:15px; padding:6px 9px; cursor:pointer; line-height:1;}
+.auto-fill-btn:disabled{opacity:.5; cursor:wait;}
+.auto-fill-status{font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--text-faint); min-height:12px; margin:2px 4px 0;}
 .standings{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
 .standing-col .st-name{font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--gold); margin-bottom:7px; text-transform:uppercase;}
 .standing-inputs{display:flex; gap:8px; flex-wrap:wrap;}
@@ -548,9 +552,13 @@ input{font-family:inherit;}
             <div class="eyebrow">Dossier football — pièce n°1</div>
             <div class="matchup">
               <input id="nameA" class="team-input" value="A" maxlength="14">
+              <button id="autoFillBtnA" class="auto-fill-btn sfx-tap" title="Auto-remplir depuis les stats en ligne">🔎</button>
               <span class="vs">VS</span>
               <input id="nameB" class="team-input" value="B" maxlength="14">
+              <button id="autoFillBtnB" class="auto-fill-btn sfx-tap" title="Auto-remplir depuis les stats en ligne">🔎</button>
             </div>
+            <div id="autoFillStatusA" class="auto-fill-status"></div>
+            <div id="autoFillStatusB" class="auto-fill-status"></div>
           </div>
 
           <div class="field-group">
@@ -708,9 +716,13 @@ input{font-family:inherit;}
             <div class="eyebrow">Dossier basketball — pièce n°1</div>
             <div class="matchup">
               <input id="bkNameA" class="team-input" value="A" maxlength="14">
+              <button id="bkAutoFillBtnA" class="auto-fill-btn sfx-tap" title="Auto-remplir depuis les stats en ligne">🔎</button>
               <span class="vs">VS</span>
               <input id="bkNameB" class="team-input" value="B" maxlength="14">
+              <button id="bkAutoFillBtnB" class="auto-fill-btn sfx-tap" title="Auto-remplir depuis les stats en ligne">🔎</button>
             </div>
+            <div id="bkAutoFillStatusA" class="auto-fill-status"></div>
+            <div id="bkAutoFillStatusB" class="auto-fill-status"></div>
           </div>
 
           <div class="field-group">
@@ -1016,7 +1028,7 @@ input{font-family:inherit;}
       <details class="aide-section">
         <summary>Mon abonnement</summary>
         <div class="aide-body">
-          <p>Un essai gratuit de <strong id="aideTrialDays">3 jours</strong> est offert à l'inscription, avec accès complet aux deux disciplines et à la Communauté pour tout découvrir. Passé ce délai, l'accès nécessite une formule payante, réglée par Wave au numéro communiqué dans l'appli.</p>
+          <p>Un essai gratuit de <strong id="aideTrialDays">7 jours</strong> est offert à l'inscription, avec accès complet aux deux disciplines et à la Communauté pour tout découvrir. Passé ce délai, l'accès nécessite une formule payante, réglée par Wave au numéro communiqué dans l'appli.</p>
           <div id="aideFormulaCards" style="display:flex; flex-direction:column; gap:10px; margin:14px 0;"></div>
           <p>Une fois le paiement effectué, précisez la formule choisie (et la discipline si "Dossier Simple") au moment de l'envoi — l'activation peut prendre un peu de temps. Appuyez sur "J'ai payé — Vérifier" sur l'écran d'abonnement pour actualiser votre statut.</p>
           <p>Consultez les <a id="aideTermsLink" href="#" target="_blank" style="color:var(--gold);">conditions générales & politique de confidentialité</a> pour le détail des formules, tarifs et politique de remboursement.</p>
@@ -1471,7 +1483,7 @@ document.getElementById('startBtn').addEventListener('click', ()=>{
 ================================================================= */
 const SERVER_URL = 'https://ea-server-mkww.onrender.com';
 const WAVE_PAYMENT_NUMBER = '+225 07 69 50 43 04';
-const TRIAL_DAYS_LABEL = '3 jours';
+const TRIAL_DAYS_LABEL = '7 jours';
 const GATE_AUTH_KEY = 'ea_gate_auth'; // {phone, token}
 
 /* ---- Formules d'abonnement ----
@@ -2830,6 +2842,7 @@ CATS.forEach(cat=>{
   const group=document.createElement('div'); group.className='field-group';
   group.innerHTML = `<div class="field-label">${cat.label} <span class="tag">${cat.tag}</span></div>
     <div class="field-row"><input type="text" id="in-${cat.key}" placeholder="Ex: ${cat.ph}  (marqués-encaissés)"><button class="add-btn sfx-tap" data-key="${cat.key}">+</button></div>
+    <div class="paste-hint">💡 Vous pouvez coller plusieurs scores d'un coup : ex. "2-1, 1-0, 3-2"</div>
     <div class="chips" id="chips-${cat.key}"><span class="empty-hint">Aucune donnée</span></div>`;
   fieldsEl.appendChild(group);
 });
@@ -2860,6 +2873,52 @@ function updateRankPreview(prefix){
   document.getElementById(id).addEventListener('input', e=>{ standings[id]= e.target.value===''?null:parseFloat(e.target.value); updateRankPreview('A'); updateRankPreview('B'); });
 });
 document.getElementById('matchday').addEventListener('input', e=>{ standings.matchday = e.target.value || null; });
+
+/* -- Auto-remplissage par API sportive (1.1) --
+   La clé API reste côté serveur ; ici on ne fait qu'appeler /api/team-lookup et
+   redistribuer ce qu'il renvoie dans les mêmes champs que la saisie manuelle —
+   donc tout ce qui existe déjà (aperçu de zone, contexte, calcul) fonctionne
+   sans rien dupliquer. Repli silencieux vers la saisie manuelle si l'équipe
+   n'est pas trouvée ou si le service est indisponible. */
+async function autoFillFootballTeam(which){
+  const nameInput = document.getElementById(which==='A'?'nameA':'nameB');
+  const teamName = nameInput.value.trim();
+  const statusEl = document.getElementById('autoFillStatus'+which);
+  if(!teamName || teamName==='A' || teamName==='B' || teamName.length<2){
+    statusEl.textContent = "Renseignez d'abord le nom de l'équipe.";
+    try{AudioFX.error();}catch(e){}
+    return;
+  }
+  const btn = document.getElementById('autoFillBtn'+which);
+  btn.disabled = true; statusEl.style.color = 'var(--text-faint)'; statusEl.textContent = 'Recherche…';
+  const {ok, data} = await apiGet('/api/team-lookup', {sport:'football', team:teamName});
+  btn.disabled = false;
+  if(!ok || !data.found){
+    statusEl.style.color = 'var(--text-faint)';
+    statusEl.textContent = data && data.reason==='unconfigured' ? '' : 'Équipe introuvable en ligne — saisie manuelle.';
+    return;
+  }
+  if(data.form && data.form.recent && data.form.recent.length){
+    const key = which==='A' ? 'aSerie' : 'bSerie';
+    store[key].push(...data.form.recent); renderChips(key);
+  }
+  if(which==='A' && data.form && data.form.home && data.form.home.length){ store.aDom.push(...data.form.home); renderChips('aDom'); }
+  if(which==='B' && data.form && data.form.away && data.form.away.length){ store.bExt.push(...data.form.away); renderChips('bExt'); }
+  if(data.standings){
+    const rankId = which==='A'?'rankA':'rankB', ptsId = which==='A'?'ptsA':'ptsB';
+    if(data.standings.rank!=null) document.getElementById(rankId).value = data.standings.rank;
+    if(data.standings.points!=null) document.getElementById(ptsId).value = data.standings.points;
+    if(data.standings.totalTeams) document.getElementById('totalTeams').value = data.standings.totalTeams;
+    ['rankA','ptsA','rankB','ptsB','totalTeams'].forEach(id=>{ const v=document.getElementById(id).value; standings[id] = v===''?null:parseFloat(v); });
+    updateRankPreview('A'); updateRankPreview('B');
+  }
+  statusEl.style.color = 'var(--teal)';
+  statusEl.textContent = `✓ ${data.team.name}${data.league?' — '+data.league.name:''} importé`;
+  try{AudioFX.confirm();}catch(e){}
+}
+document.getElementById('autoFillBtnA').addEventListener('click', ()=>autoFillFootballTeam('A'));
+document.getElementById('autoFillBtnB').addEventListener('click', ()=>autoFillFootballTeam('B'));
+
 const matchFlags = {matchType:'championnat', league:'', stage:'poules', leg:'sec', aggAllerA:null, aggAllerB:null, injuryA:false, fatigueA:false, uncertainA:false, injuryB:false, fatigueB:false, uncertainB:false, posA:{gk:0,def:0,mid:0,att:0}, posB:{gk:0,def:0,mid:0,att:0}};
 function normalizeLeagueName(raw){ return (raw||'').trim(); }
 function leagueSlug(name){ return normalizeLeagueName(name).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,''); }
@@ -3584,6 +3643,7 @@ BK_CATS.forEach(cat=>{
   const group=document.createElement('div'); group.className='field-group';
   group.innerHTML = `<div class="field-label">${cat.label} <span class="tag">${cat.tag}</span></div>
     <div class="field-row"><input type="text" id="bk-in-${cat.key}" placeholder="Ex: ${cat.ph}  (points inscrits-encaissés)"><button class="add-btn sfx-tap" data-key="${cat.key}">+</button></div>
+    <div class="paste-hint">💡 Vous pouvez coller plusieurs scores d'un coup : ex. "102-98, 110-105, 95-101"</div>
     <div class="chips" id="bk-chips-${cat.key}"><span class="empty-hint">Aucune donnée</span></div>`;
   bkFieldsEl.appendChild(group);
 });
@@ -3616,6 +3676,50 @@ function bkUpdateRankPreview(prefix){
   });
 });
 document.getElementById('bkMatchday').addEventListener('input', e=>{ bkStandings.matchday = e.target.value || null; });
+
+/* -- Auto-remplissage par API sportive, équivalent basketball (1.1) -- */
+async function autoFillBasketballTeam(which){
+  const nameInput = document.getElementById(which==='A'?'bkNameA':'bkNameB');
+  const teamName = nameInput.value.trim();
+  const statusEl = document.getElementById('bkAutoFillStatus'+which);
+  if(!teamName || teamName==='A' || teamName==='B' || teamName.length<2){
+    statusEl.textContent = "Renseignez d'abord le nom de l'équipe.";
+    try{AudioFX.error();}catch(e){}
+    return;
+  }
+  const btn = document.getElementById('bkAutoFillBtn'+which);
+  btn.disabled = true; statusEl.style.color = 'var(--text-faint)'; statusEl.textContent = 'Recherche…';
+  const {ok, data} = await apiGet('/api/team-lookup', {sport:'basketball', team:teamName});
+  btn.disabled = false;
+  if(!ok || !data.found){
+    statusEl.style.color = 'var(--text-faint)';
+    statusEl.textContent = data && data.reason==='unconfigured' ? '' : 'Équipe introuvable en ligne — saisie manuelle.';
+    return;
+  }
+  if(data.form && data.form.recent && data.form.recent.length){
+    const key = which==='A' ? 'aSerie' : 'bSerie';
+    bkStore[key].push(...data.form.recent); bkRenderChips(key);
+  }
+  if(which==='A' && data.form && data.form.home && data.form.home.length){ bkStore.aDom.push(...data.form.home); bkRenderChips('aDom'); }
+  if(which==='B' && data.form && data.form.away && data.form.away.length){ bkStore.bExt.push(...data.form.away); bkRenderChips('bExt'); }
+  if(data.standings){
+    const rankId = which==='A'?'bkRankA':'bkRankB', ptsId = which==='A'?'bkPtsA':'bkPtsB';
+    if(data.standings.rank!=null) document.getElementById(rankId).value = data.standings.rank;
+    if(data.standings.points!=null) document.getElementById(ptsId).value = data.standings.points;
+    if(data.standings.totalTeams) document.getElementById('bkTotalTeams').value = data.standings.totalTeams;
+    ['rankA','ptsA','rankB','ptsB','totalTeams'].forEach(id=>{
+      const el = document.getElementById('bk'+id.charAt(0).toUpperCase()+id.slice(1));
+      bkStandings[id] = el.value===''?null:parseFloat(el.value);
+    });
+    bkUpdateRankPreview('A'); bkUpdateRankPreview('B');
+  }
+  statusEl.style.color = 'var(--teal)';
+  statusEl.textContent = `✓ ${data.team.name} importé`;
+  try{AudioFX.confirm();}catch(e){}
+}
+document.getElementById('bkAutoFillBtnA').addEventListener('click', ()=>autoFillBasketballTeam('A'));
+document.getElementById('bkAutoFillBtnB').addEventListener('click', ()=>autoFillBasketballTeam('B'));
+
 const bkMatchFlags = {matchType:'championnat', league:'', stage:'poules', leg:'sec', aggAllerA:null, aggAllerB:null, injuryA:false, fatigueA:false, uncertainA:false, injuryB:false, fatigueB:false, uncertainB:false, absA:0, absB:0};
 function syncStageBlockBk(){
   const isKO = bkMatchFlags.matchType==='coupe' || bkMatchFlags.matchType==='europe';
