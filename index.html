@@ -936,9 +936,9 @@ input{font-family:inherit;}
         <button class="sfx-tap" data-sub="basketball" data-group="commsport">🏀 Basketball</button>
       </div>
       <div class="subnav">
-        <button class="active sfx-tap" data-sub="all" data-group="commsub">Tout</button>
+        <button class="sfx-tap" data-sub="all" data-group="commsub">Tout</button>
         <button class="sfx-tap" data-sub="best" data-group="commsub">🏆 Meilleurs Paris</button>
-        <button class="sfx-tap" data-sub="safe" data-group="commsub">Safe Bets 82%+</button>
+        <button class="active sfx-tap" data-sub="safe" data-group="commsub">Safe Bets 82%+</button>
         <button class="sfx-tap" data-sub="value" data-group="commsub">Value Bets</button>
         <button class="sfx-tap" data-sub="score" data-group="commsub">Score exact 15%+</button>
       </div>
@@ -2021,12 +2021,14 @@ document.getElementById('communityPublishBtnBk').addEventListener('click', ()=>{
 });
 
 function renderCommCard(r){
-  // En mode "Meilleurs Paris", le serveur renvoie déjà le pari vedette choisi par fiabilité
-  // réelle (headlineBet) — sinon on reprend le plus probable, comme avant.
+  // En mode "Meilleurs Paris", le serveur renvoie déjà le pari vedette choisi par rentabilité
+  // (edge positif en priorité) puis par fiabilité réelle (headlineBet) — sinon on reprend le
+  // plus probable, comme avant.
   const best = r.headlineBet || (r.bets||[]).slice().sort((a,b)=>b.p-a.p)[0];
   const dateStr = r.timestamp ? new Date(r.timestamp).toLocaleDateString('fr-FR') : '';
-  const reliabilityBadge = (r.headlineBet && r.reliabilityN>=15)
-    ? `<div style="font-size:10px; color:var(--green,#6EE7B7); margin-top:4px;">🏆 Fiabilité réelle du marché : ${(r.reliabilityFactor*100).toFixed(0)}% (${r.reliabilityN} vérifiés communauté)</div>` : '';
+  const reliabilityBadge = !r.headlineBet ? '' : r.rentable
+    ? `<div style="font-size:10px; color:var(--green,#6EE7B7); margin-top:4px;">💰 Rentable · edge +${(best.edge*100).toFixed(1)}% (cote ${best.odds})</div>`
+    : (r.reliabilityN>=15 ? `<div style="font-size:10px; color:var(--sky,#4FC3F7); margin-top:4px;">📊 Probable · fiabilité réelle du marché : ${(r.reliabilityFactor*100).toFixed(0)}% (${r.reliabilityN} vérifiés communauté)</div>` : '');
   return `<div class="comm-card">
     <div class="comm-card-head"><span>👤 ${r.authorPseudo||'Anonyme'}</span><span>${dateStr}</span></div>
     <div class="comm-card-teams">${r.nameA} vs ${r.nameB}${r.league?` <span style="font-weight:400; color:var(--text-faint); font-size:11px;">(${r.league})</span>`:''}</div>
@@ -2037,7 +2039,7 @@ function renderCommCard(r){
 }
 
 // -- Fil communautaire (onglet Communauté) --
-const commState = {sport:'football', sub:'all', page:0};
+const commState = {sport:'football', sub:'safe', page:0};
 async function renderCommunityFeed(reset){
   if(reset) commState.page = 0;
   const sportBtn = document.querySelector('.subnav button[data-group="commsport"].active');
@@ -2666,6 +2668,26 @@ async function disableCommunityPush(){
     return {ok:true};
   }catch(e){ return {ok:false, error:e.message}; }
 }
+
+/* -- Activation automatique des notifications, façon SofaScore --
+   On ne peut pas légalement/techniquement forcer une permission navigateur sans que
+   l'utilisateur clique "Autoriser" dans la popup native — mais on peut lui proposer
+   tout de suite (au premier passage dans l'appli, juste après un geste utilisateur réel :
+   la connexion/inscription), au lieu de le laisser chercher un interrupteur caché dans
+   Profil. On ne propose qu'UNE seule fois par appareil pour ne jamais harceler. */
+const AUTO_PUSH_PROMPT_KEY = 'ea_push_auto_prompted';
+async function maybeAutoPromptPush(){
+  try{
+    if(!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if(!SERVER_URL || !apiAuthed()) return;
+    if(localStorage.getItem(AUTO_PUSH_PROMPT_KEY)) return; // déjà proposé sur cet appareil
+    if(Notification.permission!=='default') { localStorage.setItem(AUTO_PUSH_PROMPT_KEY,'1'); return; } // déjà répondu (accepté ou refusé) par le passé
+    localStorage.setItem(AUTO_PUSH_PROMPT_KEY,'1');
+    await enableCommunityPush(); // ouvre directement la popup native "Autoriser les notifications ?"
+    if(Notification.permission==='granted') localStorage.setItem('ea_notif_pref','on');
+  }catch(e){ /* silencieux : ne jamais bloquer l'entrée dans l'appli pour ça */ }
+}
+
 function notifyDayResult(sport, rec, finalA, finalB){
   const wins = rec.evaluations.filter(e=>e.hit===true).length;
   const total = rec.evaluations.filter(e=>e.hit!==null).length;
@@ -4317,11 +4339,18 @@ function renderBets(sport){
       // Cohérence : on exige un plancher de probabilité ET on écarte les paris sur des marchés
       // encore jugés "à corriger" (écart>10 pts) avec trop peu de recul pour leur faire confiance.
       const trustworthy = !(c && c.n>=15 && c.gap>10);
-      if(b.p>=0.58 && trustworthy){
-        picks.push({...b, nameA:r.nameA, nameB:r.nameB, timestamp:r.timestamp, score: b.p*reliability, reliability, marketType:mt});
+      const rentable = b.edge!=null && b.edge>0;
+      // Un pari RENTABLE (cote bookmaker connue + edge positif) passe TOUJOURS devant un pari
+      // juste PROBABLE (haute probabilité mais cote trop faible ou inconnue pour être payante) :
+      // une probabilité de 96% avec une cote à 1.05 ne rapporte presque rien même en gagnant.
+      if(rentable){
+        picks.push({...b, nameA:r.nameA, nameB:r.nameB, timestamp:r.timestamp, tierRank:0, score:b.edge, reliability, marketType:mt, rentable:true});
+      } else if(b.edge==null && b.p>=0.58 && trustworthy){
+        // edge<=0 (cote connue mais pari pas rentable) : exclu d'ici, reste visible dans Safe Bets si sa proba le justifie.
+        picks.push({...b, nameA:r.nameA, nameB:r.nameB, timestamp:r.timestamp, tierRank:1, score:b.p*reliability, reliability, marketType:mt, rentable:false});
       }
     }));
-    picks.sort((a,b)=>b.score-a.score);
+    picks.sort((a,b)=> a.tierRank-b.tierRank || b.score-a.score);
     picks = picks.slice(0,12);
   } else if(sub==='safe'){
     list.forEach(r=> r.bets.forEach(b=>{ if(b.p>=0.82) picks.push({...b, nameA:r.nameA, nameB:r.nameB, timestamp:r.timestamp}); }));
@@ -4338,7 +4367,7 @@ function renderBets(sport){
 
   if(picks.length===0){
     const emptyLabels = {
-      best: `Aucun pari suffisamment cohérent et fiable pour l'instant. Ce classement combine la probabilité annoncée ET la fiabilité réelle du type de marché mesurée sur votre historique — il devient plus précis à mesure que vous vérifiez des résultats.`,
+      best: `Aucun pari rentable ou suffisamment probable pour l'instant. Ce classement met d'abord en avant les paris RENTABLES (cote bookmaker renseignée + edge positif), puis les paris PROBABLES (fiabilité réelle du marché, sans cote connue) — il devient plus précis à mesure que vous entrez des cotes et vérifiez des résultats.`,
       safe: `Aucun pari n'atteint 82% aujourd'hui. Chaque analyse ${isBasket?'Basket Analyse':'Genèse'} qui franchit ce seuil apparaîtra ici automatiquement.`,
       value: `Aucun value bet aujourd'hui. Un value bet n'apparaît ici que si vous entrez une cote de bookmaker sur un pari dans ${isBasket?'Basket Analyse':'Genèse'} ET que l'edge calculé (probabilité modèle × cote − 1) est positif.`,
       score: `Aucun ${isBasket?'fourchette de score':'score exact'} à 15%+ aujourd'hui.`
@@ -4349,7 +4378,9 @@ function renderBets(sport){
 
   panel.innerHTML = picks.map(p=>{
     const valueTag = `<span class="tier-badge" style="color:var(--green); background:var(--green)18;">EDGE +${(p.edge*100).toFixed(1)}% · cote ${p.odds}</span>`;
-    const bestTag = `<span class="tier-badge" style="color:var(--green); background:var(--green)18;">FIABILITÉ RÉELLE ${(p.reliability*100).toFixed(0)}%</span>`;
+    const bestTag = p.rentable
+      ? `<span class="tier-badge" style="color:var(--green); background:var(--green)18;">💰 RENTABLE · EDGE +${(p.edge*100).toFixed(1)}% · cote ${p.odds}</span>`
+      : `<span class="tier-badge" style="color:var(--sky); background:var(--sky)18;">📊 PROBABLE · FIABILITÉ ${(p.reliability*100).toFixed(0)}%</span>`;
     const badgesHtml = sub==='value' ? valueTag : sub==='best' ? bestTag : (()=>{ const tier=tierBadge(p.p); return `<span class="tier-badge" style="color:${tier.color}; background:${tier.color}18;">${tier.label}</span>`; })();
     return `<div class="pick-card">
       <div class="pc-teams">${p.nameA} — ${p.nameB}</div>
@@ -4538,6 +4569,7 @@ function handleImportFile(e){
 
 async function initApp(){
   applyPlanAccess();
+  maybeAutoPromptPush();
   const trialLbl = document.getElementById('aideTrialDays'); if(trialLbl) trialLbl.textContent = TRIAL_DAYS_LABEL;
   renderFormulaCards('aideFormulaCards', false);
   loadDB();
