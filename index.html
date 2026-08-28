@@ -2880,6 +2880,15 @@ document.getElementById('matchday').addEventListener('input', e=>{ standings.mat
    donc tout ce qui existe déjà (aperçu de zone, contexte, calcul) fonctionne
    sans rien dupliquer. Repli silencieux vers la saisie manuelle si l'équipe
    n'est pas trouvée ou si le service est indisponible. */
+// Message précis selon la cause réelle de l'échec — avant, "quota dépassé" et
+// "vraiment introuvable" affichaient le même texte trompeur "équipe introuvable".
+function lookupFailureMessage(data){
+  if(!data) return 'Équipe introuvable en ligne — saisie manuelle.';
+  if(data.reason==='unconfigured') return '';
+  if(data.reason==='quota') return 'Quota de recherches en ligne atteint pour aujourd\'hui — saisie manuelle.';
+  if(data.reason==='auth') return 'Service de recherche indisponible pour le moment — saisie manuelle.';
+  return 'Équipe introuvable en ligne — saisie manuelle.';
+}
 async function autoFillFootballTeam(which){
   const nameInput = document.getElementById(which==='A'?'nameA':'nameB');
   const teamName = nameInput.value.trim();
@@ -2895,7 +2904,7 @@ async function autoFillFootballTeam(which){
   btn.disabled = false;
   if(!ok || !data.found){
     statusEl.style.color = 'var(--text-faint)';
-    statusEl.textContent = data && data.reason==='unconfigured' ? '' : 'Équipe introuvable en ligne — saisie manuelle.';
+    statusEl.textContent = lookupFailureMessage(data);
     return;
   }
   const hasForm = !!(data.form && ((data.form.recent&&data.form.recent.length) || (data.form.home&&data.form.home.length) || (data.form.away&&data.form.away.length)));
@@ -3699,7 +3708,7 @@ async function autoFillBasketballTeam(which){
   btn.disabled = false;
   if(!ok || !data.found){
     statusEl.style.color = 'var(--text-faint)';
-    statusEl.textContent = data && data.reason==='unconfigured' ? '' : 'Équipe introuvable en ligne — saisie manuelle.';
+    statusEl.textContent = lookupFailureMessage(data);
     return;
   }
   const hasForm = !!(data.form && ((data.form.recent&&data.form.recent.length) || (data.form.home&&data.form.home.length) || (data.form.away&&data.form.away.length)));
