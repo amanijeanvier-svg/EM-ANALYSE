@@ -2898,6 +2898,12 @@ async function autoFillFootballTeam(which){
     statusEl.textContent = data && data.reason==='unconfigured' ? '' : 'Équipe introuvable en ligne — saisie manuelle.';
     return;
   }
+  const hasForm = !!(data.form && ((data.form.recent&&data.form.recent.length) || (data.form.home&&data.form.home.length) || (data.form.away&&data.form.away.length)));
+  if(!data.standings && !hasForm){
+    statusEl.style.color = 'var(--text-faint)';
+    statusEl.textContent = `${data.team.name} trouvée, mais pas de données exploitables (limite du plan API) — saisie manuelle.`;
+    return;
+  }
   if(data.form && data.form.recent && data.form.recent.length){
     const key = which==='A' ? 'aSerie' : 'bSerie';
     store[key].push(...data.form.recent); renderChips(key);
@@ -3694,6 +3700,12 @@ async function autoFillBasketballTeam(which){
   if(!ok || !data.found){
     statusEl.style.color = 'var(--text-faint)';
     statusEl.textContent = data && data.reason==='unconfigured' ? '' : 'Équipe introuvable en ligne — saisie manuelle.';
+    return;
+  }
+  const hasForm = !!(data.form && ((data.form.recent&&data.form.recent.length) || (data.form.home&&data.form.home.length) || (data.form.away&&data.form.away.length)));
+  if(!data.standings && !hasForm){
+    statusEl.style.color = 'var(--text-faint)';
+    statusEl.textContent = `${data.team.name} trouvée, mais pas de données exploitables (limite du plan API) — saisie manuelle.`;
     return;
   }
   if(data.form && data.form.recent && data.form.recent.length){
