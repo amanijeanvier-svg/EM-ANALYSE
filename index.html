@@ -176,15 +176,24 @@ input{font-family:inherit;}
 .crest-frame{position:relative; display:flex; align-items:center; justify-content:center;}
 .crest-svg{position:absolute; width:145%; height:145%; z-index:0; opacity:.85; filter:drop-shadow(0 0 18px rgba(212,175,55,0.45)); pointer-events:none; animation:crestGlow 4s ease-in-out infinite;}
 @keyframes crestGlow{0%,100%{opacity:.75; filter:drop-shadow(0 0 14px rgba(212,175,55,0.35));}50%{opacity:.95; filter:drop-shadow(0 0 28px rgba(212,175,55,0.55));}}
-#eaMark .letter{display:inline-block; animation:floatY 5.5s ease-in-out infinite;}
-#eaMark .e{color:var(--gold); text-shadow:0 0 30px rgba(212,175,55,0.45);}
-#eaMark .a{background:linear-gradient(160deg,#E9D6FF 0%, var(--violet) 45%, #4B2E83 100%); -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:0 0 34px rgba(155,93,229,0.55); animation-delay:.5s;}
-#eaMark.ignite .letter{animation:none;}
-#eaMark.ignite .e{animation:igniteE .9s cubic-bezier(.2,.9,.2,1) forwards;}
-#eaMark.ignite .a{animation:igniteA .9s cubic-bezier(.2,.9,.2,1) forwards;}
-@keyframes igniteE{0%{transform:translate(0,0) scale(1); filter:brightness(1);}40%{transform:translate(-18px,-6px) scale(1.35); filter:brightness(1.8);}100%{transform:translate(-60px,-10px) scale(.4); filter:brightness(2.4); opacity:0;}}
-@keyframes igniteA{0%{transform:translate(0,0) scale(1); filter:brightness(1);}40%{transform:translate(18px,-6px) scale(1.35); filter:brightness(1.8);}100%{transform:translate(60px,-10px) scale(.4); filter:brightness(2.4); opacity:0;}}
-.splash-hint{margin-top:38px; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.22em; color:var(--text-faint); text-transform:uppercase; animation:hintPulse 2.4s ease-in-out infinite;}
+/* Cinématique d'entrée façon Netflix/FIFA : le "E" se dessine et se révèle en "Experts",
+   puis le "A" en "Analysent" — auto-jouée dès le chargement, sans besoin de toucher
+   l'écran. Un tap n'importe quand saute directement à la suite. */
+#splashStage{display:flex; flex-direction:column; align-items:center; gap:6px; position:relative; z-index:1; user-select:none;}
+#splashWordE, #splashWordA{display:flex; align-items:baseline; justify-content:center; font-family:'Fraunces',serif; font-weight:600; white-space:nowrap;}
+#splashWordE{color:var(--gold);}
+#splashWordA{background:linear-gradient(160deg,#E9D6FF 0%, var(--violet) 45%, #4B2E83 100%); -webkit-background-clip:text; background-clip:text; color:transparent;}
+#splashWordE .big-letter, #splashWordA .big-letter{font-size:min(20vw,150px); line-height:1; opacity:0; transform:scale(.4) translateY(10px); filter:brightness(1); text-shadow:0 0 30px rgba(212,175,55,0.45); animation:bigLetterIn .5s cubic-bezier(.2,.9,.2,1) forwards;}
+#splashWordA .big-letter{text-shadow:0 0 34px rgba(155,93,229,0.55); animation-delay:1.15s;}
+#splashWordE .rest-letters, #splashWordA .rest-letters{font-size:min(7.5vw,54px); line-height:1; max-width:0; opacity:0; overflow:hidden; display:inline-block; animation:revealWord .6s ease forwards;}
+#splashWordE .rest-letters{animation-delay:.55s;}
+#splashWordA .rest-letters{animation-delay:1.7s;}
+@keyframes bigLetterIn{0%{opacity:0; transform:scale(.4) translateY(10px);}55%{opacity:1; transform:scale(1.18) translateY(0);}100%{opacity:1; transform:scale(1) translateY(0);}}
+@keyframes revealWord{0%{max-width:0; opacity:0;}100%{max-width:600px; opacity:1;}}
+#splashStage.ignite{animation:igniteStage .9s cubic-bezier(.2,.9,.2,1) forwards;}
+@keyframes igniteStage{0%{transform:scale(1); filter:brightness(1); opacity:1;}40%{transform:scale(1.08); filter:brightness(1.8);}100%{transform:scale(.5); filter:brightness(2.4); opacity:0;}}
+.splash-hint{margin-top:38px; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.22em; color:var(--text-faint); text-transform:uppercase; opacity:0; animation:hintPulse 2.4s ease-in-out infinite, hintFadeIn .6s ease 1.4s forwards;}
+@keyframes hintFadeIn{to{opacity:1;}}
 
 /* ================= ONBOARDING ================= */
 #onboarding{position:fixed; inset:0; z-index:50; overflow-y:auto; opacity:0;}
@@ -443,13 +452,15 @@ input{font-family:inherit;}
       <circle cx="26" cy="58" r="2" fill="#FFE9A8"/>
       <circle cx="214" cy="58" r="2" fill="#FFE9A8"/>
     </svg>
-    <div id="eaMark"><span class="letter e">E</span><span class="letter a">A</span></div>
+    <div id="splashStage">
+      <div id="splashWordE"><span class="big-letter">E</span><span class="rest-letters">xperts</span></div>
+      <div id="splashWordA"><span class="big-letter">A</span><span class="rest-letters">nalysent</span></div>
+    </div>
   </div>
-  <div class="splash-hint">Touchez l'écran pour entrer</div>
+  <div class="splash-hint">Touchez pour passer</div>
 </div>
 <canvas id="burstCanvas"></canvas>
 <div id="flashOverlay"></div>
-
 <!-- ================= ONBOARDING ================= -->
 <div id="onboarding" class="hidden">
   <canvas id="starfield"></canvas>
@@ -472,6 +483,11 @@ input{font-family:inherit;}
 <div id="subscribeGate" class="hidden" style="position:fixed; inset:0; z-index:500; background:#05060A; display:flex; align-items:center; justify-content:center; padding:20px;">
   <div style="width:100%; max-width:380px;">
     <div class="onboarding-mark" style="text-align:center; margin-bottom:24px;"><span class="e">E</span><span class="a">A</span> — CABINET D'ANALYSE PRIVÉE</div>
+
+    <div id="publicStatsBanner" class="hidden" style="text-align:center; margin-bottom:20px; padding:14px; background:rgba(212,175,55,0.08); border:1px solid rgba(212,175,55,0.3); border-radius:10px;">
+      <div style="font-size:28px; font-weight:700; color:var(--gold); font-family:'Fraunces',serif; line-height:1.1;" id="publicStatsRate">—</div>
+      <div style="font-size:10px; color:var(--text-faint); letter-spacing:.05em; text-transform:uppercase; margin-top:4px;" id="publicStatsSub">taux de réussite vérifié — communauté EA</div>
+    </div>
 
     <div id="gateLoading" style="text-align:center; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; font-size:12px;">Vérification de l'accès...</div>
 
@@ -500,6 +516,9 @@ input{font-family:inherit;}
     <div id="gateBlocked" class="hidden" style="text-align:center;">
       <p style="font-size:15px; margin-bottom:6px;">⏳ Abonnement requis</p>
       <p style="color:var(--text-dim); font-size:12.5px; line-height:1.6; margin-bottom:14px;" id="gateBlockedMsg">Votre période d'essai est terminée.</p>
+      <div style="display:flex; align-items:center; justify-content:center; gap:6px; background:rgba(79,217,201,0.08); border:1px solid rgba(79,217,201,0.35); border-radius:10px; padding:9px 12px; margin-bottom:16px; font-size:11.5px; color:var(--teal);">
+        🛡️ Satisfait ou remboursé sous 48h si l'accès ne correspond pas à vos attentes
+      </div>
       <p style="color:var(--text-faint); font-size:11px; margin-bottom:10px; text-align:left;">Choisissez votre formule :</p>
       <div id="gateFormulaCards" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;"></div>
       <p style="color:var(--text-faint); font-size:11px; margin-bottom:8px; text-align:left;">Durée souhaitée :</p>
@@ -514,6 +533,7 @@ input{font-family:inherit;}
         4. Appuyez sur "J'ai payé" pour vérifier
       </div>
       <button id="gateRecheckBtn" class="glow-btn sfx-confirm" style="width:100%; margin-bottom:10px;">J'ai payé — Vérifier</button>
+      <a id="gateWhatsappBtn" target="_blank" rel="noopener" style="display:block; width:100%; box-sizing:border-box; background:rgba(37,211,102,0.1); border:1px solid rgba(37,211,102,0.4); color:#25D366; border-radius:10px; padding:10px; font-size:12px; text-decoration:none; margin-bottom:10px;">💬 Besoin d'aide ? Écrivez-nous sur WhatsApp</a>
       <button id="gateLogoutBtn" style="width:100%; background:transparent; border:1px solid var(--line); color:var(--text-dim); border-radius:10px; padding:10px; font-size:12px; cursor:pointer;">Changer de compte</button>
     </div>
   </div>
@@ -521,6 +541,7 @@ input{font-family:inherit;}
 
 <!-- ================= APP ================= -->
 <div id="app" class="hidden">
+  <div id="eaToastHost" style="position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:900; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none; width:min(92vw,380px);"></div>
   <nav class="topbar" style="flex-direction:column; align-items:stretch; gap:10px;">
     <div style="display:flex; align-items:center; gap:14px;">
       <div class="brand-mini"><span class="e">E</span><span class="a">A</span></div>
@@ -973,6 +994,8 @@ input{font-family:inherit;}
       <h2 class="shimmer-title">Aide</h2>
       <div class="subtag">Tout ce qu'il faut savoir pour utiliser l'appli sans accompagnement</div>
 
+      <a id="aideWhatsappBtn" target="_blank" rel="noopener" style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; box-sizing:border-box; background:rgba(37,211,102,0.1); border:1px solid rgba(37,211,102,0.4); color:#25D366; border-radius:10px; padding:12px; font-size:13px; font-weight:600; text-decoration:none; margin-bottom:18px;">💬 Contacter le support sur WhatsApp</a>
+
       <details class="aide-section" open>
         <summary>À quoi sert cette appli ?</summary>
         <div class="aide-body">
@@ -1424,11 +1447,11 @@ function updateMusicButton(){
    2. SPLASH — ignition cinématique
 ================================================================= */
 let ignited=false;
-const splashEl=document.getElementById('splash'), eaMark=document.getElementById('eaMark'), flashOverlay=document.getElementById('flashOverlay'), onboardingEl=document.getElementById('onboarding');
+const splashEl=document.getElementById('splash'), splashStage=document.getElementById('splashStage'), flashOverlay=document.getElementById('flashOverlay'), onboardingEl=document.getElementById('onboarding');
 function runBurst(){
   const canvas=document.getElementById('burstCanvas'), c=canvas.getContext('2d');
   canvas.width=window.innerWidth; canvas.height=window.innerHeight;
-  const rect=eaMark.getBoundingClientRect(); const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+  const rect=splashStage.getBoundingClientRect(); const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
   const colors=['#D4AF37','#9B5DE5','#4FD9C9','#E9E7E0'];
   const particles=Array.from({length:150},()=>{ const a=Math.random()*Math.PI*2, s=3+Math.random()*15;
     return {x:cx,y:cy,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r:1+Math.random()*2.4,color:colors[Math.floor(Math.random()*colors.length)],life:55+Math.random()*45}; });
@@ -1444,11 +1467,16 @@ function runBurst(){
 }
 function triggerIgnite(){
   if(ignited) return; ignited=true;
+  clearTimeout(splashAutoTimer);
   try{ AudioFX.whoosh(); }catch(e){}
-  splashEl.classList.add('ignited'); eaMark.classList.add('ignite'); flashOverlay.classList.add('flash'); runBurst();
+  splashEl.classList.add('ignited'); splashStage.classList.add('ignite'); flashOverlay.classList.add('flash'); runBurst();
   setTimeout(()=>{ splashEl.classList.add('fade-out'); onboardingEl.classList.remove('hidden'); onboardingEl.classList.add('fade-in'); applySeasonTheme(); initStarfield(); initSeasonCanvas(); }, 750);
   setTimeout(()=>{ splashEl.style.display='none'; }, 1600);
 }
+// Cinématique auto-jouée : "E"→"Experts" puis "A"→"Analysent" se dessinent seuls (voir CSS),
+// et la suite s'enchaîne automatiquement — jamais besoin de toucher l'écran pour continuer.
+// Un tap n'importe quand pendant la séquence saute directement à la suite.
+const splashAutoTimer = setTimeout(triggerIgnite, 2600);
 ['touchstart','mousedown','keydown'].forEach(evt=> window.addEventListener(evt, triggerIgnite, {once:true, passive:true}));
 
 let starfieldStarted=false;
@@ -1483,6 +1511,11 @@ document.getElementById('startBtn').addEventListener('click', ()=>{
 ================================================================= */
 const SERVER_URL = 'https://ea-server-mkww.onrender.com';
 const WAVE_PAYMENT_NUMBER = '+225 07 69 50 43 04';
+// ⚠️ À REMPLACER par ton vrai numéro WhatsApp Business (format international, sans espaces
+// ni "+" pour le lien wa.me — ex: '2250769504304'). Laissé identique au numéro Wave par défaut.
+const WHATSAPP_SUPPORT_NUMBER = '2250769504304';
+document.getElementById('gateWhatsappBtn').href = `https://wa.me/${WHATSAPP_SUPPORT_NUMBER}?text=${encodeURIComponent("Bonjour, j'ai besoin d'aide avec mon abonnement EA.")}`;
+document.getElementById('aideWhatsappBtn').href = `https://wa.me/${WHATSAPP_SUPPORT_NUMBER}?text=${encodeURIComponent("Bonjour, j'ai une question sur l'appli EA.")}`;
 const TRIAL_DAYS_LABEL = '7 jours';
 const GATE_AUTH_KEY = 'ea_gate_auth'; // {phone, token}
 
@@ -1591,9 +1624,23 @@ function enterApp(){
   setTimeout(()=>{ gateEl2.classList.add('hidden'); gateEl2.style.opacity='1'; appEl.classList.remove('hidden'); appEl.classList.add('fade-in'); initApp(); }, 420);
 }
 
+// Argument de confiance affiché AVANT même l'inscription (5.2) — appel public, sans
+// authentification, donc peut se faire dès l'affichage de l'écran de connexion.
+async function fetchPublicStats(){
+  if(!SERVER_URL) return;
+  try{
+    const r = await fetch(`${SERVER_URL}/api/public-stats`);
+    const data = await r.json();
+    if(!r.ok || data.winRate==null || data.totalVerifiedBets < 20) return; // pas assez de recul = on ne l'affiche pas plutôt que d'afficher un chiffre peu significatif
+    document.getElementById('publicStatsRate').textContent = `${Math.round(data.winRate*100)}%`;
+    document.getElementById('publicStatsSub').textContent = `taux de réussite vérifié — ${data.totalVerifiedBets} paris sur ${data.totalVerifiedMatches} matchs`;
+    document.getElementById('publicStatsBanner').classList.remove('hidden');
+  }catch(e){ /* silencieux : ce n'est qu'un argument de confiance, jamais bloquant */ }
+}
 async function runAccessGate(){
   const gateEl2 = document.getElementById('subscribeGate');
   gateEl2.classList.remove('hidden');
+  fetchPublicStats(); // affiché avant même de savoir si la personne va se connecter ou s'inscrire
 
   if(!SERVER_URL){
     // Gate non configuré (mode local/dev) : accès direct, comme avant cette mise à jour.
@@ -2736,8 +2783,29 @@ function markResult(sport, recordId, finalA, finalB, finalStats){
   fetchSharedCalibration(sport, rec.league); // rafraîchit le cache partagé avec ce nouveau match inclus
   archiveResult(sport, rec, finalA, finalB);
   notifyDayResult(sport, rec, finalA, finalB);
+  maybePromptPlayStoreRating(evaluations);
   renderHistory();
   renderJournal();
+}
+
+/* -- Demande de notation Play Store (5.6) -- uniquement au pic émotionnel positif
+   (juste après un pari gagnant), jamais après un échec, et jamais plus d'une fois. */
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.ea.cabinet'; // ⚠️ à remplacer par le vrai lien une fois publié
+function maybePromptPlayStoreRating(evaluations){
+  if(localStorage.getItem('ea_rating_prompted')==='1') return;
+  const hasWin = evaluations.some(e=>e.hit===true);
+  if(!hasWin) return;
+  localStorage.setItem('ea_rating_prompted', '1');
+  setTimeout(()=>{
+    const host = document.getElementById('eaToastHost');
+    if(!host) return;
+    const el = document.createElement('div');
+    el.style.cssText = 'pointer-events:auto; background:var(--panel2,#0d0f16); border:1px solid var(--gold); border-radius:12px; padding:14px 16px; font-size:12.5px; color:var(--text); box-shadow:0 8px 24px rgba(0,0,0,.45); text-align:center; max-width:340px;';
+    el.innerHTML = `⭐ Ce pari est passé ! Un petit avis sur le Play Store nous aide énormément.<br><div style="display:flex; gap:8px; margin-top:10px;"><button id="rateNowBtn" style="flex:1; background:var(--gold); border:none; color:#1a1206; border-radius:8px; padding:8px; font-size:12px; cursor:pointer; font-weight:600;">Noter maintenant</button><button id="rateLaterBtn" style="flex:1; background:transparent; border:1px solid var(--line); color:var(--text-dim); border-radius:8px; padding:8px; font-size:12px; cursor:pointer;">Plus tard</button></div>`;
+    host.appendChild(el);
+    document.getElementById('rateNowBtn').addEventListener('click', ()=>{ window.open(PLAY_STORE_URL, '_blank'); el.remove(); });
+    document.getElementById('rateLaterBtn').addEventListener('click', ()=>el.remove());
+  }, 900);
 }
 
 /* ================================================================
@@ -4252,6 +4320,7 @@ function renderHistory(){
       <div class="rc-result-done">
         <span>✓ Résultat enregistré : <b>${r.finalScore.a}-${r.finalScore.b}</b></span>
         <div class="rc-evals">${r.evaluations.map(e=>`<span class="eval-chip ${e.hit===true?'hit':e.hit===false?'miss':'nv'}">${e.hit===true?'✓':e.hit===false?'✗':'—'} ${e.label}</span>`).join('')}</div>
+        ${r.evaluations.some(e=>e.hit===true) ? `<button class="share-win-btn sfx-tap" data-name-a="${r.nameA}" data-name-b="${r.nameB}" data-score="${r.finalScore.a}-${r.finalScore.b}" style="margin-top:10px; background:transparent; border:1px solid var(--teal,#6EE7B7); color:var(--teal,#6EE7B7); border-radius:8px; padding:7px 12px; font-size:11.5px; cursor:pointer;">📤 Partager ce pari gagnant</button>` : ''}
       </div>
     ` : (()=>{
       const hasCorners = r.bets.some(b=>b.eval && b.eval.type==='statLine' && b.eval.stat==='corners');
@@ -4297,6 +4366,23 @@ function renderHistory(){
       markResult(sp, id, parseInt(aVal,10), parseInt(bVal,10), finalStats);
     });
   });
+  panel.querySelectorAll('.share-win-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>shareWinningBet(btn.dataset.nameA, btn.dataset.nameB, btn.dataset.score));
+  });
+}
+
+/* -- Partage en un tap d'un pari gagnant (5.9) -- */
+const APP_SHARE_URL = 'https://vier-svg.github.io'; // ⚠️ à remplacer par ton vrai lien public si différent
+async function shareWinningBet(nameA, nameB, score){
+  const text = `J'ai suivi ce pari EA sur ${nameA} vs ${nameB} et il est passé ✅ (${score}) — essaie toi aussi :`;
+  if(navigator.share){
+    try{ await navigator.share({ text, url: APP_SHARE_URL }); }catch(e){ /* annulé par la personne, rien à faire */ }
+  } else {
+    try{
+      await navigator.clipboard.writeText(`${text} ${APP_SHARE_URL}`);
+      showToast('📋 Copié — colle-le où tu veux partager');
+    }catch(e){ showToast(text+' '+APP_SHARE_URL, 5000); }
+  }
 }
 
 /* ================================================================
@@ -4692,9 +4778,34 @@ function handleImportFile(e){
 }
 
 
+/* -- Petit toast réutilisable (streak, partage, notation...) -- */
+function showToast(text, ms=3200){
+  const host = document.getElementById('eaToastHost');
+  if(!host) return;
+  const el = document.createElement('div');
+  el.style.cssText = 'pointer-events:auto; background:var(--panel2,#0d0f16); border:1px solid var(--gold); border-radius:10px; padding:10px 16px; font-size:12.5px; color:var(--text); box-shadow:0 8px 24px rgba(0,0,0,.4); text-align:center; opacity:0; transform:translateY(-10px); transition:all .3s ease;';
+  el.textContent = text;
+  host.appendChild(el);
+  requestAnimationFrame(()=>{ el.style.opacity='1'; el.style.transform='translateY(0)'; });
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(-10px)'; setTimeout(()=>el.remove(), 300); }, ms);
+}
+
+/* -- Série de connexions quotidiennes (5.7) -- validée côté serveur, un seul appel par jour. */
+async function dailyStreakCheckin(){
+  if(!SERVER_URL || !apiAuthed()) return;
+  try{
+    const {ok, data} = await apiPost('/api/streak-checkin', {});
+    if(!ok || data.alreadyCheckedIn) return;
+    let msg = `🔥 Série de ${data.streak} jour${data.streak>1?'s':''} — +${data.xpEarned} XP`;
+    if(data.milestone) msg += ` (palier atteint !)`;
+    showToast(msg);
+  }catch(e){ /* silencieux */ }
+}
+
 async function initApp(){
   applyPlanAccess();
   maybeAutoPromptPush();
+  dailyStreakCheckin();
   const trialLbl = document.getElementById('aideTrialDays'); if(trialLbl) trialLbl.textContent = TRIAL_DAYS_LABEL;
   renderFormulaCards('aideFormulaCards', false);
   loadDB();
