@@ -171,6 +171,15 @@ input{font-family:inherit;}
 #splash.fade-out{opacity:0; pointer-events:none;}
 #burstCanvas{position:fixed; inset:0; z-index:101; pointer-events:none;}
 #flashOverlay{position:fixed; inset:0; z-index:102; pointer-events:none; background:radial-gradient(circle, #fff 0%, var(--violet) 35%, transparent 70%); opacity:0;}
+/* Petit éclat "étincelle" au changement d'onglet — masque le bref instant où le contenu se
+   construit, pour que la transition paraisse voulue plutôt que subie (jamais de flash brut). */
+#tabLoadOverlay{position:fixed; inset:0; z-index:850; pointer-events:none; opacity:0;}
+#tabLoadOverlay.show{opacity:1;}
+#tabLoadOverlay.show::before{content:''; position:absolute; top:44%; left:50%; width:3px; height:3px; border-radius:50%;
+  box-shadow: 0 0 14px 5px rgba(212,175,55,.95), 46px -58px 10px 2px rgba(155,93,229,.85), -52px -32px 8px 2px rgba(79,217,201,.85),
+    62px 48px 8px 2px rgba(212,175,55,.75), -60px 56px 10px 2px rgba(155,93,229,.7), 10px 70px 7px 1px rgba(79,217,201,.6);
+  animation: sparkPulse .42s ease-out;}
+@keyframes sparkPulse{0%{transform:translate(-50%,-50%) scale(.25); opacity:0;}45%{opacity:1;}100%{transform:translate(-50%,-50%) scale(1.7); opacity:0;}}
 #flashOverlay.flash{animation:flashPulse .9s ease forwards;}
 #eaMark{display:flex; align-items:baseline; gap:2px; font-family:'Fraunces',serif; font-weight:600; font-size:min(22vw,160px); user-select:none; position:relative; z-index:1;}
 .crest-frame{position:relative; display:flex; align-items:center; justify-content:center;}
@@ -399,6 +408,10 @@ input{font-family:inherit;}
 .btn-outline:hover{border-color:var(--gold-dim); color:var(--gold);}
 .btn-secondary:hover{border-color:var(--red); color:var(--red);}
 .engine-badge{font-family:'IBM Plex Mono',monospace; font-size:10px; padding:4px 9px; border-radius:4px; border:1px solid var(--line); color:var(--text-faint);}
+.completeness-badge{display:inline-flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:5px 10px; border-radius:6px; border:1px solid var(--line);}
+.completeness-badge.full{color:var(--teal,#6EE7B7); border-color:rgba(110,231,183,0.35); background:rgba(110,231,183,0.06);}
+.completeness-badge.partial{color:var(--gold); border-color:rgba(212,175,55,0.35); background:rgba(212,175,55,0.06);}
+.completeness-badge.low{color:var(--text-faint); border-color:var(--line);}
 .engine-badge.on{color:var(--teal); border-color:var(--teal-dim);}
 .scores-row{display:flex; gap:14px; flex-wrap:wrap;}
 .score-card{flex:1; min-width:190px; background:var(--panel2); border:1px solid var(--line); padding:18px; position:relative; border-radius:10px;}
@@ -461,6 +474,7 @@ input{font-family:inherit;}
 </div>
 <canvas id="burstCanvas"></canvas>
 <div id="flashOverlay"></div>
+<div id="tabLoadOverlay"></div>
 <!-- ================= ONBOARDING ================= -->
 <div id="onboarding" class="hidden">
   <canvas id="starfield"></canvas>
@@ -554,8 +568,6 @@ input{font-family:inherit;}
       <button class="tab sfx-tab" data-tab="hi"><span class="ic">🕓</span>Histoire</button>
       <button class="tab sfx-tab" data-tab="rc"><span class="ic">🔎</span>Recherche</button>
       <button class="tab sfx-tab" data-tab="be"><span class="ic">🎯</span>Bets</button>
-      <button class="tab sfx-tab" data-tab="bb"><span class="ic">🎯</span>Bets Basket</button>
-      <button class="tab sfx-tab" data-tab="jr"><span class="ic">📅</span>Journal</button>
       <button class="tab sfx-tab" data-tab="comm"><span class="ic">🌐</span>Communauté</button>
       <button class="tab sfx-tab" data-tab="classement"><span class="ic">🏆</span>Classement</button>
       <button class="tab sfx-tab" data-tab="aide"><span class="ic">❓</span>Aide</button>
@@ -715,7 +727,7 @@ input{font-family:inherit;}
             <p>Aucune donnée traitée. Complétez le classement et les six séries à gauche, puis générez le verdict.</p>
           </div>
           <div id="resultsGe" style="display:none;">
-            <div style="padding:22px 22px 0;"><div class="section-title">Moteurs actifs</div><div id="enginesRowGe" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:18px;"></div></div>
+            <div style="padding:22px 22px 0;"><div class="section-title">Moteurs actifs</div><div id="enginesRowGe" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div><div id="completenessGe" style="margin-bottom:18px;"></div></div>
             <div style="padding:0 22px 22px;"><div class="section-title">Scores exacts probables</div><div class="scores-row" id="scoresRowGe"></div><div class="lambda-row" id="lambdaRowGe"></div></div>
             <div style="padding:0 22px 22px;"><div class="section-title">Paris retenus</div><div id="betsListGe"></div></div>
             <div style="padding:0 22px 22px;">
@@ -866,7 +878,7 @@ input{font-family:inherit;}
             <p>Aucune donnée traitée. Complétez le classement et les six séries à gauche, puis générez le verdict.</p>
           </div>
           <div id="resultsBk" style="display:none;">
-            <div style="padding:22px 22px 0;"><div class="section-title">Moteurs actifs</div><div id="enginesRowBk" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:18px;"></div></div>
+            <div style="padding:22px 22px 0;"><div class="section-title">Moteurs actifs</div><div id="enginesRowBk" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div><div id="completenessBk" style="margin-bottom:18px;"></div></div>
             <div style="padding:0 22px 22px;"><div class="section-title">Fourchettes de score probables</div><div class="scores-row" id="scoresRowBk"></div><div class="lambda-row" id="lambdaRowBk"></div></div>
             <div style="padding:0 22px 22px;"><div class="section-title">Paris retenus</div><div id="betsListBk"></div></div>
             <div style="padding:0 22px 22px;">
@@ -883,22 +895,26 @@ input{font-family:inherit;}
     <!-- ========== HISTOIRE ========== -->
     <section id="view-hi" class="view">
       <h2 class="shimmer-title">Histoire</h2>
-      <div class="subtag">Journal des analyses du jour</div>
-      <div style="display:flex; gap:8px; margin-bottom:16px;">
-        <button class="btn-outline sfx-tap" id="exportBtn">⬇ Exporter mes données</button>
-        <button class="btn-outline sfx-tap" id="importBtn">⬆ Importer une sauvegarde</button>
-        <input type="file" id="importFile" accept="application/json" class="hidden">
+      <div class="subtag">Vos analyses, jour par jour — aujourd'hui en direct, les jours précédents en archive</div>
+      <div id="historySettingsCards"></div>
+      <div class="glass" style="padding:10px 6px; margin-bottom:14px;">
+        <div id="historyDayScroller" style="display:flex; gap:8px; overflow-x:auto; padding:4px 6px;"></div>
       </div>
-      <div class="glass countdown-bar">
-        <div class="countdown-ring"><svg width="44" height="44"><circle class="bg" cx="22" cy="22" r="18" fill="none" stroke-width="4"/><circle class="fg" id="ringHi" cx="22" cy="22" r="18" fill="none" stroke-width="4" stroke-dasharray="113"/></svg></div>
-        <div class="countdown-text"><div class="lbl">Réinitialisation dans</div><div class="val" id="countdownHi">--:--:--</div></div>
+      <div id="historyTodayBlock">
+        <div class="glass countdown-bar">
+          <div class="countdown-ring"><svg width="44" height="44"><circle class="bg" cx="22" cy="22" r="18" fill="none" stroke-width="4"/><circle class="fg" id="ringHi" cx="22" cy="22" r="18" fill="none" stroke-width="4" stroke-dasharray="113"/></svg></div>
+          <div class="countdown-text"><div class="lbl">Réinitialisation dans</div><div class="val" id="countdownHi">--:--:--</div></div>
+        </div>
+        <div class="subnav">
+          <button class="active sfx-tap" data-sub="football" data-group="hi">⚽ Football</button>
+          <button class="sfx-tap" data-sub="basketball" data-group="hi">🏀 Basketball</button>
+        </div>
+        <div id="dailySummary" style="display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap;"></div>
+        <div id="historyPanel"></div>
       </div>
-      <div class="subnav">
-        <button class="active sfx-tap" data-sub="football" data-group="hi">⚽ Football</button>
-        <button class="sfx-tap" data-sub="basketball" data-group="hi">🏀 Basketball</button>
+      <div id="historyArchiveBlock" style="display:none;">
+        <div id="journalPanel"></div>
       </div>
-      <div id="dailySummary" style="display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap;"></div>
-      <div id="historyPanel"></div>
     </section>
 
     <!-- ========== RECHERCHE ========== -->
@@ -918,7 +934,11 @@ input{font-family:inherit;}
     <!-- ========== BETS ========== -->
     <section id="view-be" class="view">
       <h2 class="shimmer-title">Bets</h2>
-      <div class="subtag">Sélections issues de vos analyses Genèse du jour</div>
+      <div class="subtag">Sélections issues de vos analyses du jour</div>
+      <div class="subnav" id="betsSportToggle">
+        <button class="active sfx-tap" data-sub="football" data-group="betsport">⚽ Football</button>
+        <button class="sfx-tap" data-sub="basketball" data-group="betsport">🏀 Basketball</button>
+      </div>
       <div class="glass countdown-bar">
         <div class="countdown-ring"><svg width="44" height="44"><circle class="bg" cx="22" cy="22" r="18" fill="none" stroke-width="4"/><circle class="fg" id="ringBe" cx="22" cy="22" r="18" fill="none" stroke-width="4" stroke-dasharray="113"/></svg></div>
         <div class="countdown-text"><div class="lbl">Réinitialisation dans</div><div class="val" id="countdownBe">--:--:--</div></div>
@@ -930,33 +950,6 @@ input{font-family:inherit;}
         <button class="sfx-tap" data-sub="score" data-group="be"><svg class="chest-ic" style="color:var(--violet)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Score Exact 15%+</button>
       </div>
       <div id="betsPanel"></div>
-    </section>
-
-    <!-- ========== BETS BASKET ========== -->
-    <section id="view-bb" class="view">
-      <h2 class="shimmer-title">Bets Basket</h2>
-      <div class="subtag">Sélections issues de vos analyses Basket Analyse du jour</div>
-      <div class="glass countdown-bar">
-        <div class="countdown-ring"><svg width="44" height="44"><circle class="bg" cx="22" cy="22" r="18" fill="none" stroke-width="4"/><circle class="fg" id="ringBb" cx="22" cy="22" r="18" fill="none" stroke-width="4" stroke-dasharray="113"/></svg></div>
-        <div class="countdown-text"><div class="lbl">Réinitialisation dans</div><div class="val" id="countdownBb">--:--:--</div></div>
-      </div>
-      <div class="subnav">
-        <button class="active sfx-tap" data-sub="best" data-group="bb"><svg class="chest-ic" style="color:var(--green)" viewBox="0 0 24 24" width="15" height="15"><path d="M12 2l2.6 6.2L21 9l-5 4.6L17.4 21 12 17.3 6.6 21 8 13.6 3 9l6.4-.8z" fill="currentColor"/></svg> Meilleurs Paris</button>
-        <button class="sfx-tap" data-sub="safe" data-group="bb"><svg class="chest-ic" style="color:var(--gold)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Safe Bets 82%+</button>
-        <button class="sfx-tap" data-sub="value" data-group="bb"><svg class="chest-ic" style="color:var(--sky)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Value Bets (edge réel)</button>
-        <button class="sfx-tap" data-sub="score" data-group="bb"><svg class="chest-ic" style="color:var(--violet)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Fourchette de score 15%+</button>
-      </div>
-      <div id="betsBasketPanel"></div>
-    </section>
-
-    <!-- ========== JOURNAL ========== -->
-    <section id="view-jr" class="view">
-      <h2 class="shimmer-title">Journal</h2>
-      <div class="subtag">Historique permanent, jour par jour — paris vérifiés et scores exacts trouvés</div>
-      <div class="glass" style="padding:10px 6px; margin-bottom:14px;">
-        <div id="journalDayScroller" style="display:flex; gap:8px; overflow-x:auto; padding:4px 6px;"></div>
-      </div>
-      <div id="journalPanel"></div>
     </section>
 
     <!-- ========== COMMUNAUTÉ ========== -->
@@ -974,11 +967,23 @@ input{font-family:inherit;}
         <button class="active sfx-tap" data-sub="safe" data-group="commsub">Safe Bets 82%+</button>
         <button class="sfx-tap" data-sub="value" data-group="commsub">Value Bets</button>
         <button class="sfx-tap" data-sub="score" data-group="commsub">Score exact 15%+</button>
+        <button class="sfx-tap" data-sub="combos" data-group="commsub">🎰 Combinés</button>
       </div>
 
-      <div id="commFeedPanel"></div>
-      <div style="text-align:center; margin-top:14px;">
-        <button id="commLoadMoreBtn" class="hidden" style="background:transparent; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:9px 18px; font-size:12px; cursor:pointer;">Charger plus</button>
+      <div id="commFeedBlock">
+        <div id="commFeedPanel"></div>
+        <div style="text-align:center; margin-top:14px;">
+          <button id="commLoadMoreBtn" class="hidden" style="background:transparent; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:9px 18px; font-size:12px; cursor:pointer;">Charger plus</button>
+        </div>
+      </div>
+
+      <div id="commCombosBlock" class="hidden">
+        <div class="glass" style="padding:10px 6px; margin-bottom:14px;">
+          <div id="commComboDayScroller" style="display:flex; gap:8px; overflow-x:auto; padding:4px 6px;"></div>
+        </div>
+        <div id="commCombosPanel"></div>
+        <div class="section-label" style="margin-top:22px;">🎯 Scores exacts gagnés — 20 derniers jours</div>
+        <div id="commExactWinsPanel"></div>
       </div>
     </section>
 
@@ -1788,14 +1793,19 @@ function applyPlanAccess(){
   const plan = getEffectivePlan();
   const formula = getFormula(plan.id);
   const show = (tab, visible)=>{ const b = document.querySelector(`.tab[data-tab="${tab}"]`); if(b) b.style.display = visible ? '' : 'none'; };
+  const sportToggle = document.getElementById('betsSportToggle');
   if(formula.id==='simple'){
     const sport = plan.sport || 'ge';
-    show('ge', sport==='ge'); show('be', sport==='ge');
-    show('bk', sport==='bk'); show('bb', sport==='bk');
+    show('ge', sport==='ge'); show('bk', sport==='bk'); show('be', true);
     show('comm', false); show('classement', false);
+    // Un seul sport disponible sur cette formule : l'onglet Bets fusionné reste visible mais
+    // se verrouille dessus, et le sélecteur de sport n'a plus lieu d'être affiché.
+    setBetsSelectedSport(sport==='bk' ? 'basketball' : 'football');
+    if(sportToggle) sportToggle.style.display = 'none';
   } else {
-    show('ge', true); show('be', true); show('bk', true); show('bb', true);
+    show('ge', true); show('bk', true); show('be', true);
     show('comm', true); show('classement', true);
+    if(sportToggle) sportToggle.style.display = '';
   }
   // Si l'onglet actif vient d'être masqué, on bascule vers le premier onglet visible.
   const activeBtn = document.querySelector('.tab.active');
@@ -1873,21 +1883,34 @@ gateEl('gateLogoutBtn')?.addEventListener('click', ()=>{ clearGateAuth(); showAu
 /* ================================================================
    3. NAVIGATION — 5 onglets + sous-onglets
 ================================================================= */
+function flashTabSpark(){
+  const ov = document.getElementById('tabLoadOverlay');
+  if(!ov) return;
+  ov.classList.remove('show'); void ov.offsetWidth; // force le redémarrage de l'animation même si elle vient de tourner
+  ov.classList.add('show');
+  setTimeout(()=>ov.classList.remove('show'), 420);
+}
 document.querySelectorAll('.tab').forEach(btn=>{
   btn.addEventListener('click', ()=>{
+    flashTabSpark();
     document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('view-'+btn.dataset.tab).classList.add('active');
-    if(btn.dataset.tab==='ge'){ fetchSharedCalibration('football', matchFlags.league); refreshLeagueDatalist('football','leagueListGe'); }
-    if(btn.dataset.tab==='bk'){ fetchSharedCalibration('basketball', bkMatchFlags.league); refreshLeagueDatalist('basketball','leagueListBk'); }
-    if(btn.dataset.tab==='profil'){ renderProfile(); }
-    if(btn.dataset.tab==='comm'){ renderCommunityFeed(true); }
-    if(btn.dataset.tab==='classement'){ renderLeaderboard(); }
-    if(btn.dataset.tab==='rc'){
-      const rp = document.getElementById('searchResultsPanel');
-      if(rp && !rp.innerHTML.trim()) rp.innerHTML = `<div class="glass empty-state"><div class="glyph">Ø</div><p>Tapez les deux équipes puis appuyez sur « Rechercher ».</p></div>`;
-    }
+    // Le contenu lourd (appels réseau, gros innerHTML) se construit APRÈS que l'onglet et
+    // l'étincelle soient déjà affichés — jamais avant, sinon c'est justement le blanc/gel
+    // d'affichage que l'étincelle est censée éviter.
+    requestAnimationFrame(()=>{
+      if(btn.dataset.tab==='ge'){ fetchSharedCalibration('football', matchFlags.league); refreshLeagueDatalist('football','leagueListGe'); }
+      if(btn.dataset.tab==='bk'){ fetchSharedCalibration('basketball', bkMatchFlags.league); refreshLeagueDatalist('basketball','leagueListBk'); }
+      if(btn.dataset.tab==='profil'){ renderProfile(); }
+      if(btn.dataset.tab==='comm'){ renderCommunityFeed(true); }
+      if(btn.dataset.tab==='classement'){ renderLeaderboard(); }
+      if(btn.dataset.tab==='rc'){
+        const rp = document.getElementById('searchResultsPanel');
+        if(rp && !rp.innerHTML.trim()) rp.innerHTML = `<div class="glass empty-state"><div class="glyph">Ø</div><p>Tapez les deux équipes puis appuyez sur « Rechercher ».</p></div>`;
+      }
+    });
   });
 });
 function switchToTab(tabName){
@@ -2079,7 +2102,8 @@ document.getElementById('communityPublishBtnBk').addEventListener('click', ()=>{
   publishAnalysisToCommunity('basketball', lastRecordBk, document.getElementById('communityPublishBtnBk'), document.getElementById('communityPublishStatusBk'));
 });
 
-function renderCommCard(r){
+let commResultsRegistry = {}; // pour retrouver les données complètes d'une carte au clic sur "Copier" (1.4)
+function renderCommCard(r, opts={}){
   // En mode "Meilleurs Paris", le serveur renvoie déjà le pari vedette choisi par rentabilité
   // (edge positif en priorité) puis par fiabilité réelle (headlineBet) — sinon on reprend le
   // plus probable, comme avant.
@@ -2088,13 +2112,45 @@ function renderCommCard(r){
   const reliabilityBadge = !r.headlineBet ? '' : r.rentable
     ? `<div style="font-size:10px; color:var(--green,#6EE7B7); margin-top:4px;">💰 Rentable · edge +${(best.edge*100).toFixed(1)}% (cote ${best.odds})</div>`
     : (r.reliabilityN>=15 ? `<div style="font-size:10px; color:var(--sky,#4FC3F7); margin-top:4px;">📊 Probable · fiabilité réelle du marché : ${(r.reliabilityFactor*100).toFixed(0)}% (${r.reliabilityN} vérifiés communauté)</div>` : '');
+  let copyBtn = '';
+  if(opts.showCopy){
+    const key = 'c'+Math.random().toString(36).slice(2,9);
+    commResultsRegistry[key] = r;
+    copyBtn = `<button class="comm-copy-btn sfx-tap" data-key="${key}" style="margin-top:9px; background:transparent; border:1px solid var(--gold); color:var(--gold); border-radius:7px; padding:6px 10px; font-size:10.5px; cursor:pointer;">📋 Copier les données de cette analyse</button>`;
+  }
   return `<div class="comm-card">
     <div class="comm-card-head"><span>👤 ${r.authorPseudo||'Anonyme'}</span><span>${dateStr}</span></div>
     <div class="comm-card-teams">${r.nameA} vs ${r.nameB}${r.league?` <span style="font-weight:400; color:var(--text-faint); font-size:11px;">(${r.league})</span>`:''}</div>
     ${best?`<div class="comm-card-bet"><span class="comm-pill">${fmtPct(best.p)}</span>${best.label}</div>`:''}
     ${reliabilityBadge}
     ${r.verifiedAt?'<div style="font-size:10.5px; color:var(--teal,#6EE7B7); margin-top:6px;">✔ Vérifiée</div>':''}
+    ${copyBtn}
   </div>`;
+}
+document.addEventListener('click', (e)=>{
+  const btn = e.target.closest('.comm-copy-btn');
+  if(!btn) return;
+  const r = commResultsRegistry[btn.dataset.key];
+  if(r) copyCommunityAnalysisToHistory(r);
+});
+/* -- Copier une analyse déjà publiée par un autre utilisateur (1.4) — évite une ressaisie
+   complète : les DONNÉES SOURCES (série, domicile...) de l'auteur original ne sont jamais
+   partagées (seuls les résultats calculés le sont), donc "copier" ajoute directement le
+   verdict déjà calculé dans votre Histoire, prêt à suivre — sans repasser par le formulaire. */
+function copyCommunityAnalysisToHistory(r){
+  const sport = r.sport==='basketball' ? 'basketball' : 'football';
+  addRecord(sport, {
+    id: uid(), timestamp: Date.now(), nameA: r.nameA, nameB: r.nameB,
+    league: r.league || '',
+    stage: r.stage||null, leg: r.leg||null, tensionUsed:null, aggFactorUsed:null, aggDiff:0,
+    lambdaA: r.lambdaA, lambdaB: r.lambdaB,
+    components: null, convictionIdx: r.convictionIdx || 0,
+    contextSentence: (r.contextSentence||'') + ` (copié depuis l'analyse de ${r.authorPseudo||'un autre analyste'} — Communauté)`,
+    topScores: r.topScores || [],
+    bets: (r.bets||[]).map(b=>({label:b.label, p:b.p, cat:b.cat, eval:b.eval})),
+  });
+  try{AudioFX.confirm();}catch(e){}
+  showToast(`✓ ${r.nameA} vs ${r.nameB} copié dans Histoire — vous pouvez suivre son résultat`);
 }
 
 // -- Fil communautaire (onglet Communauté) --
@@ -2111,12 +2167,82 @@ async function renderCommunityFeed(reset){
   if(reset) panel.innerHTML = '<div class="empty-hint">Chargement…</div>';
   const {ok, data} = await apiGet('/api/community/feed', {sport:commState.sport, sub:commState.sub, page:commState.page});
   if(!ok){ panel.innerHTML = `<div class="empty-hint">${data.error||'Erreur de chargement.'}</div>`; loadMoreBtn.classList.add('hidden'); return; }
-  const html = (data.results||[]).map(renderCommCard).join('');
+  const html = (data.results||[]).map(r=>renderCommCard(r)).join('');
   if(reset) panel.innerHTML = html || "<div class=\"empty-hint\">Aucune analyse publiée pour l'instant sur ce filtre.</div>";
   else panel.insertAdjacentHTML('beforeend', html);
   loadMoreBtn.classList.toggle('hidden', !(data.results && data.results.length===10));
 }
 document.getElementById('commLoadMoreBtn').addEventListener('click', ()=>{ commState.page++; renderCommunityFeed(false); });
+
+/* -- Combinés par catégorie de risque (nouveau) — un combiné faible/modéré/élevé par
+   jour, construit à partir des analyses publiées ce jour-là. Statut recalculé à chaque
+   affichage : "Perdu" dès qu'une seule jambe est vérifiée manquée, même si les autres
+   n'ont pas encore de résultat — exactement comme un vrai combiné chez un bookmaker. -- */
+const RISK_LABELS = {faible:{label:'Risque faible', color:'var(--teal,#6EE7B7)'}, modere:{label:'Risque modéré', color:'var(--gold)'}, eleve:{label:'Risque élevé', color:'var(--red,#F2545B)'}};
+const STATUS_LABELS = {gagne:{label:'✓ Gagné', color:'var(--teal,#6EE7B7)'}, perdu:{label:'✗ Perdu', color:'var(--red,#F2545B)'}, en_cours:{label:'⏳ En cours', color:'var(--text-faint)'}};
+let commComboDay = todayISO();
+async function renderCommunityCombos(){
+  const sportBtn = document.querySelector('.subnav button[data-group="commsport"].active');
+  const sport = sportBtn ? sportBtn.dataset.sub : 'football';
+  const scroller = document.getElementById('commComboDayScroller');
+  const panel = document.getElementById('commCombosPanel');
+  const winsPanel = document.getElementById('commExactWinsPanel');
+  if(!SERVER_URL || !apiAuthed()){ panel.innerHTML = '<div class="empty-hint">Connectez-vous pour voir les combinés.</div>'; return; }
+
+  // 20 derniers jours, aujourd'hui en tête.
+  const days = Array.from({length:20}, (_,i)=>{ const d=new Date(Date.now()-i*86400000); return d.toISOString().slice(0,10); });
+  if(!days.includes(commComboDay)) commComboDay = days[0];
+  scroller.innerHTML = days.map(k=>{
+    const active = k===commComboDay ? 'active' : '';
+    const label = k===days[0] ? "Aujourd'hui" : new Date(k+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit', month:'short'});
+    return `<button class="journal-day-chip sfx-tap ${active}" data-day="${k}">${label}</button>`;
+  }).join('');
+  scroller.querySelectorAll('.journal-day-chip').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ commComboDay = btn.dataset.day; renderCommunityCombos(); });
+  });
+
+  panel.innerHTML = '<div class="empty-hint">Chargement…</div>';
+  const {ok, data} = await apiGet('/api/community/combos', {sport, day:commComboDay});
+  if(!ok || !data.combos || !data.combos.length){
+    panel.innerHTML = `<div class="empty-hint">Aucun combiné généré pour ce jour — il faut au moins 2 matchs publiés par niveau de risque.</div>`;
+  } else {
+    panel.innerHTML = data.combos.map(renderComboCard).join('');
+  }
+
+  winsPanel.innerHTML = '<div class="empty-hint">Chargement…</div>';
+  const {ok:okW, data:dataW} = await apiGet('/api/community/exact-score-wins', {sport});
+  if(!okW || !dataW.results || !dataW.results.length){
+    winsPanel.innerHTML = '<div class="empty-hint">Aucun score exact vérifié sur les 20 derniers jours pour l\'instant.</div>';
+  } else {
+    winsPanel.innerHTML = dataW.results.map(w=>`
+      <div class="pick-card" style="border-color:rgba(155,93,229,0.4);">
+        <div class="pc-teams">${w.nameA} — ${w.nameB} <span style="font-size:10px; color:var(--text-faint);">(${new Date(w.verifiedAt).toLocaleDateString('fr-FR')})</span></div>
+        <div class="pc-market"><span class="pc-label">🎯 ${w.scoreLabel||''} · par ${w.authorPseudo||'Anonyme'}</span><span class="pc-pct" style="color:var(--violet);">${w.finalScore ? w.finalScore.a+'-'+w.finalScore.b : ''}</span></div>
+      </div>`).join('');
+  }
+}
+function renderComboCard(combo){
+  const risk = RISK_LABELS[combo.riskLevel] || {label:combo.riskLevel, color:'var(--text)'};
+  const status = STATUS_LABELS[combo.status] || STATUS_LABELS.en_cours;
+  return `<div class="glass combo-card" style="border-left:3px solid ${risk.color}; padding:14px; margin-bottom:12px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <span style="font-weight:700; color:${risk.color}; font-size:13px;">${risk.label} <span style="font-weight:400; color:var(--text-faint); font-size:11px;">· Combiné ${combo.legs.length}</span></span>
+      <span style="font-weight:700; color:${status.color}; font-size:12px;">${status.label}</span>
+    </div>
+    ${combo.legs.map(l=>{
+      const dot = l.status==='hit' ? '✓' : l.status==='miss' ? '✗' : '•';
+      const dotColor = l.status==='hit' ? 'var(--teal,#6EE7B7)' : l.status==='miss' ? 'var(--red,#F2545B)' : 'var(--text-faint)';
+      return `<div style="display:flex; justify-content:space-between; font-size:11.5px; padding:5px 0; border-bottom:1px dashed var(--line);">
+        <span><span style="color:${dotColor}; font-weight:700;">${dot}</span> ${l.nameA} — ${l.nameB} <span style="color:var(--text-faint);">(${l.label})</span></span>
+        <span style="color:var(--text-dim);">${fmtPct(l.p)}</span>
+      </div>`;
+    }).join('')}
+    <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); font-size:12.5px;">
+      <span>Cote combinée estimée</span>
+      <span style="font-weight:700; color:var(--gold);">${combo.combinedOdds.toFixed(2)}</span>
+    </div>
+  </div>`;
+}
 
 // -- Classement (onglet Classement) --
 async function renderLeaderboard(){
@@ -2132,17 +2258,34 @@ async function renderLeaderboard(){
 let journalSelectedDay = null;
 let lastRecordGe = null, lastRecordBk = null;
 const subState = {hi:'football', be:'best', bb:'best'};
+let betsSelectedSport = 'football'; // sport actuellement affiché dans l'onglet Bets fusionné (5.11)
+function setBetsSelectedSport(sport){
+  betsSelectedSport = sport;
+  document.querySelectorAll('.subnav button[data-group="betsport"]').forEach(b=>{ b.classList.toggle('active', b.dataset.sub===sport); });
+  renderBets(sport);
+}
 const leagueFilterState = {}; // filtre d'affichage par sport dans Histoire — vide = "toutes ligues" (global)
 document.querySelectorAll('.subnav button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     const group = btn.dataset.group;
     document.querySelectorAll(`.subnav button[data-group="${group}"]`).forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
+    if(group==='betsport'){ betsSelectedSport = btn.dataset.sub; renderBets(betsSelectedSport); return; }
     subState[group] = btn.dataset.sub;
     if(group==='hi') renderHistory();
-    if(group==='be') renderBets('football');
-    if(group==='bb') renderBets('basketball');
-    if(group==='commsport' || group==='commsub') renderCommunityFeed(true);
+    if(group==='be' || group==='bb') renderBets(betsSelectedSport);
+    if(group==='commsport' || group==='commsub'){
+      const feedBlock = document.getElementById('commFeedBlock'), combosBlock = document.getElementById('commCombosBlock');
+      if(subState.commsub==='combos'){
+        if(feedBlock) feedBlock.classList.add('hidden');
+        if(combosBlock) combosBlock.classList.remove('hidden');
+        renderCommunityCombos();
+      } else {
+        if(feedBlock) feedBlock.classList.remove('hidden');
+        if(combosBlock) combosBlock.classList.add('hidden');
+        renderCommunityFeed(true);
+      }
+    }
   });
 });
 
@@ -2440,13 +2583,13 @@ function persistDB(){ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }
 function checkDailyReset(){
   if(purgeExpiredRecords()){
     persistDB();
-    renderHistory(); renderBets('football'); renderBets('basketball');
+    renderHistoryUnified(); renderBets(betsSelectedSport);
   }
 }
 function addRecord(sport, record){
   DB[sport].unshift(record);
   persistDB();
-  renderHistory(); renderBets(sport);
+  renderHistoryUnified(); setBetsSelectedSport(sport);
 }
 
 /* ================================================================
@@ -2784,8 +2927,7 @@ function markResult(sport, recordId, finalA, finalB, finalStats){
   archiveResult(sport, rec, finalA, finalB);
   notifyDayResult(sport, rec, finalA, finalB);
   maybePromptPlayStoreRating(evaluations);
-  renderHistory();
-  renderJournal();
+  renderHistoryUnified();
 }
 
 /* -- Demande de notation Play Store (5.6) -- uniquement au pic émotionnel positif
@@ -2813,39 +2955,6 @@ function maybePromptPlayStoreRating(evaluations){
    bilan vérifié permanent) en fichier JSON téléchargeable. Seul moyen
    de ne pas tout perdre si le cache du navigateur est vidé.
 ================================================================= */
-function exportData(){
-  const payload = {exportedAt:new Date().toISOString(), app:'EA', version:3, DB, TRACK};
-  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `ea-sauvegarde-${todayISO()}.json`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-function importDataFromFile(file){
-  const reader = new FileReader();
-  reader.onload = (e)=>{
-    try{
-      const payload = JSON.parse(e.target.result);
-      if(!payload || (!payload.DB && !payload.TRACK)) throw new Error('format inattendu');
-      if(payload.DB){ DB = payload.DB; persistDB(); }
-      if(payload.TRACK){ TRACK = payload.TRACK; persistTrack(); }
-      renderHistory(); renderBets('football'); renderBets('basketball');
-      try{ AudioFX.confirm(); }catch(err){}
-    }catch(err){
-      try{ AudioFX.error(); }catch(e2){}
-      alert("Fichier invalide — ce n'est pas une sauvegarde EA reconnue.");
-    }
-  };
-  reader.readAsText(file);
-}
-document.getElementById('exportBtn').addEventListener('click', exportData);
-document.getElementById('importBtn').addEventListener('click', ()=> document.getElementById('importFile').click());
-document.getElementById('importFile').addEventListener('change', (e)=>{
-  if(e.target.files && e.target.files[0]) importDataFromFile(e.target.files[0]);
-  e.target.value = '';
-});
-
 /* Compte à rebours avant l'expiration du plus proche pari (chaque pari a son propre TTL de 24h) */
 function msUntilReset(){
   const now = Date.now();
@@ -2866,7 +2975,7 @@ function updateCountdowns(){
   const offset = circumference*(1-frac);
   const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000), s = Math.floor((ms%60000)/1000);
   const label = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  ['Hi','Be','Bb'].forEach(suffix=>{
+  ['Hi','Be'].forEach(suffix=>{
     const txt = document.getElementById('countdown'+suffix);
     const ring = document.getElementById('ring'+suffix);
     if(txt) txt.textContent = label;
@@ -3540,14 +3649,33 @@ function buildFragilityNote(ctx){
 }
 
 
+function computeCompletenessFootball(){
+  const sources = [
+    {label:'Série A', on: store.aSerie.length>0},
+    {label:'Domicile A', on: store.aDom.length>0},
+    {label:'Série B', on: store.bSerie.length>0},
+    {label:'Extérieur B', on: store.bExt.length>0},
+    {label:'Face-à-face', on: (store.ab.length>0 || store.ba.length>0)},
+    {label:'Classement', on: (standings.rankA!=null && standings.ptsA!=null && standings.rankB!=null && standings.ptsB!=null)},
+  ];
+  return {filled: sources.filter(s=>s.on).length, total: sources.length, sources};
+}
+function renderCompletenessBadge(elId, completeness){
+  const {filled, total} = completeness;
+  const cls = filled===total ? 'full' : filled>=total/2 ? 'partial' : 'low';
+  const missing = completeness.sources.filter(s=>!s.on).map(s=>s.label);
+  const el = document.getElementById(elId);
+  if(!el) return;
+  el.innerHTML = `<span class="completeness-badge ${cls}">${filled===total?'✓':'ⓘ'} Analyse basée sur ${filled}/${total} sources${missing.length && filled<total ? ` — manque : ${missing.join(', ')}` : ''}</span>`;
+}
+
 function runAnalysisGe(){
   const nameA=document.getElementById('nameA').value.trim()||'A', nameB=document.getElementById('nameB').value.trim()||'B';
   const totalEntries=Object.values(store).reduce((s,a)=>s+a.length,0);
-  // En coupe, les confrontations et matchs disponibles sont structurellement plus rares
-  // (peu de précédents entre deux équipes qui ne se croisent qu'en élimination directe) —
-  // le seuil minimum est donc abaissé, l'incertitude étant déjà élargie ailleurs (Monte Carlo).
-  const minEntries = matchFlags.matchType==='coupe' ? 1 : 2;
-  if(totalEntries<minEntries){ const el=document.getElementById('in-aDom'); el.classList.add('err'); try{AudioFX.error();}catch(e){} setTimeout(()=>el.classList.remove('err'),700); return; }
+  // Plus aucun blocage strict (1.3) : le verdict se génère toujours, même avec peu ou pas
+  // de données — computeGeneseLambdas() a son propre repli neutre pour ce cas. On informe
+  // seulement, via la pastille de complétude affichée sur le résultat, jamais un mur.
+  const completenessGe = computeCompletenessFootball();
 
   const {lambdaA, lambdaB, totalAdj, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff}=computeGeneseLambdas();
   const convictionIdx = computeConvictionIdx(enjeuIdx, trendDiffIdx, tensionUsed, aggDiff);
@@ -3608,6 +3736,7 @@ function runAnalysisGe(){
     {name:'Enjeu (40%)', on: zoneA!=null},
   ];
   document.getElementById('enginesRowGe').innerHTML = engines.map(e=>`<span class="engine-badge ${e.on?'on':''}">${e.on?'✓':'—'} ${e.name}</span>`).join('');
+  renderCompletenessBadge('completenessGe', completenessGe);
 
   document.getElementById('scoresRowGe').innerHTML = top2.map((s,i)=>`
     <div class="score-card ${i===0?'primary':''}"><div class="rank">SCÉNARIO ${i+1}</div><div class="names">${nameA} — ${nameB}</div>
@@ -3988,11 +4117,23 @@ function scoreBracketMarket(sims, nameA, nameB){
   return rows.sort((x,y)=>y.p-x.p).slice(0,2);
 }
 
+function computeCompletenessBasket(){
+  const sources = [
+    {label:'Série A', on: bkStore.aSerie.length>0},
+    {label:'Domicile A', on: bkStore.aDom.length>0},
+    {label:'Série B', on: bkStore.bSerie.length>0},
+    {label:'Extérieur B', on: bkStore.bExt.length>0},
+    {label:'Face-à-face', on: (bkStore.ab.length>0 || bkStore.ba.length>0)},
+    {label:'Classement', on: (bkStandings.rankA!=null && bkStandings.ptsA!=null && bkStandings.rankB!=null && bkStandings.ptsB!=null)},
+  ];
+  return {filled: sources.filter(s=>s.on).length, total: sources.length, sources};
+}
+
 function runAnalysisBk(){
   const nameA=document.getElementById('bkNameA').value.trim()||'A', nameB=document.getElementById('bkNameB').value.trim()||'B';
   const totalEntries=Object.values(bkStore).reduce((s,a)=>s+a.length,0);
-  const minEntriesBk = bkMatchFlags.matchType==='coupe' ? 1 : 2;
-  if(totalEntries<minEntriesBk){ const el=document.getElementById('bk-in-aDom'); el.classList.add('err'); try{AudioFX.error();}catch(e){} setTimeout(()=>el.classList.remove('err'),700); return; }
+  // Plus aucun blocage strict (1.3) — voir la même logique côté football pour le détail.
+  const completenessBk = computeCompletenessBasket();
 
   const {ptsA, ptsB, totalAdj, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff}=computeBasketPoints();
   const convictionIdxBk = computeConvictionIdx(enjeuIdx, trendDiffIdx, tensionUsed, aggDiff);
@@ -4042,6 +4183,7 @@ function runAnalysisBk(){
     {name:'Stats avancées', on: advCount>0},
   ];
   document.getElementById('enginesRowBk').innerHTML = engines.map(e=>`<span class="engine-badge ${e.on?'on':''}">${e.on?'✓':'—'} ${e.name}</span>`).join('');
+  renderCompletenessBadge('completenessBk', completenessBk);
 
   document.getElementById('scoresRowBk').innerHTML = scoreBrackets.map((s,i)=>`
     <div class="score-card ${i===0?'primary':''}"><div class="rank">FOURCHETTE ${i+1}</div><div class="names">${nameA} — ${nameB}</div>
@@ -4443,7 +4585,7 @@ async function performTeamSearch(){
     for(const sport of ['football','basketball']){
       try{
         const {ok, data} = await apiGet('/api/community/search', {sport, teamA:rawA.trim(), teamB:rawB.trim(), page:0});
-        if(ok && data.results && data.results.length) communityMatches.push(...data.results);
+        if(ok && data.results && data.results.length){ data.results.forEach(row=>{ row.sport = sport; }); communityMatches.push(...data.results); }
       }catch(e){ /* la communauté est optionnelle dans ce résultat de recherche */ }
     }
   }
@@ -4456,7 +4598,7 @@ async function performTeamSearch(){
   let html = '';
   if(communityMatches.length){
     html += `<div class="section-label">🌐 Communauté</div>`;
-    html += communityMatches.map(renderCommCard).join('');
+    html += communityMatches.map(r=>renderCommCard(r, {showCopy:true})).join('');
   }
   if(todayMatches.length){
     html += `<div class="section-label" style="margin-top:${communityMatches.length?'18px':'0'};">Aujourd'hui — Histoire</div>`;
@@ -4532,9 +4674,8 @@ function tierBadge(p){
 }
 function renderBets(sport){
   const isBasket = sport==='basketball';
-  const group = isBasket ? 'bb' : 'be';
-  const panelId = isBasket ? 'betsBasketPanel' : 'betsPanel';
-  const panel = document.getElementById(panelId);
+  const group = isBasket ? 'bb' : 'be'; // mémoire de sous-onglet (best/safe/value/score) gardée séparée par sport
+  const panel = document.getElementById('betsPanel');
   const sub = subState[group];
   const list = DB[sport]||[];
 
@@ -4607,38 +4748,15 @@ function renderBets(sport){
    9bis. JOURNAL — historique permanent jour par jour (paris vérifiés,
    scores exacts trouvés), avec sélecteur de jour type BetOnAir.
 ================================================================= */
-async function renderJournal(){
-  const scroller = document.getElementById('journalDayScroller');
-  const panel = document.getElementById('journalPanel');
-  if(!scroller || !panel) return;
-  const keys = getArchiveDayKeys();
-  if(keys.length===0){
-    scroller.innerHTML = '';
-    panel.innerHTML = `<div class="glass empty-state"><div class="glyph">Ø</div><p>Aucun résultat noté pour l'instant. Dès que vous validez le score d'un match dans Histoire, il rejoint le Journal du jour correspondant, en permanence — même après l'expiration des 24h.</p></div>`;
-    return;
-  }
-  if(!journalSelectedDay || !keys.includes(journalSelectedDay)) journalSelectedDay = keys[0];
-
-  scroller.innerHTML = keys.map((k,i)=>{
-    const d = new Date(k+'T12:00:00');
-    const label = d.toLocaleDateString('fr-FR',{day:'2-digit', month:'short'});
-    const dayNum = keys.length - i;
-    const active = k===journalSelectedDay ? 'active' : '';
-    return `<button class="journal-day-chip sfx-tap ${active}" data-day="${k}">Jour ${dayNum}<br><span style="font-size:9px; opacity:.7;">${label}</span></button>`;
-  }).join('');
-  scroller.querySelectorAll('.journal-day-chip').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ journalSelectedDay = btn.dataset.day; renderJournal(); });
-  });
-
-  const summary = archiveDaySummary(journalSelectedDay);
-  const day = ARCHIVE[journalSelectedDay];
+/* -- Réglages (notifications, push communauté, sauvegarde) — toujours visibles en haut de
+   l'Histoire fusionnée (5.11), quel que soit le jour sélectionné. -- */
+async function renderHistorySettingsCards(){
+  const host = document.getElementById('historySettingsCards');
+  if(!host) return;
   const notifOn = notificationsEnabled();
   const commPushOn = await isCommunityPushActive();
-
-  const summaryHtml = `
+  host.innerHTML = `
     <div class="summary-row" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
-      <div class="summary-card"><div class="num" style="color:var(--teal)">${fmtPct(summary.winRate)}</div><div class="lbl">${summary.wins}/${summary.total} paris gagnés</div></div>
-      <div class="summary-card"><div class="num" style="color:var(--violet)">${summary.exactCount}</div><div class="lbl">Score(s) exact(s) trouvé(s)</div></div>
       <div class="summary-card" style="flex:2; min-width:220px; cursor:pointer;" id="notifToggleCard">
         <div class="lbl" style="font-size:10.5px;">🔔 Notifications de résultats</div>
         <div style="font-size:12px; margin-top:6px; color:${notifOn?'var(--teal)':'var(--text-dim)'};">${notifOn ? 'Activées — vous serez notifié à chaque score noté' : 'Désactivées — appuyer pour activer'}</div>
@@ -4659,6 +4777,43 @@ async function renderJournal(){
       </div>
     </div>`;
 
+  document.getElementById('notifToggleCard').addEventListener('click', async ()=>{
+    if(notificationsEnabled()){ localStorage.setItem('ea_notif_pref','off'); }
+    else { await requestNotificationPermission(); }
+    renderHistorySettingsCards();
+  });
+  document.getElementById('commPushToggleCard').addEventListener('click', async (e)=>{
+    const card = e.currentTarget;
+    const wasOn = await isCommunityPushActive();
+    const labelEl = card.querySelector('div:last-child');
+    if(wasOn){
+      await disableCommunityPush();
+    } else {
+      if(labelEl){ labelEl.textContent = 'Activation…'; labelEl.style.color = 'var(--text-dim)'; }
+      const res = await enableCommunityPush();
+      if(!res.ok){ if(labelEl){ labelEl.textContent = res.error||"Échec de l'activation."; labelEl.style.color='var(--red)'; } try{AudioFX.error();}catch(err){} return; }
+    }
+    renderHistorySettingsCards();
+  });
+  document.getElementById('exportDataBtn').addEventListener('click', exportAllData);
+  document.getElementById('importDataInput').addEventListener('change', handleImportFile);
+}
+
+/* -- Contenu d'un jour archivé (ex-Journal) — écrit uniquement dans le panneau, sans toucher
+   au sélecteur de jour ni aux réglages, qui vivent désormais au niveau de renderHistoryUnified(). -- */
+function renderJournalDayContent(dayKey){
+  const panel = document.getElementById('journalPanel');
+  if(!panel) return;
+  const day = ARCHIVE[dayKey];
+  if(!day){ panel.innerHTML = ''; return; }
+  const summary = archiveDaySummary(dayKey);
+
+  const summaryHtml = `
+    <div class="summary-row" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+      <div class="summary-card"><div class="num" style="color:var(--teal)">${fmtPct(summary.winRate)}</div><div class="lbl">${summary.wins}/${summary.total} paris gagnés</div></div>
+      <div class="summary-card"><div class="num" style="color:var(--violet)">${summary.exactCount}</div><div class="lbl">Score(s) exact(s) trouvé(s)</div></div>
+    </div>`;
+
   const exactHtml = day.exactScores.length ? `
     <div class="section-label">🎯 Scores exacts trouvés</div>
     ${day.exactScores.map(s=>`<div class="pick-card"><div class="pc-teams">${s.nameA} — ${s.nameB}</div><div class="pc-market"><span class="pc-label">${s.label}</span><span class="pc-pct" style="color:var(--violet)">${s.score}</span></div></div>`).join('')}
@@ -4677,32 +4832,42 @@ async function renderJournal(){
   `;
 
   panel.innerHTML = summaryHtml + exactHtml + betsHtml;
+}
 
-  const notifCard = document.getElementById('notifToggleCard');
-  if(notifCard) notifCard.addEventListener('click', async ()=>{
-    if(notificationsEnabled()){ localStorage.setItem('ea_notif_pref','off'); }
-    else { await requestNotificationPermission(); }
-    renderJournal();
+/* -- Chef d'orchestre de l'Histoire fusionnée (5.11) : un seul sélecteur de jour, avec
+   "Aujourd'hui" (vue vivante, formulaires de résultat) en tête, suivi des jours archivés
+   (lecture seule). Les réglages restent affichés en permanence, au-dessus, quel que soit
+   le jour choisi — ce ne sont pas des données du jour, mais des préférences de compte. -- */
+let historySelectedDay = 'today';
+async function renderHistoryUnified(){
+  await renderHistorySettingsCards();
+
+  const keys = getArchiveDayKeys();
+  const scroller = document.getElementById('historyDayScroller');
+  const allDays = ['today', ...keys];
+  if(!allDays.includes(historySelectedDay)) historySelectedDay = 'today';
+
+  scroller.innerHTML = allDays.map((k,i)=>{
+    const active = k===historySelectedDay ? 'active' : '';
+    if(k==='today') return `<button class="journal-day-chip sfx-tap ${active}" data-day="today">Aujourd'hui</button>`;
+    const d = new Date(k+'T12:00:00');
+    const label = d.toLocaleDateString('fr-FR',{day:'2-digit', month:'short'});
+    return `<button class="journal-day-chip sfx-tap ${active}" data-day="${k}">${label}</button>`;
+  }).join('');
+  scroller.querySelectorAll('.journal-day-chip').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ historySelectedDay = btn.dataset.day; renderHistoryUnified(); });
   });
 
-  const commPushCard = document.getElementById('commPushToggleCard');
-  if(commPushCard) commPushCard.addEventListener('click', async ()=>{
-    const wasOn = await isCommunityPushActive();
-    const labelEl = commPushCard.querySelector('div:last-child');
-    if(wasOn){
-      await disableCommunityPush();
-    } else {
-      if(labelEl){ labelEl.textContent = 'Activation…'; labelEl.style.color = 'var(--text-dim)'; }
-      const res = await enableCommunityPush();
-      if(!res.ok){ if(labelEl){ labelEl.textContent = res.error||"Échec de l'activation."; labelEl.style.color='var(--red)'; } try{AudioFX.error();}catch(e){} return; }
-    }
-    renderJournal();
-  });
-
-  const exportBtn = document.getElementById('exportDataBtn');
-  if(exportBtn) exportBtn.addEventListener('click', exportAllData);
-  const importInput = document.getElementById('importDataInput');
-  if(importInput) importInput.addEventListener('change', handleImportFile);
+  const todayBlock = document.getElementById('historyTodayBlock');
+  const archiveBlock = document.getElementById('historyArchiveBlock');
+  if(historySelectedDay==='today'){
+    todayBlock.style.display = ''; archiveBlock.style.display = 'none';
+    renderHistory();
+  } else {
+    todayBlock.style.display = 'none'; archiveBlock.style.display = '';
+    journalSelectedDay = historySelectedDay; // gardé en phase pour le reste du code qui s'y réfère encore (archivage, export...)
+    renderJournalDayContent(historySelectedDay);
+  }
 }
 
 /* ================================================================
@@ -4769,7 +4934,7 @@ function handleImportFile(e){
         });
       }
       if(statusEl) statusEl.textContent = '✓ Import réussi — historique fusionné.';
-      renderHistory(); renderJournal(); renderBets('football'); renderBets('basketball');
+      renderHistoryUnified(); renderBets(betsSelectedSport);
     }catch(err){
       if(statusEl) statusEl.textContent = '✗ Fichier invalide — import annulé.';
     }
@@ -4811,10 +4976,8 @@ async function initApp(){
   loadDB();
   await loadTrack();
   loadArchive();
-  renderHistory();
-  renderBets('football');
-  renderBets('basketball');
-  renderJournal();
+  renderHistoryUnified();
+  renderBets(betsSelectedSport);
   updateCountdowns();
   applySeasonTheme();
   updateTimeTheme();
