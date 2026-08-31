@@ -58,7 +58,6 @@ body.season-winter{
   --panel:#0D1620; --panel2:#111E2B; --line:#223243; --gold:#BFE3F5; --violet:#7C9FC9; --ink:#050A10;
 }
 #seasonCanvas{position:fixed; inset:0; z-index:-1; pointer-events:none;}
-#musicToggleBtn.active{ color:var(--gold); border-color:var(--gold); box-shadow:0 0 10px rgba(212,175,55,0.35); }
 .pos-abs-lbl{ font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--text-faint); margin-top:10px; margin-bottom:6px; }
 .pos-abs-grid{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
 .pos-abs-grid div{ display:flex; flex-direction:column; gap:3px; }
@@ -178,8 +177,8 @@ input{font-family:inherit;}
 #tabLoadOverlay.show::before{content:''; position:absolute; top:44%; left:50%; width:3px; height:3px; border-radius:50%;
   box-shadow: 0 0 14px 5px rgba(212,175,55,.95), 46px -58px 10px 2px rgba(155,93,229,.85), -52px -32px 8px 2px rgba(79,217,201,.85),
     62px 48px 8px 2px rgba(212,175,55,.75), -60px 56px 10px 2px rgba(155,93,229,.7), 10px 70px 7px 1px rgba(79,217,201,.6);
-  animation: sparkPulse .42s ease-out;}
-@keyframes sparkPulse{0%{transform:translate(-50%,-50%) scale(.25); opacity:0;}45%{opacity:1;}100%{transform:translate(-50%,-50%) scale(1.7); opacity:0;}}
+  animation: sparkPulse 1.4s ease-out;}
+@keyframes sparkPulse{0%{transform:translate(-50%,-50%) scale(.25); opacity:0;}20%{opacity:1;}80%{opacity:.9;}100%{transform:translate(-50%,-50%) scale(2.2); opacity:0;}}
 #flashOverlay.flash{animation:flashPulse .9s ease forwards;}
 #eaMark{display:flex; align-items:baseline; gap:2px; font-family:'Fraunces',serif; font-weight:600; font-size:min(22vw,160px); user-select:none; position:relative; z-index:1;}
 .crest-frame{position:relative; display:flex; align-items:center; justify-content:center;}
@@ -560,7 +559,6 @@ input{font-family:inherit;}
     <div style="display:flex; align-items:center; gap:14px;">
       <div class="brand-mini"><span class="e">E</span><span class="a">A</span></div>
       <span class="live-clock" id="liveClock">🌙 Nuit · --:--</span>
-      <button id="musicToggleBtn" title="Musique d'ambiance" style="margin-left:auto; background:transparent; border:1px solid var(--line); color:var(--text-dim); width:32px; height:32px; border-radius:50%; font-size:14px; cursor:pointer; flex-shrink:0;">🔈</button>
     </div>
     <div class="tabs">
       <button class="tab active sfx-tab" data-tab="ge"><span class="ic">⚽</span>Genèse</button>
@@ -1368,86 +1366,6 @@ document.addEventListener('click', (e)=>{
    dans l'esprit "menu chill" (type FIFA), 100% procédurale (Web
    Audio, aucun fichier audio externe, aucune reproduction d'œuvre).
 ================================================================= */
-const AmbientMusic = (()=>{
-  let ctx=null, masterGain=null, playing=false, schedulerId=null, nextBarTime=0, barIndex=0;
-  const BAR_DUR=4.2;
-  // Progression douce et mélancolique, esprit "menu de jeu" — accords originaux
-  const CHORDS = [ [220.00,261.63,329.63], [196.00,246.94,293.66], [174.61,220.00,261.63], [196.00,233.08,293.66] ];
-  function ensureCtx(){
-    if(!ctx){ ctx=new (window.AudioContext||window.webkitAudioContext)(); masterGain=ctx.createGain(); masterGain.gain.value=0; masterGain.connect(ctx.destination); }
-    if(ctx.state==='suspended') ctx.resume();
-    return ctx;
-  }
-  function padChord(freqs,t0,dur){
-    freqs.forEach(f=>{
-      const osc=ctx.createOscillator(), g=ctx.createGain(), filt=ctx.createBiquadFilter();
-      osc.type='sine'; osc.frequency.value=f/2;
-      filt.type='lowpass'; filt.frequency.value=850; filt.Q.value=0.5;
-      g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(0.045,t0+1.4); g.gain.linearRampToValueAtTime(0,t0+dur);
-      osc.connect(filt); filt.connect(g); g.connect(masterGain);
-      osc.start(t0); osc.stop(t0+dur+0.15);
-    });
-  }
-  function arpNote(freq,t0,dur,vol){
-    const osc=ctx.createOscillator(), g=ctx.createGain(), filt=ctx.createBiquadFilter();
-    osc.type='triangle'; osc.frequency.value=freq;
-    filt.type='lowpass'; filt.frequency.value=2000; filt.Q.value=0.4;
-    g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(vol,t0+.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
-    osc.connect(filt); filt.connect(g); g.connect(masterGain);
-    osc.start(t0); osc.stop(t0+dur+.05);
-  }
-  function scheduleBar(){
-    const chord=CHORDS[barIndex%CHORDS.length];
-    padChord(chord,nextBarTime,BAR_DUR*1.05);
-    const notes=[chord[0]*2,chord[1]*2,chord[2]*2,chord[1]*2];
-    notes.forEach((f,i)=>arpNote(f, nextBarTime+i*(BAR_DUR/4), BAR_DUR/4*0.88, 0.026));
-    barIndex++; nextBarTime+=BAR_DUR;
-  }
-  function loop(){
-    if(!playing) return;
-    while(nextBarTime < ctx.currentTime+8) scheduleBar();
-    schedulerId=setTimeout(loop, 2000);
-  }
-  return {
-    start(){
-      ensureCtx(); if(playing) return; playing=true;
-      masterGain.gain.cancelScheduledValues(ctx.currentTime);
-      masterGain.gain.setValueAtTime(masterGain.gain.value, ctx.currentTime);
-      masterGain.gain.linearRampToValueAtTime(1, ctx.currentTime+2);
-      nextBarTime=ctx.currentTime+0.1; barIndex=0; loop();
-    },
-    stop(){
-      if(!ctx) return; playing=false; clearTimeout(schedulerId);
-      masterGain.gain.cancelScheduledValues(ctx.currentTime);
-      masterGain.gain.setValueAtTime(masterGain.gain.value, ctx.currentTime);
-      masterGain.gain.linearRampToValueAtTime(0, ctx.currentTime+0.9);
-    },
-    toggle(){ if(playing) this.stop(); else this.start(); return playing; },
-    isPlaying(){ return playing; }
-  };
-})();
-function updateMusicButton(){
-  const btn=document.getElementById('musicToggleBtn'); if(!btn) return;
-  btn.textContent = AmbientMusic.isPlaying() ? '🎵' : '🔈';
-  btn.classList.toggle('active', AmbientMusic.isPlaying());
-}
-(function bindAmbientMusic(){
-  const pref = localStorage.getItem('ea_music_pref');
-  function firstGesture(){
-    if(pref!=='off'){ AmbientMusic.start(); updateMusicButton(); }
-    document.removeEventListener('click', firstGesture, true);
-  }
-  document.addEventListener('click', firstGesture, true);
-  document.addEventListener('DOMContentLoaded', ()=>{
-    const btn=document.getElementById('musicToggleBtn');
-    if(btn) btn.addEventListener('click', (ev)=>{
-      const playing=AmbientMusic.toggle();
-      localStorage.setItem('ea_music_pref', playing?'on':'off');
-      updateMusicButton();
-    });
-  });
-})();
-
 /* ================================================================
    2. SPLASH — ignition cinématique
 ================================================================= */
@@ -1888,7 +1806,7 @@ function flashTabSpark(){
   if(!ov) return;
   ov.classList.remove('show'); void ov.offsetWidth; // force le redémarrage de l'animation même si elle vient de tourner
   ov.classList.add('show');
-  setTimeout(()=>ov.classList.remove('show'), 420);
+  setTimeout(()=>ov.classList.remove('show'), 1400);
 }
 document.querySelectorAll('.tab').forEach(btn=>{
   btn.addEventListener('click', ()=>{
