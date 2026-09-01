@@ -58,6 +58,7 @@ body.season-winter{
   --panel:#0D1620; --panel2:#111E2B; --line:#223243; --gold:#BFE3F5; --violet:#7C9FC9; --ink:#050A10;
 }
 #seasonCanvas{position:fixed; inset:0; z-index:-1; pointer-events:none;}
+#musicToggleBtn.active{ color:var(--gold); border-color:var(--gold); box-shadow:0 0 10px rgba(212,175,55,0.35); }
 .pos-abs-lbl{ font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--text-faint); margin-top:10px; margin-bottom:6px; }
 .pos-abs-grid{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
 .pos-abs-grid div{ display:flex; flex-direction:column; gap:3px; }
@@ -177,8 +178,8 @@ input{font-family:inherit;}
 #tabLoadOverlay.show::before{content:''; position:absolute; top:44%; left:50%; width:3px; height:3px; border-radius:50%;
   box-shadow: 0 0 14px 5px rgba(212,175,55,.95), 46px -58px 10px 2px rgba(155,93,229,.85), -52px -32px 8px 2px rgba(79,217,201,.85),
     62px 48px 8px 2px rgba(212,175,55,.75), -60px 56px 10px 2px rgba(155,93,229,.7), 10px 70px 7px 1px rgba(79,217,201,.6);
-  animation: sparkPulse 1.4s ease-out;}
-@keyframes sparkPulse{0%{transform:translate(-50%,-50%) scale(.25); opacity:0;}20%{opacity:1;}80%{opacity:.9;}100%{transform:translate(-50%,-50%) scale(2.2); opacity:0;}}
+  animation: sparkPulse .42s ease-out;}
+@keyframes sparkPulse{0%{transform:translate(-50%,-50%) scale(.25); opacity:0;}45%{opacity:1;}100%{transform:translate(-50%,-50%) scale(1.7); opacity:0;}}
 #flashOverlay.flash{animation:flashPulse .9s ease forwards;}
 #eaMark{display:flex; align-items:baseline; gap:2px; font-family:'Fraunces',serif; font-weight:600; font-size:min(22vw,160px); user-select:none; position:relative; z-index:1;}
 .crest-frame{position:relative; display:flex; align-items:center; justify-content:center;}
@@ -285,9 +286,9 @@ input{font-family:inherit;}
 .record-card .rc-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; gap:10px;}
 .record-card .rc-names{font-family:'Fraunces',serif; font-size:18px;}
 .record-card .rc-time{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--text-faint);}
-.record-card .rc-lambda{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim); margin-bottom:12px;}
+.record-card .rc-lambda, .comm-card .rc-lambda{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim); margin-bottom:12px;}
 .record-card .rc-ttl{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--gold); opacity:.75; margin-bottom:10px;}
-.record-card .rc-bets{display:flex; flex-direction:column; gap:8px;}
+.record-card .rc-bets, .comm-card .rc-bets{display:flex; flex-direction:column; gap:8px; margin-top:8px;}
 .rc-bet-line{display:flex; justify-content:space-between; align-items:center; font-size:12.5px; padding:7px 10px; background:var(--panel2); border-radius:6px;}
 .rc-result-form{display:flex; align-items:center; gap:8px; margin-top:14px; padding-top:14px; border-top:1px dashed var(--line); flex-wrap:wrap;}
 .rc-score-input{width:64px; background:var(--ink); border:1px solid var(--line); color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:7px 8px; border-radius:6px; text-align:center;}
@@ -474,6 +475,15 @@ input{font-family:inherit;}
 <canvas id="burstCanvas"></canvas>
 <div id="flashOverlay"></div>
 <div id="tabLoadOverlay"></div>
+<div id="customConfirmOverlay" class="hidden" style="position:fixed; inset:0; z-index:950; background:rgba(0,0,0,.62); display:flex; align-items:center; justify-content:center; padding:24px;">
+  <div class="glass" style="max-width:340px; width:100%; padding:22px; text-align:center;">
+    <p id="customConfirmMsg" style="font-size:13.5px; line-height:1.55; margin-bottom:20px; color:var(--text);"></p>
+    <div style="display:flex; gap:10px;">
+      <button id="customConfirmCancel" style="flex:1; background:transparent; border:1px solid var(--line); color:var(--text-dim); border-radius:9px; padding:11px; font-size:12.5px; cursor:pointer;">Annuler</button>
+      <button id="customConfirmOk" style="flex:1; background:var(--gold); border:none; color:#1a1206; border-radius:9px; padding:11px; font-size:12.5px; font-weight:700; cursor:pointer;">Confirmer</button>
+    </div>
+  </div>
+</div>
 <!-- ================= ONBOARDING ================= -->
 <div id="onboarding" class="hidden">
   <canvas id="starfield"></canvas>
@@ -484,9 +494,9 @@ input{font-family:inherit;}
     <h1>Deux disciplines. Un même niveau d'exigence chirurgicale.</h1>
     <div class="onboarding-text">
       <p>EA réunit désormais deux moteurs indépendants — <strong>Genèse</strong> pour le football, <strong>Basket Analyse</strong> pour le basketball — bâtis sur les mêmes fondations : loi de Poisson corrigée par l'ajustement Dixon-Coles pour le football, simulation Monte Carlo à variance calibrée pour le basketball, indice Elo, forme récente pondérée, et une correction de contexte plafonnée qui n'écrase jamais la donnée de terrain.</p>
-      <p>Chaque dossier que vous complétez vient nourrir <strong>Histoire</strong>, votre journal d'analyses du jour, classé par sport. Il se réinitialise chaque nuit à <span class="accent">00h00 UTC</span> — un compteur vous montre en permanence le temps restant.</p>
-      <p>Les meilleures conclusions de vos analyses remontent automatiquement dans <strong>Bets</strong> et <strong>Bets Basket</strong> : les paris jugés sûrs (82%+), les angles value (60–80%), et les scores exacts à forte probabilité (15%+) — sans aucune ressaisie de votre part.</p>
-      <p>Aucune clé, aucun service externe : tout tourne en local, à partir de vos propres données.</p>
+      <p>Chaque dossier que vous complétez vient nourrir <strong>Histoire</strong> : vos analyses du jour en direct, et l'archive complète de tous vos jours précédents, au même endroit. Le jour en cours se réinitialise chaque nuit à <span class="accent">00h00 UTC</span> — un compteur vous montre en permanence le temps restant — mais rien n'est jamais perdu : tout reste consultable dans l'historique.</p>
+      <p>Les meilleures conclusions de vos analyses remontent automatiquement dans <strong>Bets</strong> : les paris jugés sûrs (82%+), les angles value (edge réel calculé sur cote saisie), et les scores exacts à forte probabilité — sans aucune ressaisie de votre part.</p>
+      <p>Vos données d'analyse restent sur votre appareil ; seuls votre compte, vos publications Communauté et vos préférences de notification transitent par le serveur EA pour rester synchronisés entre vos appareils.</p>
     </div>
     <button id="startBtn" class="glow-btn sfx-confirm">Commencer</button>
   </div>
@@ -559,6 +569,7 @@ input{font-family:inherit;}
     <div style="display:flex; align-items:center; gap:14px;">
       <div class="brand-mini"><span class="e">E</span><span class="a">A</span></div>
       <span class="live-clock" id="liveClock">🌙 Nuit · --:--</span>
+      <button id="musicToggleBtn" title="Musique d'ambiance" style="margin-left:auto; background:transparent; border:1px solid var(--line); color:var(--text-dim); width:32px; height:32px; border-radius:50%; font-size:14px; cursor:pointer; flex-shrink:0;">🔈</button>
     </div>
     <div class="tabs">
       <button class="tab active sfx-tab" data-tab="ge"><span class="ic">⚽</span>Genèse</button>
@@ -885,7 +896,7 @@ input{font-family:inherit;}
             </div>
             <div style="padding:0 22px 22px;"><div class="section-title">Lecture d'analyste</div><div class="interp" id="interpTextBk"></div></div>
           </div>
-          <div class="footnote">Estimations statistiques — probabilités, non des certitudes. Chaque analyse alimente Histoire et Bets Basket.</div>
+          <div class="footnote">Estimations statistiques — probabilités, non des certitudes. Chaque analyse alimente Histoire et Bets.</div>
         </div>
       </div>
     </section>
@@ -969,6 +980,9 @@ input{font-family:inherit;}
       </div>
 
       <div id="commFeedBlock">
+        <div class="glass" style="padding:10px 6px; margin-bottom:14px;">
+          <div id="commFeedDayScroller" style="display:flex; gap:8px; overflow-x:auto; padding:4px 6px;"></div>
+        </div>
         <div id="commFeedPanel"></div>
         <div style="text-align:center; margin-top:14px;">
           <button id="commLoadMoreBtn" class="hidden" style="background:transparent; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:9px 18px; font-size:12px; cursor:pointer;">Charger plus</button>
@@ -1366,6 +1380,86 @@ document.addEventListener('click', (e)=>{
    dans l'esprit "menu chill" (type FIFA), 100% procédurale (Web
    Audio, aucun fichier audio externe, aucune reproduction d'œuvre).
 ================================================================= */
+const AmbientMusic = (()=>{
+  let ctx=null, masterGain=null, playing=false, schedulerId=null, nextBarTime=0, barIndex=0;
+  const BAR_DUR=4.2;
+  // Progression douce et mélancolique, esprit "menu de jeu" — accords originaux
+  const CHORDS = [ [220.00,261.63,329.63], [196.00,246.94,293.66], [174.61,220.00,261.63], [196.00,233.08,293.66] ];
+  function ensureCtx(){
+    if(!ctx){ ctx=new (window.AudioContext||window.webkitAudioContext)(); masterGain=ctx.createGain(); masterGain.gain.value=0; masterGain.connect(ctx.destination); }
+    if(ctx.state==='suspended') ctx.resume();
+    return ctx;
+  }
+  function padChord(freqs,t0,dur){
+    freqs.forEach(f=>{
+      const osc=ctx.createOscillator(), g=ctx.createGain(), filt=ctx.createBiquadFilter();
+      osc.type='sine'; osc.frequency.value=f/2;
+      filt.type='lowpass'; filt.frequency.value=850; filt.Q.value=0.5;
+      g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(0.045,t0+1.4); g.gain.linearRampToValueAtTime(0,t0+dur);
+      osc.connect(filt); filt.connect(g); g.connect(masterGain);
+      osc.start(t0); osc.stop(t0+dur+0.15);
+    });
+  }
+  function arpNote(freq,t0,dur,vol){
+    const osc=ctx.createOscillator(), g=ctx.createGain(), filt=ctx.createBiquadFilter();
+    osc.type='triangle'; osc.frequency.value=freq;
+    filt.type='lowpass'; filt.frequency.value=2000; filt.Q.value=0.4;
+    g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(vol,t0+.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    osc.connect(filt); filt.connect(g); g.connect(masterGain);
+    osc.start(t0); osc.stop(t0+dur+.05);
+  }
+  function scheduleBar(){
+    const chord=CHORDS[barIndex%CHORDS.length];
+    padChord(chord,nextBarTime,BAR_DUR*1.05);
+    const notes=[chord[0]*2,chord[1]*2,chord[2]*2,chord[1]*2];
+    notes.forEach((f,i)=>arpNote(f, nextBarTime+i*(BAR_DUR/4), BAR_DUR/4*0.88, 0.026));
+    barIndex++; nextBarTime+=BAR_DUR;
+  }
+  function loop(){
+    if(!playing) return;
+    while(nextBarTime < ctx.currentTime+8) scheduleBar();
+    schedulerId=setTimeout(loop, 2000);
+  }
+  return {
+    start(){
+      ensureCtx(); if(playing) return; playing=true;
+      masterGain.gain.cancelScheduledValues(ctx.currentTime);
+      masterGain.gain.setValueAtTime(masterGain.gain.value, ctx.currentTime);
+      masterGain.gain.linearRampToValueAtTime(1, ctx.currentTime+2);
+      nextBarTime=ctx.currentTime+0.1; barIndex=0; loop();
+    },
+    stop(){
+      if(!ctx) return; playing=false; clearTimeout(schedulerId);
+      masterGain.gain.cancelScheduledValues(ctx.currentTime);
+      masterGain.gain.setValueAtTime(masterGain.gain.value, ctx.currentTime);
+      masterGain.gain.linearRampToValueAtTime(0, ctx.currentTime+0.9);
+    },
+    toggle(){ if(playing) this.stop(); else this.start(); return playing; },
+    isPlaying(){ return playing; }
+  };
+})();
+function updateMusicButton(){
+  const btn=document.getElementById('musicToggleBtn'); if(!btn) return;
+  btn.textContent = AmbientMusic.isPlaying() ? '🎵' : '🔈';
+  btn.classList.toggle('active', AmbientMusic.isPlaying());
+}
+(function bindAmbientMusic(){
+  const pref = localStorage.getItem('ea_music_pref');
+  function firstGesture(){
+    if(pref!=='off'){ AmbientMusic.start(); updateMusicButton(); }
+    document.removeEventListener('click', firstGesture, true);
+  }
+  document.addEventListener('click', firstGesture, true);
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const btn=document.getElementById('musicToggleBtn');
+    if(btn) btn.addEventListener('click', (ev)=>{
+      const playing=AmbientMusic.toggle();
+      localStorage.setItem('ea_music_pref', playing?'on':'off');
+      updateMusicButton();
+    });
+  });
+})();
+
 /* ================================================================
    2. SPLASH — ignition cinématique
 ================================================================= */
@@ -1657,7 +1751,7 @@ function renderFormulaCards(containerId, selectable){
     const isSelected = selectable && current && current.id===f.id;
     const accessLines = [
       f.id==='simple' ? '1 discipline au choix (Football ou Basketball)' : 'Football + Basketball',
-      f.id==='simple' ? 'Bets, Histoire & Journal (discipline choisie)' : 'Bets, Histoire & Journal (2 disciplines)',
+      f.id==='simple' ? 'Bets & Histoire complète (discipline choisie)' : 'Bets & Histoire complète (2 disciplines)',
       f.community ? 'Communauté : lecture + publication' : 'Communauté & Classement non inclus',
       f.priority ? 'Mise en avant du profil & priorité d\'activation' : null
     ].filter(Boolean);
@@ -1806,7 +1900,7 @@ function flashTabSpark(){
   if(!ov) return;
   ov.classList.remove('show'); void ov.offsetWidth; // force le redémarrage de l'animation même si elle vient de tourner
   ov.classList.add('show');
-  setTimeout(()=>ov.classList.remove('show'), 1400);
+  setTimeout(()=>ov.classList.remove('show'), 420);
 }
 document.querySelectorAll('.tab').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -1898,8 +1992,22 @@ document.getElementById('profilToggleFormulesBtn').addEventListener('click', ()=
   // Ces cartes servent de référence pour choisir sa PROCHAINE formule au moment de payer.
   if(!box.classList.contains('hidden')) renderFormulaCards('profilFormulaCards', false);
 });
-document.getElementById('profilLogoutBtn').addEventListener('click', ()=>{
-  if(confirm('Se déconnecter de ce compte sur cet appareil ?')){ clearGateAuth(); location.reload(); }
+/* -- Confirmation stylée, cohérente avec l'identité visuelle de l'app — remplace les
+   confirm()/alert() natifs du navigateur, qui détonnent visuellement (audit "amateurisme"). -- */
+function showConfirmModal(message){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('customConfirmOverlay');
+    document.getElementById('customConfirmMsg').textContent = message;
+    overlay.classList.remove('hidden');
+    const okBtn = document.getElementById('customConfirmOk'), cancelBtn = document.getElementById('customConfirmCancel');
+    const cleanup = (result)=>{ overlay.classList.add('hidden'); okBtn.removeEventListener('click', onOk); cancelBtn.removeEventListener('click', onCancel); resolve(result); };
+    const onOk = ()=>{ try{AudioFX.confirm();}catch(e){} cleanup(true); };
+    const onCancel = ()=>cleanup(false);
+    okBtn.addEventListener('click', onOk); cancelBtn.addEventListener('click', onCancel);
+  });
+}
+document.getElementById('profilLogoutBtn').addEventListener('click', async ()=>{
+  if(await showConfirmModal('Se déconnecter de ce compte sur cet appareil ?')){ clearGateAuth(); location.reload(); }
 });
 
 async function renderProfilAbonnement(){
@@ -2030,6 +2138,35 @@ function renderCommCard(r, opts={}){
   const reliabilityBadge = !r.headlineBet ? '' : r.rentable
     ? `<div style="font-size:10px; color:var(--green,#6EE7B7); margin-top:4px;">💰 Rentable · edge +${(best.edge*100).toFixed(1)}% (cote ${best.odds})</div>`
     : (r.reliabilityN>=15 ? `<div style="font-size:10px; color:var(--sky,#4FC3F7); margin-top:4px;">📊 Probable · fiabilité réelle du marché : ${(r.reliabilityFactor*100).toFixed(0)}% (${r.reliabilityN} vérifiés communauté)</div>` : '');
+
+  // Panneau complet façon Histoire (λ + score probable + TOUS les paris, pas qu'un seul) —
+  // pour que la Communauté serve aussi de matière première aux combinés, pas juste à
+  // afficher une probabilité isolée.
+  const scoreLine = (r.lambdaA!=null && r.lambdaB!=null && r.topScores && r.topScores.length)
+    ? `<div class="rc-lambda">${r.sport==='basketball'?'Pts att.':'λ'} ${r.nameA} ${r.lambdaA} — ${r.nameB} ${r.lambdaB} &nbsp;·&nbsp; Score probable : ${r.topScores[0].label} (${fmtPct(r.topScores[0].p)})</div>`
+    : '';
+  const evalFor = (label)=> (r.verifiedAt && r.evaluations) ? r.evaluations.find(e=>e.label===label) : null;
+  const allBetsHtml = (r.bets && r.bets.length)
+    ? `<div class="rc-bets">${r.bets.map(b=>{
+        const ev = evalFor(b.label);
+        const icon = ev ? (ev.hit===true?'✓ ':ev.hit===false?'✗ ':'') : '';
+        const color = ev ? (ev.hit===true?'var(--teal,#6EE7B7)':ev.hit===false?'var(--red,#F2545B)':'') : '';
+        return `<div class="rc-bet-line"${color?` style="color:${color};"`:''}><span>${icon}${b.label}</span><b>${fmtPct(b.p)}</b></div>`;
+      }).join('')}</div>`
+    : (best?`<div class="comm-card-bet"><span class="comm-pill">${fmtPct(best.p)}</span>${best.label}</div>`:'');
+
+  // Statut du pari vedette spécifiquement (pas un "✔ Vérifiée" générique et muet) : si le
+  // score final contredit le pari mis en avant, ça doit se voir immédiatement, en rouge.
+  let verifiedBlock = '';
+  if(r.verifiedAt){
+    const bestEval = best ? evalFor(best.label) : null;
+    const scoreStr = r.finalScore ? `${r.finalScore.a}-${r.finalScore.b}` : '';
+    const hit = bestEval ? bestEval.hit : null;
+    const label = hit===true ? '✓ Vérifié — Gagné' : hit===false ? '✗ Vérifié — Perdu' : '✔ Vérifié';
+    const color = hit===true ? 'var(--teal,#6EE7B7)' : hit===false ? 'var(--red,#F2545B)' : 'var(--text-faint)';
+    verifiedBlock = `<div style="font-size:11.5px; font-weight:700; margin-top:8px; color:${color};">${label}${scoreStr?` <span style="font-weight:400; color:var(--text-faint);">(score final ${scoreStr})</span>`:''}</div>`;
+  }
+
   let copyBtn = '';
   if(opts.showCopy){
     const key = 'c'+Math.random().toString(36).slice(2,9);
@@ -2039,9 +2176,10 @@ function renderCommCard(r, opts={}){
   return `<div class="comm-card">
     <div class="comm-card-head"><span>👤 ${r.authorPseudo||'Anonyme'}</span><span>${dateStr}</span></div>
     <div class="comm-card-teams">${r.nameA} vs ${r.nameB}${r.league?` <span style="font-weight:400; color:var(--text-faint); font-size:11px;">(${r.league})</span>`:''}</div>
-    ${best?`<div class="comm-card-bet"><span class="comm-pill">${fmtPct(best.p)}</span>${best.label}</div>`:''}
+    ${scoreLine}
+    ${allBetsHtml}
     ${reliabilityBadge}
-    ${r.verifiedAt?'<div style="font-size:10.5px; color:var(--teal,#6EE7B7); margin-top:6px;">✔ Vérifiée</div>':''}
+    ${verifiedBlock}
     ${copyBtn}
   </div>`;
 }
@@ -2072,23 +2210,40 @@ function copyCommunityAnalysisToHistory(r){
 }
 
 // -- Fil communautaire (onglet Communauté) --
-const commState = {sport:'football', sub:'safe', page:0};
+const commState = {sport:'football', sub:'safe', page:0, day:'all'};
+function renderCommFeedDayScroller(){
+  const scroller = document.getElementById('commFeedDayScroller');
+  if(!scroller) return;
+  const days = ['all', ...Array.from({length:20}, (_,i)=>{ const d=new Date(Date.now()-i*86400000); return d.toISOString().slice(0,10); })];
+  scroller.innerHTML = days.map(k=>{
+    const active = k===commState.day ? 'active' : '';
+    const label = k==='all' ? 'Tous' : (k===days[1] ? "Aujourd'hui" : new Date(k+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit', month:'short'}));
+    return `<button class="journal-day-chip sfx-tap ${active}" data-day="${k}">${label}</button>`;
+  }).join('');
+  scroller.querySelectorAll('.journal-day-chip').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ commState.day = btn.dataset.day; renderCommunityFeed(true); });
+  });
+}
 async function renderCommunityFeed(reset){
   if(reset) commState.page = 0;
   const sportBtn = document.querySelector('.subnav button[data-group="commsport"].active');
   const subBtn = document.querySelector('.subnav button[data-group="commsub"].active');
   commState.sport = sportBtn ? sportBtn.dataset.sub : 'football';
   commState.sub = subBtn ? subBtn.dataset.sub : 'all';
+  renderCommFeedDayScroller();
   const panel = document.getElementById('commFeedPanel');
   const loadMoreBtn = document.getElementById('commLoadMoreBtn');
   if(!SERVER_URL || !apiAuthed()){ panel.innerHTML = '<div class="empty-hint">Connectez-vous pour voir la communauté.</div>'; loadMoreBtn.classList.add('hidden'); return; }
   if(reset) panel.innerHTML = '<div class="empty-hint">Chargement…</div>';
-  const {ok, data} = await apiGet('/api/community/feed', {sport:commState.sport, sub:commState.sub, page:commState.page});
+  const params = {sport:commState.sport, sub:commState.sub, page:commState.page};
+  if(commState.day!=='all') params.day = commState.day;
+  const {ok, data} = await apiGet('/api/community/feed', params);
   if(!ok){ panel.innerHTML = `<div class="empty-hint">${data.error||'Erreur de chargement.'}</div>`; loadMoreBtn.classList.add('hidden'); return; }
   const html = (data.results||[]).map(r=>renderCommCard(r)).join('');
   if(reset) panel.innerHTML = html || "<div class=\"empty-hint\">Aucune analyse publiée pour l'instant sur ce filtre.</div>";
   else panel.insertAdjacentHTML('beforeend', html);
-  loadMoreBtn.classList.toggle('hidden', !(data.results && data.results.length===10));
+  // Le filtre par jour renvoie déjà tout le jour d'un coup : pas de pagination dans ce cas.
+  loadMoreBtn.classList.toggle('hidden', commState.day!=='all' ? true : !(data.results && data.results.length===10));
 }
 document.getElementById('commLoadMoreBtn').addEventListener('click', ()=>{ commState.page++; renderCommunityFeed(false); });
 
@@ -2122,7 +2277,7 @@ async function renderCommunityCombos(){
   panel.innerHTML = '<div class="empty-hint">Chargement…</div>';
   const {ok, data} = await apiGet('/api/community/combos', {sport, day:commComboDay});
   if(!ok || !data.combos || !data.combos.length){
-    panel.innerHTML = `<div class="empty-hint">Aucun combiné généré pour ce jour — il faut au moins 2 matchs publiés par niveau de risque.</div>`;
+    panel.innerHTML = `<div class="empty-hint">Aucun combiné pour ce jour — il faut au moins 2 matchs <b>publiés en Communauté</b> (pas juste analysés en privé) dans ce niveau de risque, sur les dernières 48h.</div>`;
   } else {
     panel.innerHTML = data.combos.map(renderComboCard).join('');
   }
@@ -3387,108 +3542,6 @@ function seriesStdDev(pairs){
 function hl(name, side){ return `<span class="hl-team ${side==='b'?'b':''}">${name}</span>`; }
 function hlp(p){ return `<span class="hl-pct" style="color:${confidenceColor(p)}">${fmtPct(p)}</span>`; }
 
-const NARR_FOOT = {
-  openTight: [
-    (v)=>`Sur le papier, ${hl(v.nameA)} et ${hl(v.nameB,'b')} avancent au coude-à-coude — un écart de seulement ${Math.abs(v.lambdaA-v.lambdaB).toFixed(2)} but attendu entre les deux projections.`,
-    (v)=>`Difficile de trancher franchement : les profils offensifs projetés de ${hl(v.nameA)} (${v.lambdaA.toFixed(2)}) et ${hl(v.nameB,'b')} (${v.lambdaB.toFixed(2)}) sont quasiment superposables.`,
-    (v)=>`${hl(v.nameA)} et ${hl(v.nameB,'b')} présentent des chiffres si proches que ce dossier se rapproche plus d'un pile-ou-face statistique que d'un vrai déséquilibre.`,
-    (v)=>`Rien ne saute vraiment aux yeux ici : les deux formations affichent un potentiel offensif comparable, et ce genre de match se joue souvent sur un détail — un ballon arrêté, une décision arbitrale.`,
-  ],
-  openMild: [
-    (v)=>`${hl(v.favTeam)} part avec une longueur d'avance dans cette lecture, sans que l'écart (${Math.abs(v.lambdaA-v.lambdaB).toFixed(2)} but) soit suffisant pour parler de match à sens unique.`,
-    (v)=>`Léger avantage à ${hl(v.favTeam)} sur le papier — face à ${v.dogTeam}, j'attends une opposition serrée où la première réalisation pourrait faire basculer la physionomie entière.`,
-    (v)=>`${hl(v.favTeam)} devance ${v.dogTeam}, mais d'une courte tête : ce n'est pas le genre d'écart qui autorise la certitude.`,
-  ],
-  openClear: [
-    (v)=>`L'écart est net : ${hl(v.favTeam)} affiche un potentiel offensif nettement supérieur à celui de ${v.dogTeam} dans ce dossier — sauf accident, la logique devrait s'imposer.`,
-    (v)=>`${hl(v.favTeam)} domine clairement cette confrontation sur le papier, avec ${v.lambdaA_gt_lambdaB?v.lambdaA.toFixed(2):v.lambdaB.toFixed(2)} buts attendus contre ${v.lambdaA_gt_lambdaB?v.lambdaB.toFixed(2):v.lambdaA.toFixed(2)} pour ${v.dogTeam}.`,
-    (v)=>`Peu de suspense annoncé par les chiffres : ${hl(v.favTeam)} devrait dicter le tempo de bout en bout face à ${v.dogTeam}.`,
-  ],
-  tempoHigh: [
-    (v)=>`Le profil offensif cumulé des deux équipes (${v.totalExp.toFixed(2)} buts attendus au total) laisse présager un match à gros score — les filets pourraient trembler à quatre reprises ou plus si les arrière-gardes tiennent leur niveau habituel.`,
-    (v)=>`Avec ${v.totalExp.toFixed(2)} buts projetés cumulés, ce duel a tout du festival offensif — les deux défenses devront hausser le ton pour éviter le naufrage.`,
-    (v)=>`Match ouvert en perspective : la somme des attendus (${v.totalExp.toFixed(2)}) pousse clairement vers un scénario prolifique.`,
-  ],
-  tempoMid: [
-    (v)=>`On se dirige vers une rencontre plutôt prolifique sans excès, deux à trois buts au compteur final serait cohérent avec ce que montrent les deux équipes en ce moment.`,
-    (v)=>`Rien d'extrême dans le tempo attendu — une rencontre équilibrée entre prudence défensive et prises de risque ponctuelles.`,
-  ],
-  tempoLow: [
-    (v)=>`Les organisations défensives des deux côtés devraient primer sur les ambitions offensives — j'anticipe un match cadenassé, où chaque occasion se paiera cher.`,
-    (v)=>`Le total attendu (${v.totalExp.toFixed(2)}) trahit un scénario probablement verrouillé, à faible métrage offensif.`,
-  ],
-  bttsYes: [
-    (v)=>`Je verrais bien les deux équipes trouver le chemin des filets ici — ${v.dogTeam} n'a pas le profil d'une formation qui rentre aux vestiaires sans avoir marqué, même en infériorité sur le papier.`,
-    (v)=>`Les deux attaques semblent capables de percer la défense adverse ce soir-là.`,
-  ],
-  bttsNo: [
-    (v)=>`Je ne suis pas convaincu que les deux attaques se montrent décisives simultanément — une des deux défenses devrait garder sa cage inviolée.`,
-    (v)=>`Au moins un des deux gardiens devrait passer une soirée tranquille.`,
-  ],
-  citation: [
-    (v)=>v.bestA ? `À l'appui de cette lecture, ${hl(v.nameA)} a signé ${v.bestA[0]}-${v.bestA[1]} dans le lot de résultats fournis — la meilleure référence du dossier pour cette équipe.` : '',
-    (v)=>v.worstB ? `Côté ${hl(v.nameB,'b')}, le revers ${v.worstB[0]}-${v.worstB[1]} reste la donnée la plus fragile de son dossier, et pèse logiquement à la baisse dans sa projection.` : '',
-    (v)=>v.bestB ? `${hl(v.nameB,'b')} peut s'appuyer sur son résultat ${v.bestB[0]}-${v.bestB[1]}, la ligne la plus flatteuse de sa série.` : '',
-    (v)=>v.worstA ? `Le point noir du dossier ${hl(v.nameA)} reste ce ${v.worstA[0]}-${v.worstA[1]}, qui tire légèrement la moyenne vers le bas.` : '',
-  ],
-  tensionHomeFortress: [
-    (v)=>`Un vrai décalage à noter : ${hl(v.nameA)} affiche un rendement à domicile sensiblement supérieur à sa forme générale — le facteur terrain semble ici décisif, pas accessoire.`,
-  ],
-  tensionAwayFragile: [
-    (v)=>`Signal à surveiller : le rendement extérieur de ${hl(v.nameB,'b')} chute nettement par rapport à sa forme globale — le déplacement joue clairement contre elle.`,
-  ],
-  tensionTrendVsFav: [
-    (v)=>`Une nuance s'impose : ${hl(v.favTeam)} est favori sur la projection brute, mais sa dynamique récente penche plutôt vers le déclin — un vrai point de vigilance avant de s'engager.`,
-  ],
-  tensionH2h: [
-    (v)=>`Curieusement, l'historique direct raconte une autre histoire que le rapport de force actuel — à garder en tête, l'histoire entre ces deux équipes a parfois sa propre logique.`,
-  ],
-  varianceHigh: [
-    (v)=>`La série de ${hl(v.volTeam)} manque de régularité (écart-type élevé) — ses résultats oscillent fortement d'un match à l'autre, ce qui fragilise un peu la fiabilité de la projection.`,
-  ],
-  varianceLow: [
-    (v)=>`${hl(v.stableTeam)} affiche une régularité remarquable sur l'échantillon fourni — un signal de fiabilité qui renforce la confiance dans cette projection.`,
-  ],
-  closing: [
-    (v)=>`Le scénario ${v.s0} concentre la probabilité la plus élevée (${hlp(v.p0)}), devant ${v.s1} (${hlp(v.p1)}). Si je devais isoler un seul angle, ce serait « ${v.bestBetLabel} » (${hlp(v.bestBetP)}) — la conviction la plus solide de tout ce dossier.`,
-    (v)=>`Entre ${v.s0} (${hlp(v.p0)}) et ${v.s1} (${hlp(v.p1)}), le modèle penche nettement pour le premier. Mon pari de prédilection ici : « ${v.bestBetLabel} » (${hlp(v.bestBetP)}).`,
-    (v)=>`Le verdict chiffré retient ${v.s0} en scénario principal (${hlp(v.p0)}). S'il ne fallait garder qu'un seul pari de ce dossier, « ${v.bestBetLabel} » (${hlp(v.bestBetP)}) serait mon choix.`,
-  ],
-};
-
-function buildFootballNarrative(ctx){
-  const rng = makeRng(`${ctx.nameA}|${ctx.nameB}|${ctx.lambdaA.toFixed(3)}|${ctx.lambdaB.toFixed(3)}|${ctx.totalExp.toFixed(3)}`);
-  const gapAbs = Math.abs(ctx.lambdaA-ctx.lambdaB);
-  const openBank = gapAbs<0.25 ? NARR_FOOT.openTight : gapAbs<0.8 ? NARR_FOOT.openMild : NARR_FOOT.openClear;
-  const tempoBank = ctx.totalExp>=3.3 ? NARR_FOOT.tempoHigh : ctx.totalExp<=1.8 ? NARR_FOOT.tempoLow : NARR_FOOT.tempoMid;
-  const bttsBank = ctx.pBTTSyes>0.55 ? NARR_FOOT.bttsYes : NARR_FOOT.bttsNo;
-
-  const parts = [rng.pick(openBank)(ctx), rng.pick(tempoBank)(ctx), rng.pick(bttsBank)(ctx)];
-
-  // citation d'une donnée précise (au moins une, si disponible)
-  const citations = NARR_FOOT.citation.map(f=>f(ctx)).filter(Boolean);
-  if(citations.length>0) parts.push(rng.pick(citations));
-
-  // détection de tensions/contradictions réelles dans les données
-  const tensions = [];
-  if(ctx.aDomFor!=null && ctx.aSerieFor!=null && ctx.aDomFor - ctx.aSerieFor >= 0.8) tensions.push(rng.pick(NARR_FOOT.tensionHomeFortress)(ctx));
-  if(ctx.bExtFor!=null && ctx.bSerieFor!=null && ctx.bSerieFor - ctx.bExtFor >= 0.8) tensions.push(rng.pick(NARR_FOOT.tensionAwayFragile)(ctx));
-  if((ctx.favTeam===ctx.nameA && ctx.trendA<-0.35) || (ctx.favTeam===ctx.nameB && ctx.trendB<-0.35)) tensions.push(rng.pick(NARR_FOOT.tensionTrendVsFav)(ctx));
-  if(tensions.length>0) parts.push(`<span class="tension-line">${rng.pick(tensions)}</span>`);
-
-  // régularité / volatilité d'une série (si assez de données)
-  const stdA = seriesStdDev(ctx.storeASerie), stdB = seriesStdDev(ctx.storeBSerie);
-  if(stdA!=null && stdA>=2.0) parts.push(rng.pick(NARR_FOOT.varianceHigh)({...ctx, volTeam:ctx.nameA}));
-  else if(stdB!=null && stdB>=2.0) parts.push(rng.pick(NARR_FOOT.varianceHigh)({...ctx, volTeam:ctx.nameB}));
-  else if(stdA!=null && stdA<=0.6) parts.push(rng.pick(NARR_FOOT.varianceLow)({...ctx, stableTeam:ctx.nameA}));
-  else if(stdB!=null && stdB<=0.6) parts.push(rng.pick(NARR_FOOT.varianceLow)({...ctx, stableTeam:ctx.nameB}));
-
-  // contexte (classement / enjeu / elo / xG) — réutilise les phrases déjà calculées en amont
-  if(ctx.contextSentence) parts.push(ctx.contextSentence);
-
-  parts.push(rng.pick(NARR_FOOT.closing)(ctx));
-  return parts.filter(Boolean).join(' ');
-}
 
 /* ================================================================
    APERÇU ENRICHI — bloc structuré en sections (façon "AI Insights"),
@@ -3697,7 +3750,6 @@ function runAnalysisGe(){
     s0: `${top2[0].a}-${top2[0].b}`, p0: top2[0].p, s1: `${top2[1].a}-${top2[1].b}`, p1: top2[1].p,
     bestBetLabel: meilleur.label.toLowerCase(), bestBetP: meilleur.p,
   };
-  const interp = buildFootballNarrative(narrCtx);
   const avertissementTxt = oneSided ? `<p style="color:var(--red); font-family:'IBM Plex Mono',monospace; font-size:11.5px; margin-bottom:14px; border:1px dashed var(--red); padding:10px 12px; border-radius:6px;">⚠ Dossier incomplet : ${entriesA===0?nameA:nameB} n'a aucune donnée propre — verdict à traiter comme une ébauche.</p>` : '';
   const fragilityCtx = {
     dataConfidence, matchType: matchFlags.matchType,
@@ -3725,11 +3777,10 @@ function runAnalysisGe(){
     aDomAg: avg(store.aDom,1), bExtAg: avg(store.bExt,1),
     xgA: advStats.xgA, xgB: advStats.xgB,
     absencesTxt: absencesTxt.trim(),
-    qualitativeText: interp,
   };
   const insightsHtml = `<div class="insights-block">${buildFootballInsights(insightsCtx)}</div>`;
 
-  document.getElementById('interpTextGe').innerHTML = `${avertissementTxt}${interp}${fragilityTxt}${insightsHtml}`;
+  document.getElementById('interpTextGe').innerHTML = `${avertissementTxt}${fragilityTxt}${insightsHtml}`;
 
 
   document.getElementById('emptyStateGe').style.display='none';
@@ -4140,7 +4191,6 @@ function runAnalysisBk(){
     s0: `${scoreBrackets[0].a}-${scoreBrackets[0].b}`,
     bestBetLabel: meilleur.label.toLowerCase(), bestBetP: meilleur.p,
   };
-  const interp = buildBasketballNarrative(narrCtxBk);
   const avertissementTxt = oneSided ? `<p style="color:var(--red); font-family:'IBM Plex Mono',monospace; font-size:11.5px; margin-bottom:14px; border:1px dashed var(--red); padding:10px 12px; border-radius:6px;">⚠ Dossier incomplet : ${entriesA===0?nameA:nameB} n'a aucune donnée propre — verdict à traiter comme une ébauche.</p>` : '';
   const fragilityCtxBk = {
     dataConfidence, matchType: bkMatchFlags.matchType,
@@ -4166,11 +4216,10 @@ function runAnalysisBk(){
     h2hCount: bkStore.ab.length, abFor: avg(bkStore.ab,0)||0, baFor: avg(bkStore.ba,0)||0,
     bkSerieA: bkStore.aSerie, bkSerieB: bkStore.bSerie,
     absencesTxt: absencesTxtBk.trim(),
-    qualitativeText: interp,
   };
   const insightsHtmlBk = `<div class="insights-block">${buildBasketballInsights(insightsCtxBk)}</div>`;
 
-  document.getElementById('interpTextBk').innerHTML = `${avertissementTxt}${interp}${fragilityTxtBk}${insightsHtmlBk}`;
+  document.getElementById('interpTextBk').innerHTML = `${avertissementTxt}${fragilityTxtBk}${insightsHtmlBk}`;
 
   document.getElementById('emptyStateBk').style.display='none';
   const resultsBkEl = document.getElementById('resultsBk');
@@ -4193,50 +4242,6 @@ function runAnalysisBk(){
 }
 function dogTeamName(fav, a, b){ return fav===a ? b : a; }
 document.getElementById('bkGenerateBtn').addEventListener('click', runAnalysisBk);
-const NARR_BASK = {
-  openTight: [
-    (v)=>`Match très équilibré sur le papier entre ${hl(v.nameA)} et ${hl(v.nameB,'b')} — un écart de ${Math.abs(v.ptsA-v.ptsB).toFixed(1)} point seulement entre les deux projections offensives.`,
-    (v)=>`${hl(v.nameA)} et ${hl(v.nameB,'b')} arrivent quasiment à égalité statistique, ce qui annonce un money-game jusque dans le dernier quart-temps.`,
-    (v)=>`Rien ne distingue vraiment ${hl(v.nameA)} de ${hl(v.nameB,'b')} sur les chiffres — ce genre de match se joue souvent sur les lancers-francs de la fin.`,
-  ],
-  openMild: [
-    (v)=>`${hl(v.favTeam)} part légèrement favori dans cette analyse, sans domination écrasante face à ${v.dogTeam}.`,
-    (v)=>`Léger avantage à ${hl(v.favTeam)}, mais l'écart (${Math.abs(v.ptsA-v.ptsB).toFixed(1)} pts) reste dans la marge d'un money-game.`,
-  ],
-  openClear: [
-    (v)=>`${hl(v.favTeam)} affiche un net avantage statistique face à ${v.dogTeam}, avec ${Math.abs(v.ptsA-v.ptsB).toFixed(1)} points d'écart projetés.`,
-    (v)=>`La hiérarchie est claire sur le papier : ${hl(v.favTeam)} devrait imposer son rythme offensif à ${v.dogTeam}.`,
-  ],
-  citation: [
-    (v)=>v.bestA ? `${hl(v.nameA)} peut s'appuyer sur son ${v.bestA[0]}-${v.bestA[1]}, la référence la plus flatteuse de son échantillon.` : '',
-    (v)=>v.worstB ? `Le point faible du dossier ${hl(v.nameB,'b')} reste ce ${v.worstB[0]}-${v.worstB[1]}, qui pèse sur sa moyenne.` : '',
-  ],
-  tensionHome: [
-    (v)=>`Un vrai décalage : ${hl(v.nameA)} scoré nettement plus à domicile que sur l'ensemble de sa série — la salle semble jouer un rôle à part entière.`,
-  ],
-  tensionAway: [
-    (v)=>`${hl(v.nameB,'b')} chute sensiblement à l'extérieur par rapport à sa forme générale — le déplacement pèse clairement dans la balance.`,
-  ],
-  closing: [
-    (v)=>`Sur la base de la simulation, ${v.favTeam} l'emporte dans ${hlp(v.favP)} des scénarios, pour un score le plus probable autour de ${v.s0}. Si je devais isoler un seul pari, ce serait « ${v.bestBetLabel} » (${hlp(v.bestBetP)}).`,
-    (v)=>`La simulation penche pour ${v.favTeam} (${hlp(v.favP)} des tirages), avec ${v.s0} comme issue la plus probable. Mon choix de prédilection : « ${v.bestBetLabel} » (${hlp(v.bestBetP)}).`,
-  ],
-};
-function buildBasketballNarrative(ctx){
-  const rng = makeRng(`${ctx.nameA}|${ctx.nameB}|${ctx.ptsA.toFixed(2)}|${ctx.ptsB.toFixed(2)}`);
-  const gapAbs = Math.abs(ctx.ptsA-ctx.ptsB);
-  const openBank = gapAbs<3 ? NARR_BASK.openTight : gapAbs<9 ? NARR_BASK.openMild : NARR_BASK.openClear;
-  const parts = [rng.pick(openBank)(ctx)];
-  const citations = NARR_BASK.citation.map(f=>f(ctx)).filter(Boolean);
-  if(citations.length>0) parts.push(rng.pick(citations));
-  const tensions=[];
-  if(ctx.aDomFor!=null && ctx.aSerieFor!=null && ctx.aDomFor-ctx.aSerieFor>=6) tensions.push(rng.pick(NARR_BASK.tensionHome)(ctx));
-  if(ctx.bExtFor!=null && ctx.bSerieFor!=null && ctx.bSerieFor-ctx.bExtFor>=6) tensions.push(rng.pick(NARR_BASK.tensionAway)(ctx));
-  if(tensions.length>0) parts.push(`<span class="tension-line">${rng.pick(tensions)}</span>`);
-  if(ctx.contextSentence) parts.push(ctx.contextSentence);
-  parts.push(rng.pick(NARR_BASK.closing)(ctx));
-  return parts.filter(Boolean).join(' ');
-}
 
 function buildBasketballInsights(ctx){
   const nA=ctx.nameA, nB=ctx.nameB;
