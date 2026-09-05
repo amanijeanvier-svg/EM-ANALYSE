@@ -957,6 +957,7 @@ input{font-family:inherit;}
         <button class="sfx-tap" data-sub="safe" data-group="be"><svg class="chest-ic" style="color:var(--gold)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Safe Bets 82%+</button>
         <button class="sfx-tap" data-sub="value" data-group="be"><svg class="chest-ic" style="color:var(--sky)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Value Bets (edge réel)</button>
         <button class="sfx-tap" data-sub="score" data-group="be"><svg class="chest-ic" style="color:var(--violet)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Score Exact 15%+</button>
+        <button class="sfx-tap" data-sub="combos" data-group="be">🎰 Combinés</button>
       </div>
       <div id="betsPanel"></div>
     </section>
@@ -976,7 +977,6 @@ input{font-family:inherit;}
         <button class="active sfx-tap" data-sub="safe" data-group="commsub">Safe Bets 82%+</button>
         <button class="sfx-tap" data-sub="value" data-group="commsub">Value Bets</button>
         <button class="sfx-tap" data-sub="score" data-group="commsub">Score exact 15%+</button>
-        <button class="sfx-tap" data-sub="combos" data-group="commsub">🎰 Combinés</button>
       </div>
 
       <div id="commFeedBlock">
@@ -987,13 +987,6 @@ input{font-family:inherit;}
         <div style="text-align:center; margin-top:14px;">
           <button id="commLoadMoreBtn" class="hidden" style="background:transparent; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:9px 18px; font-size:12px; cursor:pointer;">Charger plus</button>
         </div>
-      </div>
-
-      <div id="commCombosBlock" class="hidden">
-        <div class="glass" style="padding:10px 6px; margin-bottom:14px;">
-          <div id="commComboDayScroller" style="display:flex; gap:8px; overflow-x:auto; padding:4px 6px;"></div>
-        </div>
-        <div id="commCombosPanel"></div>
         <div class="section-label" style="margin-top:22px;">🎯 Scores exacts gagnés — 20 derniers jours</div>
         <div id="commExactWinsPanel"></div>
       </div>
@@ -1614,6 +1607,31 @@ async function fetchSharedCalibration(sport, league){
     return data;
   }catch(e){ return null; } // hors-ligne ou serveur indisponible : repli silencieux sur le calcul local
 }
+// -- Moyennes par ligue (nouveau, football pour l'instant) : buts moyens domicile/extérieur
+// et % victoire domicile/extérieur/nul, construits côté serveur à partir de TOUTES les
+// analyses communauté déjà vérifiées, tous utilisateurs confondus. Sert de repère de fond
+// dans computeGeneseLambdas — jamais utilisé seul, toujours mélangé avec les stats propres
+// aux deux équipes, avec un poids qui grandit avec le nombre de matchs déjà vérifiés pour
+// cette ligue (jamais plus de 35%, pour ne jamais écraser la forme réelle des équipes).
+const leagueStatsCache = {}; // clé: `${sport}|${league}` -> {stats, fetchedAt}
+function leagueStatsKey(sport, league){ return `${sport}|${(league||'').trim()}`; }
+async function fetchLeagueStats(sport, league){
+  if(!SERVER_URL || !(league||'').trim()) return null;
+  const auth = loadGateAuth();
+  if(!auth) return null;
+  try{
+    const params = new URLSearchParams({sport, league, phone: auth.phone, token: auth.token});
+    const r = await fetch(`${SERVER_URL}/api/league-stats?${params.toString()}`);
+    if(!r.ok) return null;
+    const data = await r.json();
+    leagueStatsCache[leagueStatsKey(sport, league)] = {stats: data.stats||null, fetchedAt: Date.now()};
+    return data.stats||null;
+  }catch(e){ return null; }
+}
+function getCachedLeagueStats(sport, league){
+  const entry = leagueStatsCache[leagueStatsKey(sport, league)];
+  return entry ? entry.stats : null;
+}
 function pushTrackEntryToServer(sport, entry){
   if(!SERVER_URL) return;
   const auth = loadGateAuth();
@@ -1913,10 +1931,10 @@ document.querySelectorAll('.tab').forEach(btn=>{
     // l'étincelle soient déjà affichés — jamais avant, sinon c'est justement le blanc/gel
     // d'affichage que l'étincelle est censée éviter.
     requestAnimationFrame(()=>{
-      if(btn.dataset.tab==='ge'){ fetchSharedCalibration('football', matchFlags.league); refreshLeagueDatalist('football','leagueListGe'); }
-      if(btn.dataset.tab==='bk'){ fetchSharedCalibration('basketball', bkMatchFlags.league); refreshLeagueDatalist('basketball','leagueListBk'); }
+      if(btn.dataset.tab==='ge'){ fetchSharedCalibration('football', matchFlags.league); fetchLeagueStats('football', matchFlags.league); refreshLeagueDatalist('football','leagueListGe'); }
+      if(btn.dataset.tab==='bk'){ fetchSharedCalibration('basketball', bkMatchFlags.league); fetchLeagueStats('basketball', bkMatchFlags.league); refreshLeagueDatalist('basketball','leagueListBk'); }
       if(btn.dataset.tab==='profil'){ renderProfile(); }
-      if(btn.dataset.tab==='comm'){ renderCommunityFeed(true); }
+      if(btn.dataset.tab==='comm'){ renderCommunityFeed(true); renderCommunityExactWins(); }
       if(btn.dataset.tab==='classement'){ renderLeaderboard(); }
       if(btn.dataset.tab==='rc'){
         const rp = document.getElementById('searchResultsPanel');
@@ -2211,18 +2229,50 @@ function copyCommunityAnalysisToHistory(r){
 
 // -- Fil communautaire (onglet Communauté) --
 const commState = {sport:'football', sub:'safe', page:0, day:'all'};
-function renderCommFeedDayScroller(){
+async function renderCommFeedDayScroller(){
   const scroller = document.getElementById('commFeedDayScroller');
   if(!scroller) return;
-  const days = ['all', ...Array.from({length:20}, (_,i)=>{ const d=new Date(Date.now()-i*86400000); return d.toISOString().slice(0,10); })];
+  scroller.innerHTML = '<div class="empty-hint" style="padding:4px 8px;">Calendrier…</div>';
+  // Calendrier basé sur la RÉALITÉ des publications de ce sous-onglet précis (nouveau) —
+  // jamais un défilement générique "20 derniers jours" qui afficherait des jours vides :
+  // seuls les jours où CE filtre a effectivement du contenu apparaissent.
+  const {ok, data} = await apiGet('/api/community/active-days', {sport:commState.sport, sub:commState.sub});
+  const activeDays = (ok && data.days) ? data.days : [];
+  if(commState.day!=='all' && !activeDays.includes(commState.day)) commState.day = 'all';
+  const todayKey = todayISO();
+  const days = ['all', ...activeDays];
   scroller.innerHTML = days.map(k=>{
     const active = k===commState.day ? 'active' : '';
-    const label = k==='all' ? 'Tous' : (k===days[1] ? "Aujourd'hui" : new Date(k+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit', month:'short'}));
+    const label = k==='all' ? 'Tous' : (k===todayKey ? "Aujourd'hui" : new Date(k+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit', month:'short'}));
     return `<button class="journal-day-chip sfx-tap ${active}" data-day="${k}">${label}</button>`;
   }).join('');
   scroller.querySelectorAll('.journal-day-chip').forEach(btn=>{
     btn.addEventListener('click', ()=>{ commState.day = btn.dataset.day; renderCommunityFeed(true); });
   });
+}
+// -- Carte compacte (safe/best/value/score) — juste le pari vedette, pas le détail complet.
+// La version complète (renderCommCard) reste réservée à l'onglet "Tout", qui sert de vraie
+// carte d'historique d'analyse (λ, tous les paris, statut détaillé).
+function renderCommCompactCard(r){
+  const best = r.headlineBet || (r.bets||[]).slice().sort((a,b)=>b.p-a.p)[0];
+  const dateStr = r.timestamp ? new Date(r.timestamp).toLocaleDateString('fr-FR') : '';
+  const badge = !r.headlineBet ? '' : r.rentable
+    ? `<span class="tier-badge" style="color:var(--green); background:var(--green)18;">💰 EDGE +${(best.edge*100).toFixed(1)}%</span>`
+    : (r.reliabilityN>=15 ? `<span class="tier-badge" style="color:var(--sky); background:var(--sky)18;">📊 ${(r.reliabilityFactor*100).toFixed(0)}% fiable</span>` : '');
+  let statusTag = '';
+  if(r.verifiedAt){
+    const bestEval = (best && r.evaluations) ? r.evaluations.find(e=>e.label===best.label) : null;
+    const hit = bestEval ? bestEval.hit : null;
+    statusTag = hit===true ? '<span class="tier-badge" style="color:var(--teal); background:var(--teal)18;">✓ Gagné</span>'
+      : hit===false ? '<span class="tier-badge" style="color:var(--red); background:var(--red)18;">✗ Perdu</span>'
+      : '<span class="tier-badge" style="color:var(--text-faint); background:var(--text-faint)18;">Vérifié</span>';
+  }
+  return `<div class="pick-card">
+    <div class="pc-teams">${r.nameA} — ${r.nameB}</div>
+    <div class="pc-meta">👤 ${r.authorPseudo||'Anonyme'} · ${dateStr}</div>
+    <div class="pc-market"><span class="pc-label">${best?best.label:''}</span><span class="pc-pct">${best?fmtPct(best.p):''}</span></div>
+    ${badge}${statusTag}
+  </div>`;
 }
 async function renderCommunityFeed(reset){
   if(reset) commState.page = 0;
@@ -2230,7 +2280,7 @@ async function renderCommunityFeed(reset){
   const subBtn = document.querySelector('.subnav button[data-group="commsub"].active');
   commState.sport = sportBtn ? sportBtn.dataset.sub : 'football';
   commState.sub = subBtn ? subBtn.dataset.sub : 'all';
-  renderCommFeedDayScroller();
+  await renderCommFeedDayScroller();
   const panel = document.getElementById('commFeedPanel');
   const loadMoreBtn = document.getElementById('commLoadMoreBtn');
   if(!SERVER_URL || !apiAuthed()){ panel.innerHTML = '<div class="empty-hint">Connectez-vous pour voir la communauté.</div>'; loadMoreBtn.classList.add('hidden'); return; }
@@ -2239,7 +2289,10 @@ async function renderCommunityFeed(reset){
   if(commState.day!=='all') params.day = commState.day;
   const {ok, data} = await apiGet('/api/community/feed', params);
   if(!ok){ panel.innerHTML = `<div class="empty-hint">${data.error||'Erreur de chargement.'}</div>`; loadMoreBtn.classList.add('hidden'); return; }
-  const html = (data.results||[]).map(r=>renderCommCard(r)).join('');
+  // "Tout" = cartes d'historique complet (λ, tous les paris) ; les autres sous-onglets
+  // n'affichent que le pari vedette, dans une carte compacte.
+  const renderer = commState.sub==='all' ? (r)=>renderCommCard(r,{showCopy:true}) : renderCommCompactCard;
+  const html = (data.results||[]).map(renderer).join('');
   if(reset) panel.innerHTML = html || "<div class=\"empty-hint\">Aucune analyse publiée pour l'instant sur ce filtre.</div>";
   else panel.insertAdjacentHTML('beforeend', html);
   // Le filtre par jour renvoie déjà tout le jour d'un coup : pas de pagination dans ce cas.
@@ -2247,41 +2300,14 @@ async function renderCommunityFeed(reset){
 }
 document.getElementById('commLoadMoreBtn').addEventListener('click', ()=>{ commState.page++; renderCommunityFeed(false); });
 
-/* -- Combinés par catégorie de risque (nouveau) — un combiné faible/modéré/élevé par
-   jour, construit à partir des analyses publiées ce jour-là. Statut recalculé à chaque
-   affichage : "Perdu" dès qu'une seule jambe est vérifiée manquée, même si les autres
-   n'ont pas encore de résultat — exactement comme un vrai combiné chez un bookmaker. -- */
-const RISK_LABELS = {faible:{label:'Risque faible', color:'var(--teal,#6EE7B7)'}, modere:{label:'Risque modéré', color:'var(--gold)'}, eleve:{label:'Risque élevé', color:'var(--red,#F2545B)'}};
-const STATUS_LABELS = {gagne:{label:'✓ Gagné', color:'var(--teal,#6EE7B7)'}, perdu:{label:'✗ Perdu', color:'var(--red,#F2545B)'}, en_cours:{label:'⏳ En cours', color:'var(--text-faint)'}};
-let commComboDay = todayISO();
-async function renderCommunityCombos(){
+// -- Mur des scores exacts gagnés (indépendant des combinés, désormais toujours visible
+//    sous le fil Communauté, quel que soit le sous-onglet) --
+async function renderCommunityExactWins(){
   const sportBtn = document.querySelector('.subnav button[data-group="commsport"].active');
   const sport = sportBtn ? sportBtn.dataset.sub : 'football';
-  const scroller = document.getElementById('commComboDayScroller');
-  const panel = document.getElementById('commCombosPanel');
   const winsPanel = document.getElementById('commExactWinsPanel');
-  if(!SERVER_URL || !apiAuthed()){ panel.innerHTML = '<div class="empty-hint">Connectez-vous pour voir les combinés.</div>'; return; }
-
-  // 20 derniers jours, aujourd'hui en tête.
-  const days = Array.from({length:20}, (_,i)=>{ const d=new Date(Date.now()-i*86400000); return d.toISOString().slice(0,10); });
-  if(!days.includes(commComboDay)) commComboDay = days[0];
-  scroller.innerHTML = days.map(k=>{
-    const active = k===commComboDay ? 'active' : '';
-    const label = k===days[0] ? "Aujourd'hui" : new Date(k+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit', month:'short'});
-    return `<button class="journal-day-chip sfx-tap ${active}" data-day="${k}">${label}</button>`;
-  }).join('');
-  scroller.querySelectorAll('.journal-day-chip').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ commComboDay = btn.dataset.day; renderCommunityCombos(); });
-  });
-
-  panel.innerHTML = '<div class="empty-hint">Chargement…</div>';
-  const {ok, data} = await apiGet('/api/community/combos', {sport, day:commComboDay});
-  if(!ok || !data.combos || !data.combos.length){
-    panel.innerHTML = `<div class="empty-hint">Aucun combiné pour ce jour — il faut au moins 2 matchs <b>publiés en Communauté</b> (pas juste analysés en privé) dans ce niveau de risque, sur les dernières 48h.</div>`;
-  } else {
-    panel.innerHTML = data.combos.map(renderComboCard).join('');
-  }
-
+  if(!winsPanel) return;
+  if(!SERVER_URL || !apiAuthed()){ winsPanel.innerHTML = ''; return; }
   winsPanel.innerHTML = '<div class="empty-hint">Chargement…</div>';
   const {ok:okW, data:dataW} = await apiGet('/api/community/exact-score-wins', {sport});
   if(!okW || !dataW.results || !dataW.results.length){
@@ -2294,7 +2320,62 @@ async function renderCommunityCombos(){
       </div>`).join('');
   }
 }
-function renderComboCard(combo){
+
+// -- Combinés privés (déplacés depuis Communauté — 1.x) : construits à partir de VOS
+// propres analyses du jour (DB[sport]), publiées ou non. Recalculés à chaque affichage,
+// exactement comme les autres sous-onglets de Bets (Meilleurs Paris, Safe, Value, Score). --
+const RISK_LABELS = {faible:{label:'Risque faible', color:'var(--teal,#6EE7B7)'}, modere:{label:'Risque modéré', color:'var(--gold)'}, eleve:{label:'Risque élevé', color:'var(--red,#F2545B)'}};
+const STATUS_LABELS = {gagne:{label:'✓ Gagné', color:'var(--teal,#6EE7B7)'}, perdu:{label:'✗ Perdu', color:'var(--red,#F2545B)'}, en_cours:{label:'⏳ En cours', color:'var(--text-faint)'}};
+const PRIVATE_COMBO_BANDS = {
+  faible: {legsWanted:4, filter:b=>b.p>=0.75},
+  modere: {legsWanted:3, filter:b=>b.p>=0.55 && b.p<0.75},
+  eleve: {legsWanted:3, filter:b=>b.p<0.55},
+};
+function buildPrivateCombos(sport){
+  const list = DB[sport]||[];
+  const combos = [];
+  for(const [riskLevel, cfg] of Object.entries(PRIVATE_COMBO_BANDS)){
+    // Un seul pari par match (matches distincts) — sinon deux jambes du même match seraient
+    // statistiquement liées, ce qui fausse la cote combinée.
+    const perMatch = list.map(r=>{
+      const eligible = (r.bets||[]).filter(cfg.filter);
+      if(!eligible.length) return null;
+      const options = eligible.slice().sort((a,b)=>b.p-a.p)
+        .map(bet=>({recordId:r.id, nameA:r.nameA, nameB:r.nameB, label:bet.label, p:bet.p, marketType:marketTypeFromEval(bet.eval)}));
+      return {options, record:r};
+    }).filter(Boolean);
+    if(perMatch.length<2) continue; // pas assez de matchs analysés aujourd'hui pour ce niveau
+
+    // Diversité : on parcourt les matchs en boucle, prenant à chaque tour le meilleur pari
+    // de chaque match dont le type de marché n'est pas encore représenté.
+    const legs = []; const usedMarketTypes = new Set(); let round = 0;
+    while(legs.length < cfg.legsWanted && round < perMatch.length*3){
+      const idx = round % perMatch.length;
+      const {options, record} = perMatch[idx];
+      if(legs.some(l=>l.recordId===record.id)){ round++; continue; }
+      const chosen = options.find(o=>!usedMarketTypes.has(o.marketType)) || options[0];
+      if(chosen){ legs.push({...chosen, record}); usedMarketTypes.add(chosen.marketType); }
+      round++;
+    }
+    if(legs.length<2) continue;
+    const combinedP = legs.reduce((acc,l)=>acc*l.p,1);
+    const combinedOdds = legs.reduce((acc,l)=>acc*(1/l.p),1);
+    // Statut recalculé à la volée depuis vos propres records (finalScore/evaluations posés
+    // quand vous validez un résultat dans Histoire) — pas besoin de stockage séparé.
+    let allVerified = true, anyLost = false;
+    const legsWithStatus = legs.map(l=>{
+      const rec = l.record;
+      if(!rec.finalScore || !rec.evaluations){ allVerified = false; return {...l, status:'pending'}; }
+      const ev = rec.evaluations.find(e=>e.label===l.label);
+      const hit = ev ? ev.hit : null;
+      if(hit===false) anyLost = true;
+      return {...l, status: hit===true?'hit':hit===false?'miss':'pending'};
+    });
+    combos.push({riskLevel, legs:legsWithStatus, combinedP, combinedOdds, status: anyLost?'perdu':(allVerified?'gagne':'en_cours')});
+  }
+  return combos;
+}
+function renderPrivateComboCard(combo){
   const risk = RISK_LABELS[combo.riskLevel] || {label:combo.riskLevel, color:'var(--text)'};
   const status = STATUS_LABELS[combo.status] || STATUS_LABELS.en_cours;
   return `<div class="glass combo-card" style="border-left:3px solid ${risk.color}; padding:14px; margin-bottom:12px;">
@@ -2348,16 +2429,8 @@ document.querySelectorAll('.subnav button').forEach(btn=>{
     if(group==='hi') renderHistory();
     if(group==='be' || group==='bb') renderBets(betsSelectedSport);
     if(group==='commsport' || group==='commsub'){
-      const feedBlock = document.getElementById('commFeedBlock'), combosBlock = document.getElementById('commCombosBlock');
-      if(subState.commsub==='combos'){
-        if(feedBlock) feedBlock.classList.add('hidden');
-        if(combosBlock) combosBlock.classList.remove('hidden');
-        renderCommunityCombos();
-      } else {
-        if(feedBlock) feedBlock.classList.remove('hidden');
-        if(combosBlock) combosBlock.classList.add('hidden');
-        renderCommunityFeed(true);
-      }
+      renderCommunityFeed(true);
+      if(group==='commsport') renderCommunityExactWins();
     }
   });
 });
@@ -2997,6 +3070,7 @@ function markResult(sport, recordId, finalA, finalB, finalStats){
   if(rec.stage) calibrateStageTension(sport, rec.league);
   if(rec.leg==='retour') calibrateAggSensitivity(sport, rec.league);
   fetchSharedCalibration(sport, rec.league); // rafraîchit le cache partagé avec ce nouveau match inclus
+  fetchLeagueStats(sport, rec.league); // idem pour les moyennes par ligue (football + basket)
   archiveResult(sport, rec, finalA, finalB);
   notifyDayResult(sport, rec, finalA, finalB);
   maybePromptPlayStoreRating(evaluations);
@@ -3201,7 +3275,7 @@ let leagueGeDebounce;
 document.getElementById('leagueGe').addEventListener('input', e=>{
   matchFlags.league = normalizeLeagueName(e.target.value);
   clearTimeout(leagueGeDebounce);
-  leagueGeDebounce = setTimeout(()=>fetchSharedCalibration('football', matchFlags.league), 600);
+  leagueGeDebounce = setTimeout(()=>{ fetchSharedCalibration('football', matchFlags.league); fetchLeagueStats('football', matchFlags.league); }, 600);
 });
 ['injuryA','fatigueA','uncertainA','injuryB','fatigueB','uncertainB'].forEach(id=>{
   document.getElementById(id).addEventListener('change', e=>{ matchFlags[id] = e.target.checked; });
@@ -3381,6 +3455,17 @@ function computeGeneseLambdas(){
   if(lambdaB===null) lambdaB = NEUTRAL_GOALS;
   if(lambdaA!==null && lambdaB!==null && advStats.xgA!=null && advStats.xgaB!=null){ lambdaA = lambdaA*.7 + (advStats.xgA*.6+advStats.xgaB*.4)*.3; }
   if(lambdaA!==null && lambdaB!==null && advStats.xgB!=null && advStats.xgaA!=null){ lambdaB = lambdaB*.7 + (advStats.xgB*.6+advStats.xgaA*.4)*.3; }
+  // Moyennes par ligue (nouveau) : ancrage de fond vers la réalité de la ligue tapée
+  // (buts moyens domicile/extérieur), construite côté serveur sur tous les matchs déjà
+  // vérifiés par la communauté pour cette ligue. Poids croissant avec le nombre de matchs
+  // déjà vérifiés (n), plafonné à 35% pour ne jamais écraser la forme réelle des deux
+  // équipes — un simple repli de fond, pas une réécriture du calcul.
+  const leagueStats = getCachedLeagueStats('football', matchFlags.league);
+  if(leagueStats && lambdaA!==null && lambdaB!==null){
+    const leagueWeight = Math.min(0.35, leagueStats.n/30);
+    lambdaA = lambdaA*(1-leagueWeight) + leagueStats.avgHomeGoals*leagueWeight;
+    lambdaB = lambdaB*(1-leagueWeight) + leagueStats.avgAwayGoals*leagueWeight;
+  }
   const qualityIdx=classementQualityIndex(standings), eIdx=eloIndex(standings);
   const {idx:enjeuIdx, zoneA, zoneB, phaseLabel}=enjeuInfo(standings);
   const trendA=trendIndex(store.aSerie), trendB=trendIndex(store.bSerie);
@@ -3417,7 +3502,7 @@ function computeGeneseLambdas(){
   const aggAdj = aggregateAdjustment(matchFlags.leg, matchFlags.aggAllerA, matchFlags.aggAllerB, 'football', matchFlags.league);
   if(lambdaA!==null) lambdaA *= aggAdj.factorA;
   if(lambdaB!==null) lambdaB *= aggAdj.factorB;
-  return {lambdaA, lambdaB, totalAdj, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp:stageAdj.sigmaDamp, aggregateNote:aggAdj.note, components:geneseComponents,
+  return {lambdaA, lambdaB, totalAdj, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:stageAdj.sigmaDamp, aggregateNote:aggAdj.note, components:geneseComponents,
     stage: stageIsKO ? matchFlags.stage : null, leg: matchFlags.leg, tensionUsed: stageIsKO ? stageAdj.tensionUsed : null,
     aggFactorUsed: matchFlags.leg==='retour' ? {factorA:aggAdj.factorA, factorB:aggAdj.factorB} : null, aggDiff: aggAdj.diff||0};
 }
@@ -3922,7 +4007,7 @@ let leagueBkDebounce;
 document.getElementById('leagueBk').addEventListener('input', e=>{
   bkMatchFlags.league = normalizeLeagueName(e.target.value);
   clearTimeout(leagueBkDebounce);
-  leagueBkDebounce = setTimeout(()=>fetchSharedCalibration('basketball', bkMatchFlags.league), 600);
+  leagueBkDebounce = setTimeout(()=>{ fetchSharedCalibration('basketball', bkMatchFlags.league); fetchLeagueStats('basketball', bkMatchFlags.league); }, 600);
 });
 ['injuryA','fatigueA','uncertainA','injuryB','fatigueB','uncertainB'].forEach(id=>{
   document.getElementById('bk'+id.charAt(0).toUpperCase()+id.slice(1)).addEventListener('change', e=>{ bkMatchFlags[id] = e.target.checked; });
@@ -3997,6 +4082,17 @@ function computeBasketPoints(){
   const NEUTRAL_POINTS = 100;
   if(ptsA===null) ptsA = NEUTRAL_POINTS;
   if(ptsB===null) ptsB = NEUTRAL_POINTS;
+  // Moyennes par ligue (nouveau, basket) : même principe qu'en football — ancrage de fond
+  // vers les points moyens domicile/extérieur réels de la ligue, poids croissant avec le
+  // nombre de matchs déjà vérifiés par la communauté (plafonné à 35%). Le champ s'appelle
+  // "avgHomeGoals/avgAwayGoals" côté serveur (généré par la même fonction que le football)
+  // mais représente ici des POINTS, pas des buts — la mécanique de calcul est identique.
+  const leagueStats = getCachedLeagueStats('basketball', bkMatchFlags.league);
+  if(leagueStats && ptsA!==null && ptsB!==null){
+    const leagueWeight = Math.min(0.35, leagueStats.n/30);
+    ptsA = ptsA*(1-leagueWeight) + leagueStats.avgHomeGoals*leagueWeight;
+    ptsB = ptsB*(1-leagueWeight) + leagueStats.avgAwayGoals*leagueWeight;
+  }
   const qualityIdx=classementQualityIndex(bkStandings), eIdx=eloIndex(bkStandings);
   const {idx:enjeuIdx, zoneA, zoneB, phaseLabel}=enjeuInfo(bkStandings);
   const trendA=trendIndex(bkStore.aSerie), trendB=trendIndex(bkStore.bSerie);
@@ -4026,7 +4122,7 @@ function computeBasketPoints(){
   const bkAggAdj = bkAggregateAdjustment(bkMatchFlags.leg, bkMatchFlags.aggAllerA, bkMatchFlags.aggAllerB, bkMatchFlags.league);
   if(ptsA!==null) ptsA *= bkAggAdj.factorA;
   if(ptsB!==null) ptsB *= bkAggAdj.factorB;
-  return {ptsA, ptsB, totalAdj, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp:bkStageAdj.sigmaDamp, aggregateNote:bkAggAdj.note, components:basketComponents,
+  return {ptsA, ptsB, totalAdj, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:bkStageAdj.sigmaDamp, aggregateNote:bkAggAdj.note, components:basketComponents,
     stage: bkStageIsKO ? bkMatchFlags.stage : null, leg: bkMatchFlags.leg, tensionUsed: bkStageIsKO ? bkStageAdj.tensionUsed : null,
     aggFactorUsed: bkMatchFlags.leg==='retour' ? {factorA:bkAggAdj.factorA, factorB:bkAggAdj.factorB} : null, aggDiff: bkAggAdj.diff||0};
 }
@@ -4597,10 +4693,21 @@ function tierBadge(p){
 }
 function renderBets(sport){
   const isBasket = sport==='basketball';
-  const group = isBasket ? 'bb' : 'be'; // mémoire de sous-onglet (best/safe/value/score) gardée séparée par sport
+  const group = isBasket ? 'bb' : 'be'; // mémoire de sous-onglet (best/safe/value/score/combos) gardée séparée par sport
   const panel = document.getElementById('betsPanel');
   const sub = subState[group];
   const list = DB[sport]||[];
+
+  // Combinés privés (déplacés depuis Communauté) : construits à partir de VOS propres
+  // analyses du jour, publiées ou non — structure différente (groupée par niveau de
+  // risque), donc rendu à part, avant la logique "liste plate" des autres sous-onglets.
+  if(sub==='combos'){
+    const combos = buildPrivateCombos(sport);
+    panel.innerHTML = combos.length
+      ? combos.map(renderPrivateComboCard).join('')
+      : `<div class="glass empty-state"><div class="glyph">Ø</div><p>Pas assez d'analyses aujourd'hui pour former un combiné (il faut au moins 2 matchs analysés, publiés ou non, par niveau de risque). Analysez d'autres matchs et revenez ici.</p></div>`;
+    return;
+  }
 
   let picks = [];
   if(sub==='best'){
