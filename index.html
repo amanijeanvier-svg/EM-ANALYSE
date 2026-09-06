@@ -1607,13 +1607,19 @@ async function fetchSharedCalibration(sport, league){
     return data;
   }catch(e){ return null; } // hors-ligne ou serveur indisponible : repli silencieux sur le calcul local
 }
-// -- Moyennes par ligue (nouveau, football pour l'instant) : buts moyens domicile/extérieur
-// et % victoire domicile/extérieur/nul, construits côté serveur à partir de TOUTES les
-// analyses communauté déjà vérifiées, tous utilisateurs confondus. Sert de repère de fond
-// dans computeGeneseLambdas — jamais utilisé seul, toujours mélangé avec les stats propres
-// aux deux équipes, avec un poids qui grandit avec le nombre de matchs déjà vérifiés pour
-// cette ligue (jamais plus de 35%, pour ne jamais écraser la forme réelle des équipes).
-const leagueStatsCache = {}; // clé: `${sport}|${league}` -> {stats, fetchedAt}
+// -- Moyennes par ligue (football + basket) : buts/points moyens domicile/extérieur et
+// % victoire domicile/extérieur/nul. Sert de repère de fond dans computeGeneseLambdas /
+// computeBasketPoints — jamais utilisé seul, toujours mélangé avec les stats propres aux
+// deux équipes, avec un poids qui grandit avec le nombre de matchs déjà vérifiés pour cette
+// ligue (jamais plus de 35%, pour ne jamais écraser la forme réelle des équipes).
+// Deux sources FUSIONNÉES :
+//  1) le pool serveur (construit sur les analyses publiées ET vérifiées en communauté,
+//     tous utilisateurs confondus, avec un minimum de 8 matchs pour être publié) ;
+//  2) un agrégat 100% local (localStorage), alimenté par CHACUNE de vos vérifications,
+//     publiées ou non — pour que vos propres analyses privées comptent aussi, même
+//     hors-ligne ou si le serveur ne répond pas.
+const leagueStatsCache = {}; // clé: `${sport}|${league}` -> {stats, fetchedAt}  (pool serveur, brut)
+const LEAGUE_STATS_MIN_N_CLIENT = 8; // même seuil que côté serveur, appliqué ici sur le TOTAL fusionné
 function leagueStatsKey(sport, league){ return `${sport}|${(league||'').trim()}`; }
 async function fetchLeagueStats(sport, league){
   if(!SERVER_URL || !(league||'').trim()) return null;
@@ -1628,9 +1634,60 @@ async function fetchLeagueStats(sport, league){
     return data.stats||null;
   }catch(e){ return null; }
 }
+// Contribution silencieuse : envoie juste le score final + la ligue au pool serveur, SANS
+// publier l'analyse en communauté — pour que vos vérifications privées profitent quand même
+// à la moyenne commune. Best-effort, ne bloque jamais rien si ça échoue.
+async function contributeLeagueScoreSilently(sport, league, finalScore){
+  if(!SERVER_URL || !(league||'').trim()) return;
+  const auth = loadGateAuth();
+  if(!auth) return;
+  try{
+    await apiPost('/api/league-contribute', {sport, league, homeScore:finalScore.a, awayScore:finalScore.b});
+  }catch(e){} // silencieux : ce n'est qu'un enrichissement, jamais critique
+}
+const LOCAL_LEAGUE_STATS_KEY = 'ea_league_local_stats_v1';
+function loadLocalLeagueStatsStore(){
+  try{ return JSON.parse(localStorage.getItem(LOCAL_LEAGUE_STATS_KEY)||'{}'); }catch(e){ return {}; }
+}
+function saveLocalLeagueStatsStore(store){
+  try{ localStorage.setItem(LOCAL_LEAGUE_STATS_KEY, JSON.stringify(store)); }catch(e){}
+}
+// Alimente l'agrégat local à CHAQUE vérification (publiée ou non) — sommes brutes, pas des
+// moyennes, pour pouvoir les fusionner correctement plus tard avec le pool serveur.
+function updateLocalLeagueStats(sport, league, finalScore){
+  if(!(league||'').trim() || finalScore.a==null || finalScore.b==null) return;
+  const store = loadLocalLeagueStatsStore();
+  const key = leagueStatsKey(sport, league);
+  const s = store[key] || {homeGoals:0, awayGoals:0, homeWins:0, awayWins:0, draws:0, n:0};
+  s.homeGoals += finalScore.a; s.awayGoals += finalScore.b; s.n++;
+  if(finalScore.a>finalScore.b) s.homeWins++; else if(finalScore.b>finalScore.a) s.awayWins++; else s.draws++;
+  store[key] = s;
+  saveLocalLeagueStatsStore(store);
+}
+function getLocalLeagueStats(sport, league){
+  const store = loadLocalLeagueStatsStore();
+  return store[leagueStatsKey(sport, league)] || null; // sommes brutes {homeGoals, awayGoals, homeWins, awayWins, draws, n}
+}
+// Fusion des deux sources — c'est CETTE fonction que computeGeneseLambdas/computeBasketPoints
+// utilisent, jamais les deux sources séparément.
 function getCachedLeagueStats(sport, league){
-  const entry = leagueStatsCache[leagueStatsKey(sport, league)];
-  return entry ? entry.stats : null;
+  const serverEntry = leagueStatsCache[leagueStatsKey(sport, league)];
+  const server = serverEntry ? serverEntry.stats : null; // {avgHomeGoals, avgAwayGoals, homeWinPct, awayWinPct, drawPct, n} ou null
+  const local = getLocalLeagueStats(sport, league); // sommes brutes ou null
+  const serverSums = server
+    ? {homeGoals:server.avgHomeGoals*server.n, awayGoals:server.avgAwayGoals*server.n, homeWins:server.homeWinPct*server.n, awayWins:server.awayWinPct*server.n, draws:server.drawPct*server.n, n:server.n}
+    : {homeGoals:0, awayGoals:0, homeWins:0, awayWins:0, draws:0, n:0};
+  const localSums = local || {homeGoals:0, awayGoals:0, homeWins:0, awayWins:0, draws:0, n:0};
+  const n = serverSums.n + localSums.n;
+  if(n < LEAGUE_STATS_MIN_N_CLIENT) return null; // pas assez de matchs (serveur + local confondus) pour que ce soit fiable
+  return {
+    avgHomeGoals: (serverSums.homeGoals+localSums.homeGoals)/n,
+    avgAwayGoals: (serverSums.awayGoals+localSums.awayGoals)/n,
+    homeWinPct: (serverSums.homeWins+localSums.homeWins)/n,
+    awayWinPct: (serverSums.awayWins+localSums.awayWins)/n,
+    drawPct: (serverSums.draws+localSums.draws)/n,
+    n,
+  };
 }
 function pushTrackEntryToServer(sport, entry){
   if(!SERVER_URL) return;
@@ -3070,6 +3127,12 @@ function markResult(sport, recordId, finalA, finalB, finalStats){
   if(rec.stage) calibrateStageTension(sport, rec.league);
   if(rec.leg==='retour') calibrateAggSensitivity(sport, rec.league);
   fetchSharedCalibration(sport, rec.league); // rafraîchit le cache partagé avec ce nouveau match inclus
+  // Moyennes par ligue : alimente TOUJOURS l'agrégat local (même hors-ligne, même en privé),
+  // et alimente le pool serveur SEULEMENT si ce match n'est pas déjà publié en communauté —
+  // sinon il serait compté deux fois côté serveur (une fois via la vérification communauté,
+  // une fois via cette contribution silencieuse).
+  updateLocalLeagueStats(sport, rec.league, {a:finalA, b:finalB});
+  if(rec.communityId==null) contributeLeagueScoreSilently(sport, rec.league, {a:finalA, b:finalB});
   fetchLeagueStats(sport, rec.league); // idem pour les moyennes par ligue (football + basket)
   archiveResult(sport, rec, finalA, finalB);
   notifyDayResult(sport, rec, finalA, finalB);
