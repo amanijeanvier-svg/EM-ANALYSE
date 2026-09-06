@@ -2385,8 +2385,8 @@ const RISK_LABELS = {faible:{label:'Risque faible', color:'var(--teal,#6EE7B7)'}
 const STATUS_LABELS = {gagne:{label:'✓ Gagné', color:'var(--teal,#6EE7B7)'}, perdu:{label:'✗ Perdu', color:'var(--red,#F2545B)'}, en_cours:{label:'⏳ En cours', color:'var(--text-faint)'}};
 const PRIVATE_COMBO_BANDS = {
   faible: {legsWanted:4, filter:b=>b.p>=0.75},
-  modere: {legsWanted:3, filter:b=>b.p>=0.55 && b.p<0.75},
-  eleve: {legsWanted:3, filter:b=>b.p<0.55},
+  modere: {legsWanted:5, filter:b=>b.p>=0.55 && b.p<0.75},
+  eleve: {legsWanted:4, filter:b=>b.p<0.55},
 };
 function buildPrivateCombos(sport){
   const list = DB[sport]||[];
