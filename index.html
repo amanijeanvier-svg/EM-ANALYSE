@@ -398,6 +398,12 @@ input{font-family:inherit;}
 .flags-team-lbl{font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--gold); margin-bottom:6px; text-transform:uppercase;}
 .flag-check{display:flex; align-items:center; gap:7px; font-size:12px; color:var(--text-dim); margin-bottom:7px; cursor:pointer;}
 .flag-check input{accent-color:var(--gold); width:14px; height:14px;}
+.severity-seg{display:none; gap:4px; margin:-3px 0 9px 21px;}
+.severity-seg.show{display:flex;}
+.severity-seg button{flex:1; border:1px solid var(--line); background:var(--panel2,#0d0f16); color:var(--text-faint); font-family:'IBM Plex Mono',monospace; font-size:9px; padding:4px 2px; border-radius:5px; cursor:pointer; text-transform:uppercase; letter-spacing:.02em;}
+.severity-seg button.active[data-lvl="faible"]{background:rgba(110,231,183,.18); border-color:#6EE7B7; color:#6EE7B7;}
+.severity-seg button.active[data-lvl="modere"]{background:rgba(240,200,90,.18); border-color:var(--gold); color:var(--gold);}
+.severity-seg button.active[data-lvl="eleve"]{background:rgba(242,84,91,.18); border-color:#F2545B; color:#F2545B;}
 .adv-toggle-row{display:flex; align-items:center; justify-content:space-between; cursor:pointer; padding:16px 20px; border-bottom:1px solid var(--line);}
 .adv-toggle-row .section-title{margin:0; border:none;}
 .actions{padding:18px 20px; display:flex; gap:10px; flex-direction:column;}
@@ -841,15 +847,21 @@ input{font-family:inherit;}
               <div class="flags-col">
                 <div class="flags-team-lbl" id="bkFlagsNameA">A</div>
                 <label class="flag-check"><input type="checkbox" id="bkInjuryA"> Blessure(s) clé(s)</label>
+                <div class="severity-seg" id="bkInjurySeverityA" data-flag="injury" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <label class="flag-check"><input type="checkbox" id="bkFatigueA"> Enchaînement fatigant</label>
+                <div class="severity-seg" id="bkFatigueSeverityA" data-flag="fatigue" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <label class="flag-check"><input type="checkbox" id="bkUncertainA"> Doute sur l'effectif</label>
+                <div class="severity-seg" id="bkUncertainSeverityA" data-flag="uncertain" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <div class="standing-inputs" style="margin-top:8px;"><div><label>Joueurs clés absents</label><input type="number" id="bkAbsA" min="0" max="5" placeholder="0"></div></div>
               </div>
               <div class="flags-col">
                 <div class="flags-team-lbl" id="bkFlagsNameB">B</div>
                 <label class="flag-check"><input type="checkbox" id="bkInjuryB"> Blessure(s) clé(s)</label>
+                <div class="severity-seg" id="bkInjurySeverityB" data-flag="injury" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <label class="flag-check"><input type="checkbox" id="bkFatigueB"> Enchaînement fatigant</label>
+                <div class="severity-seg" id="bkFatigueSeverityB" data-flag="fatigue" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <label class="flag-check"><input type="checkbox" id="bkUncertainB"> Doute sur l'effectif</label>
+                <div class="severity-seg" id="bkUncertainSeverityB" data-flag="uncertain" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <div class="standing-inputs" style="margin-top:8px;"><div><label>Joueurs clés absents</label><input type="number" id="bkAbsB" min="0" max="5" placeholder="0"></div></div>
               </div>
             </div>
@@ -4055,7 +4067,30 @@ async function autoFillBasketballTeam(which){
 document.getElementById('bkAutoFillBtnA').addEventListener('click', ()=>autoFillBasketballTeam('A'));
 document.getElementById('bkAutoFillBtnB').addEventListener('click', ()=>autoFillBasketballTeam('B'));
 
-const bkMatchFlags = {matchType:'championnat', league:'', stage:'poules', leg:'sec', aggAllerA:null, aggAllerB:null, injuryA:false, fatigueA:false, uncertainA:false, injuryB:false, fatigueB:false, uncertainB:false, absA:0, absB:0};
+const bkMatchFlags = {matchType:'championnat', league:'', stage:'poules', leg:'sec', aggAllerA:null, aggAllerB:null, injuryA:false, fatigueA:false, uncertainA:false, injuryB:false, fatigueB:false, uncertainB:false, absA:0, absB:0,
+  injurySeverityA:'modere', fatigueSeverityA:'modere', uncertainSeverityA:'modere', injurySeverityB:'modere', fatigueSeverityB:'modere', uncertainSeverityB:'modere'};
+// Degré de gravité (faible/modéré/élevé) pour chaque marqueur contextuel — permet de préciser
+// à quel point la blessure/fatigue/doute pèse sur l'équipe (ex: absence d'un titulaire clé
+// vs simple rotation) plutôt qu'un impact fixe pour toute case cochée.
+const BK_SEVERITY_MULT = {
+  injury:    {faible:0.97, modere:0.92, eleve:0.85},
+  fatigue:   {faible:0.98, modere:0.95, eleve:0.90},
+  uncertain: {faible:0.98, modere:0.94, eleve:0.88},
+};
+const BK_SEVERITY_LABEL = {faible:'degré faible', modere:'degré modéré', eleve:'degré élevé'};
+document.querySelectorAll('.severity-seg').forEach(seg=>{
+  const flag = seg.dataset.flag, team = seg.dataset.team;
+  seg.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      seg.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      bkMatchFlags[flag+'Severity'+team] = btn.dataset.lvl;
+    });
+  });
+});
+function syncSeveritySegBk(flag, team, checked){
+  document.getElementById('bk'+flag.charAt(0).toUpperCase()+flag.slice(1)+'Severity'+team).classList.toggle('show', checked);
+}
 function syncStageBlockBk(){
   const isKO = bkMatchFlags.matchType==='coupe' || bkMatchFlags.matchType==='europe';
   document.getElementById('stageBlockBk').classList.toggle('hidden', !isKO);
@@ -4073,7 +4108,8 @@ document.getElementById('leagueBk').addEventListener('input', e=>{
   leagueBkDebounce = setTimeout(()=>{ fetchSharedCalibration('basketball', bkMatchFlags.league); fetchLeagueStats('basketball', bkMatchFlags.league); }, 600);
 });
 ['injuryA','fatigueA','uncertainA','injuryB','fatigueB','uncertainB'].forEach(id=>{
-  document.getElementById('bk'+id.charAt(0).toUpperCase()+id.slice(1)).addEventListener('change', e=>{ bkMatchFlags[id] = e.target.checked; });
+  const flag = id.slice(0,-1), team = id.slice(-1);
+  document.getElementById('bk'+id.charAt(0).toUpperCase()+id.slice(1)).addEventListener('change', e=>{ bkMatchFlags[id] = e.target.checked; syncSeveritySegBk(flag, team, e.target.checked); });
 });
 ['absA','absB'].forEach(id=>{
   document.getElementById('bk'+id.charAt(0).toUpperCase()+id.slice(1)).addEventListener('input', e=>{ bkMatchFlags[id] = e.target.value===''?0:parseInt(e.target.value,10)||0; });
@@ -4106,7 +4142,14 @@ document.getElementById('bkResetBtn').addEventListener('click', ()=>{
   bkMatchFlags.aggAllerA=null; bkMatchFlags.aggAllerB=null;
   syncStageBlockBk();
   document.getElementById('leagueBk').value=''; bkMatchFlags.league='';
-  ['injuryA','fatigueA','uncertainA','injuryB','fatigueB','uncertainB'].forEach(id=>{ document.getElementById('bk'+id.charAt(0).toUpperCase()+id.slice(1)).checked=false; bkMatchFlags[id]=false; });
+  ['injuryA','fatigueA','uncertainA','injuryB','fatigueB','uncertainB'].forEach(id=>{
+    const flag = id.slice(0,-1), team = id.slice(-1);
+    document.getElementById('bk'+id.charAt(0).toUpperCase()+id.slice(1)).checked=false; bkMatchFlags[id]=false;
+    syncSeveritySegBk(flag, team, false);
+    bkMatchFlags[flag+'Severity'+team]='modere';
+    const seg=document.getElementById('bk'+flag.charAt(0).toUpperCase()+flag.slice(1)+'Severity'+team);
+    seg.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b.dataset.lvl==='modere'));
+  });
   ['absA','absB'].forEach(id=>{ document.getElementById('bk'+id.charAt(0).toUpperCase()+id.slice(1)).value=''; bkMatchFlags[id]=0; });
   document.getElementById('resultsBk').style.display='none'; document.getElementById('emptyStateBk').style.display='flex';
 });
@@ -4167,15 +4210,15 @@ function computeBasketPoints(){
     ptsA = Math.max(60, ptsA*(1+totalAdj)); ptsB = Math.max(60, ptsB*(1-totalAdj));
   }
   if(ptsA!==null){
-    if(bkMatchFlags.injuryA) ptsA *= 0.92;
-    if(bkMatchFlags.fatigueA) ptsA *= 0.95;
-    if(bkMatchFlags.uncertainA) ptsA *= 0.94;
+    if(bkMatchFlags.injuryA) ptsA *= BK_SEVERITY_MULT.injury[bkMatchFlags.injurySeverityA];
+    if(bkMatchFlags.fatigueA) ptsA *= BK_SEVERITY_MULT.fatigue[bkMatchFlags.fatigueSeverityA];
+    if(bkMatchFlags.uncertainA) ptsA *= BK_SEVERITY_MULT.uncertain[bkMatchFlags.uncertainSeverityA];
     ptsA *= absenceAdjustment(bkMatchFlags.absA);
   }
   if(ptsB!==null){
-    if(bkMatchFlags.injuryB) ptsB *= 0.92;
-    if(bkMatchFlags.fatigueB) ptsB *= 0.95;
-    if(bkMatchFlags.uncertainB) ptsB *= 0.94;
+    if(bkMatchFlags.injuryB) ptsB *= BK_SEVERITY_MULT.injury[bkMatchFlags.injurySeverityB];
+    if(bkMatchFlags.fatigueB) ptsB *= BK_SEVERITY_MULT.fatigue[bkMatchFlags.fatigueSeverityB];
+    if(bkMatchFlags.uncertainB) ptsB *= BK_SEVERITY_MULT.uncertain[bkMatchFlags.uncertainSeverityB];
     ptsB *= absenceAdjustment(bkMatchFlags.absB);
   }
   const bkStageIsKO = bkMatchFlags.matchType==='coupe' || bkMatchFlags.matchType==='europe';
@@ -4361,10 +4404,12 @@ function runAnalysisBk(){
 
   let absencesTxtBk = '';
   const absABk=[], absBBk=[];
-  if(bkMatchFlags.injuryA) absABk.push('joueur(s) blessé(s)/suspendu(s) signalé(s)');
-  if(bkMatchFlags.fatigueA) absABk.push('fatigue/enchaînement de matchs signalé');
-  if(bkMatchFlags.injuryB) absBBk.push('joueur(s) blessé(s)/suspendu(s) signalé(s)');
-  if(bkMatchFlags.fatigueB) absBBk.push('fatigue/enchaînement de matchs signalé');
+  if(bkMatchFlags.injuryA) absABk.push(`joueur(s) blessé(s)/suspendu(s) signalé(s) (${BK_SEVERITY_LABEL[bkMatchFlags.injurySeverityA]})`);
+  if(bkMatchFlags.fatigueA) absABk.push(`fatigue/enchaînement de matchs signalé (${BK_SEVERITY_LABEL[bkMatchFlags.fatigueSeverityA]})`);
+  if(bkMatchFlags.uncertainA) absABk.push(`doute sur l'effectif (${BK_SEVERITY_LABEL[bkMatchFlags.uncertainSeverityA]})`);
+  if(bkMatchFlags.injuryB) absBBk.push(`joueur(s) blessé(s)/suspendu(s) signalé(s) (${BK_SEVERITY_LABEL[bkMatchFlags.injurySeverityB]})`);
+  if(bkMatchFlags.fatigueB) absBBk.push(`fatigue/enchaînement de matchs signalé (${BK_SEVERITY_LABEL[bkMatchFlags.fatigueSeverityB]})`);
+  if(bkMatchFlags.uncertainB) absBBk.push(`doute sur l'effectif (${BK_SEVERITY_LABEL[bkMatchFlags.uncertainSeverityB]})`);
   if(absABk.length) absencesTxtBk += `Côté ${nameA} : ${absABk.join(', ')}. `;
   if(absBBk.length) absencesTxtBk += `Côté ${nameB} : ${absBBk.join(', ')}. `;
   const insightsCtxBk = {
