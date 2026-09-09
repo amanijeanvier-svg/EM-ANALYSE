@@ -684,8 +684,11 @@ input{font-family:inherit;}
               <div class="flags-col">
                 <div class="flags-team-lbl" id="flagsNameA">A</div>
                 <label class="flag-check"><input type="checkbox" id="injuryA"> Blessure(s) clé(s)</label>
+                <div class="severity-seg" id="injurySeverityA" data-flag="injury" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <label class="flag-check"><input type="checkbox" id="fatigueA"> Enchaînement fatigant</label>
+                <div class="severity-seg" id="fatigueSeverityA" data-flag="fatigue" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <label class="flag-check"><input type="checkbox" id="uncertainA"> Doute sur la composition</label>
+                <div class="severity-seg" id="uncertainSeverityA" data-flag="uncertain" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <div class="pos-abs-lbl">Titulaires clés absents, par poste</div>
                 <div class="pos-abs-grid">
                   <div><label>Gardien</label><input type="number" id="posGkA" min="0" max="1" placeholder="0"></div>
@@ -697,8 +700,11 @@ input{font-family:inherit;}
               <div class="flags-col">
                 <div class="flags-team-lbl" id="flagsNameB">B</div>
                 <label class="flag-check"><input type="checkbox" id="injuryB"> Blessure(s) clé(s)</label>
+                <div class="severity-seg" id="injurySeverityB" data-flag="injury" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <label class="flag-check"><input type="checkbox" id="fatigueB"> Enchaînement fatigant</label>
+                <div class="severity-seg" id="fatigueSeverityB" data-flag="fatigue" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <label class="flag-check"><input type="checkbox" id="uncertainB"> Doute sur la composition</label>
+                <div class="severity-seg" id="uncertainSeverityB" data-flag="uncertain" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <div class="pos-abs-lbl">Titulaires clés absents, par poste</div>
                 <div class="pos-abs-grid">
                   <div><label>Gardien</label><input type="number" id="posGkB" min="0" max="1" placeholder="0"></div>
@@ -1633,6 +1639,27 @@ async function fetchSharedCalibration(sport, league){
 const leagueStatsCache = {}; // clé: `${sport}|${league}` -> {stats, fetchedAt}  (pool serveur, brut)
 const LEAGUE_STATS_MIN_N_CLIENT = 8; // même seuil que côté serveur, appliqué ici sur le TOTAL fusionné
 function leagueStatsKey(sport, league){ return `${sport}|${(league||'').trim()}`; }
+// -- Priors externes par ligue (10 grands championnats européens) --
+// Moyenne RÉELLE de buts/match, saison 2024-25 complète (source publique : Wikipedia,
+// pages de saison officielles ; UEFA Champions League = phase de ligue + phases finales
+// complètes ; recherchées le 09/09/2026). Volontairement la saison COMPLÈTE la plus
+// récente, pas 2025-26 : en septembre, la saison en cours n'a que quelques matchs joués
+// par équipe, ce qui la rendrait moins fiable qu'une saison entière déjà bouclée.
+// Sert uniquement de repli léger (voir getExternalLeagueGoalPrior) tant que l'ancrage
+// communautaire (getCachedLeagueStats) n'a pas encore assez de matchs vérifiés.
+const LEAGUE_GOAL_AVG_2024_25 = {
+  premier_league: 2.93, laliga: 2.62, la_liga: 2.62, bundesliga: 3.13, serie_a: 2.56,
+  ligue_1: 2.98, championship: 2.45, eredivisie: 2.99, primeira_liga: 2.57,
+  liga_portugal: 2.57, belgian_pro_league: 2.87, jupiler_pro_league: 2.87, pro_league: 2.87,
+  ligue_des_champion: 3.27, ligue_des_champions: 3.27, champions_league: 3.27, uefa_champions_league: 3.27,
+};
+function getExternalLeagueGoalPrior(league){
+  const avg = LEAGUE_GOAL_AVG_2024_25[leagueSlug(league)];
+  if(!avg) return null;
+  // Split domicile/extérieur ~55/45 : avantage du terrain moyen observé en football
+  // européen (approximation raisonnable, pas mesurée ligue par ligue individuellement).
+  return {avgHomeGoals: avg*0.55, avgAwayGoals: avg*0.45};
+}
 async function fetchLeagueStats(sport, league){
   if(!SERVER_URL || !(league||'').trim()) return null;
   const auth = loadGateAuth();
@@ -2400,49 +2427,67 @@ const PRIVATE_COMBO_BANDS = {
   modere: {legsWanted:5, filter:b=>b.p>=0.55 && b.p<0.75},
   eleve: {legsWanted:4, filter:b=>b.p<0.55},
 };
-function buildPrivateCombos(sport){
-  const list = DB[sport]||[];
+// Cœur générique : construit les combinés à partir d'une liste de "matchs" déjà uniformisés
+// ({matchKey, nameA, nameB, bets:[{label,p,marketType,status}]}) — utilisé aussi bien pour
+// aujourd'hui (source: DB, en direct) que pour un jour archivé (source: ARCHIVE, figé).
+function buildCombosGeneric(matches){
   const combos = [];
   for(const [riskLevel, cfg] of Object.entries(PRIVATE_COMBO_BANDS)){
-    // Un seul pari par match (matches distincts) — sinon deux jambes du même match seraient
-    // statistiquement liées, ce qui fausse la cote combinée.
-    const perMatch = list.map(r=>{
-      const eligible = (r.bets||[]).filter(cfg.filter);
+    const perMatch = matches.map(m=>{
+      const eligible = (m.bets||[]).filter(cfg.filter);
       if(!eligible.length) return null;
       const options = eligible.slice().sort((a,b)=>b.p-a.p)
-        .map(bet=>({recordId:r.id, nameA:r.nameA, nameB:r.nameB, label:bet.label, p:bet.p, marketType:marketTypeFromEval(bet.eval)}));
-      return {options, record:r};
+        .map(bet=>({matchKey:m.matchKey, nameA:m.nameA, nameB:m.nameB, label:bet.label, p:bet.p, marketType:bet.marketType, status:bet.status}));
+      return {options, matchKey:m.matchKey};
     }).filter(Boolean);
-    if(perMatch.length<2) continue; // pas assez de matchs analysés aujourd'hui pour ce niveau
+    if(perMatch.length<2) continue; // pas assez de matchs analysés pour ce niveau ce jour-là
 
-    // Diversité : on parcourt les matchs en boucle, prenant à chaque tour le meilleur pari
-    // de chaque match dont le type de marché n'est pas encore représenté.
     const legs = []; const usedMarketTypes = new Set(); let round = 0;
     while(legs.length < cfg.legsWanted && round < perMatch.length*3){
       const idx = round % perMatch.length;
-      const {options, record} = perMatch[idx];
-      if(legs.some(l=>l.recordId===record.id)){ round++; continue; }
+      const {options, matchKey} = perMatch[idx];
+      if(legs.some(l=>l.matchKey===matchKey)){ round++; continue; }
       const chosen = options.find(o=>!usedMarketTypes.has(o.marketType)) || options[0];
-      if(chosen){ legs.push({...chosen, record}); usedMarketTypes.add(chosen.marketType); }
+      if(chosen){ legs.push(chosen); usedMarketTypes.add(chosen.marketType); }
       round++;
     }
     if(legs.length<2) continue;
     const combinedP = legs.reduce((acc,l)=>acc*l.p,1);
     const combinedOdds = legs.reduce((acc,l)=>acc*(1/l.p),1);
-    // Statut recalculé à la volée depuis vos propres records (finalScore/evaluations posés
-    // quand vous validez un résultat dans Histoire) — pas besoin de stockage séparé.
     let allVerified = true, anyLost = false;
-    const legsWithStatus = legs.map(l=>{
-      const rec = l.record;
-      if(!rec.finalScore || !rec.evaluations){ allVerified = false; return {...l, status:'pending'}; }
-      const ev = rec.evaluations.find(e=>e.label===l.label);
-      const hit = ev ? ev.hit : null;
-      if(hit===false) anyLost = true;
-      return {...l, status: hit===true?'hit':hit===false?'miss':'pending'};
-    });
-    combos.push({riskLevel, legs:legsWithStatus, combinedP, combinedOdds, status: anyLost?'perdu':(allVerified?'gagne':'en_cours')});
+    legs.forEach(l=>{ if(l.status==='pending') allVerified=false; if(l.status==='miss') anyLost=true; });
+    combos.push({riskLevel, legs, combinedP, combinedOdds, status: anyLost?'perdu':(allVerified?'gagne':'en_cours')});
   }
   return combos;
+}
+function betStatusFromRecord(rec, bet){
+  if(!rec.finalScore || !rec.evaluations) return 'pending';
+  const ev = rec.evaluations.find(e=>e.label===bet.label);
+  const hit = ev ? ev.hit : null;
+  return hit===true?'hit':hit===false?'miss':'pending';
+}
+function buildPrivateCombos(sport){
+  const list = DB[sport]||[];
+  const matches = list.map(r=>({
+    matchKey:r.id, nameA:r.nameA, nameB:r.nameB,
+    bets:(r.bets||[]).map(b=>({label:b.label, p:b.p, marketType:marketTypeFromEval(b.eval), status:betStatusFromRecord(r,b)})),
+  }));
+  return buildCombosGeneric(matches);
+}
+// Journal des combinés (jours passés) : reconstruits depuis ARCHIVE (paris déjà vérifiés
+// ce jour-là), regroupés par match — donc toujours entièrement tranchés (gagné/perdu),
+// jamais "en cours" contrairement à aujourd'hui. Fenêtre limitée à 20 jours (voir
+// pruneArchiveOlderThan20Days) : au-delà, le jour n'existe simplement plus dans ARCHIVE.
+function buildArchivedCombos(sport, dayKey){
+  const day = ARCHIVE[dayKey];
+  if(!day) return [];
+  const grouped = {};
+  day.bets.filter(b=>b.sport===sport).forEach(b=>{
+    const key = b.nameA+'|'+b.nameB;
+    if(!grouped[key]) grouped[key] = {matchKey:key, nameA:b.nameA, nameB:b.nameB, bets:[]};
+    grouped[key].bets.push({label:b.label, p:b.p, marketType:b.marketType, status: b.hit===true?'hit':b.hit===false?'miss':'pending'});
+  });
+  return buildCombosGeneric(Object.values(grouped));
 }
 function renderPrivateComboCard(combo){
   const risk = RISK_LABELS[combo.riskLevel] || {label:combo.riskLevel, color:'var(--text)'};
@@ -2479,6 +2524,13 @@ async function renderLeaderboard(){
   ).join('') || "<div class=\"empty-hint\">Personne au classement pour l'instant.</div>";
 }
 let journalSelectedDay = null;
+let comboSelectedDay = 'today'; // jour affiché dans le journal des combinés (5.x)
+document.addEventListener('click', (e)=>{
+  const chip = e.target.closest('.combo-day-chip');
+  if(!chip) return;
+  comboSelectedDay = chip.dataset.day;
+  renderBets(betsSelectedSport);
+});
 let lastRecordGe = null, lastRecordBk = null;
 const subState = {hi:'football', be:'best', bb:'best'};
 let betsSelectedSport = 'football'; // sport actuellement affiché dans l'onglet Bets fusionné (5.11)
@@ -2796,7 +2848,9 @@ function loadDB(){
 }
 function persistDB(){ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }
 function checkDailyReset(){
-  if(purgeExpiredRecords()){
+  const purged = purgeExpiredRecords();
+  const archivePruned = pruneArchiveOlderThan20Days();
+  if(purged || archivePruned){
     persistDB();
     renderHistoryUnified(); renderBets(betsSelectedSport);
   }
@@ -2992,6 +3046,20 @@ function archiveResult(sport, rec, finalA, finalB){
   persistArchive();
 }
 function getArchiveDayKeys(){ return Object.keys(ARCHIVE).sort((a,b)=>b.localeCompare(a)); }
+// Fenêtre glissante de 20 jours pour le journal des combinés (et, par la même occasion,
+// pour l'archive générale) : au-delà de 20 jours, un jour archivé est supprimé pour laisser
+// la place aux nouveaux — jamais plus de 20 jours d'historique conservés.
+const ARCHIVE_WINDOW_DAYS = 20;
+function pruneArchiveOlderThan20Days(){
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - ARCHIVE_WINDOW_DAYS);
+  const cutoffKey = cutoff.toISOString().slice(0,10);
+  let changed = false;
+  Object.keys(ARCHIVE).forEach(key=>{
+    if(key < cutoffKey){ delete ARCHIVE[key]; changed = true; }
+  });
+  if(changed) persistArchive();
+  return changed;
+}
 function archiveDaySummary(key){
   const day = ARCHIVE[key];
   if(!day) return null;
@@ -3333,7 +3401,11 @@ async function autoFillFootballTeam(which){
 document.getElementById('autoFillBtnA').addEventListener('click', ()=>autoFillFootballTeam('A'));
 document.getElementById('autoFillBtnB').addEventListener('click', ()=>autoFillFootballTeam('B'));
 
-const matchFlags = {matchType:'championnat', league:'', stage:'poules', leg:'sec', aggAllerA:null, aggAllerB:null, injuryA:false, fatigueA:false, uncertainA:false, injuryB:false, fatigueB:false, uncertainB:false, posA:{gk:0,def:0,mid:0,att:0}, posB:{gk:0,def:0,mid:0,att:0}};
+const matchFlags = {matchType:'championnat', league:'', stage:'poules', leg:'sec', aggAllerA:null, aggAllerB:null, injuryA:false, fatigueA:false, uncertainA:false, injuryB:false, fatigueB:false, uncertainB:false, posA:{gk:0,def:0,mid:0,att:0}, posB:{gk:0,def:0,mid:0,att:0},
+  injurySeverityA:'modere', fatigueSeverityA:'modere', uncertainSeverityA:'modere', injurySeverityB:'modere', fatigueSeverityB:'modere', uncertainSeverityB:'modere'};
+function syncSeveritySegGe(flag, team, checked){
+  document.getElementById(flag+'Severity'+team).classList.toggle('show', checked);
+}
 function normalizeLeagueName(raw){ return (raw||'').trim(); }
 function leagueSlug(name){ return normalizeLeagueName(name).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,''); }
 function syncStageBlockGe(){
@@ -3353,7 +3425,8 @@ document.getElementById('leagueGe').addEventListener('input', e=>{
   leagueGeDebounce = setTimeout(()=>{ fetchSharedCalibration('football', matchFlags.league); fetchLeagueStats('football', matchFlags.league); }, 600);
 });
 ['injuryA','fatigueA','uncertainA','injuryB','fatigueB','uncertainB'].forEach(id=>{
-  document.getElementById(id).addEventListener('change', e=>{ matchFlags[id] = e.target.checked; });
+  const flag = id.slice(0,-1), team = id.slice(-1);
+  document.getElementById(id).addEventListener('change', e=>{ matchFlags[id] = e.target.checked; syncSeveritySegGe(flag, team, e.target.checked); });
 });
 [['posGkA','A','gk'],['posDefA','A','def'],['posMidA','A','mid'],['posAttA','A','att'],['posGkB','B','gk'],['posDefB','B','def'],['posMidB','B','mid'],['posAttB','B','att']].forEach(([id,team,pos])=>{
   document.getElementById(id).addEventListener('input', e=>{ matchFlags['pos'+team][pos] = e.target.value===''?0:parseInt(e.target.value,10)||0; });
@@ -3384,7 +3457,14 @@ document.getElementById('resetBtn').addEventListener('click', ()=>{
   matchFlags.aggAllerA=null; matchFlags.aggAllerB=null;
   syncStageBlockGe();
   document.getElementById('leagueGe').value=''; matchFlags.league='';
-  ['injuryA','fatigueA','uncertainA','injuryB','fatigueB','uncertainB'].forEach(id=>{ document.getElementById(id).checked=false; matchFlags[id]=false; });
+  ['injuryA','fatigueA','uncertainA','injuryB','fatigueB','uncertainB'].forEach(id=>{
+    const flag = id.slice(0,-1), team = id.slice(-1);
+    document.getElementById(id).checked=false; matchFlags[id]=false;
+    syncSeveritySegGe(flag, team, false);
+    matchFlags[flag+'Severity'+team]='modere';
+    const seg=document.getElementById(flag+'Severity'+team);
+    seg.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b.dataset.lvl==='modere'));
+  });
   ['posGkA','posDefA','posMidA','posAttA','posGkB','posDefB','posMidB','posAttB'].forEach(id=>{ document.getElementById(id).value=''; });
   matchFlags.posA={gk:0,def:0,mid:0,att:0}; matchFlags.posB={gk:0,def:0,mid:0,att:0};
   document.getElementById('resultsGe').style.display='none'; document.getElementById('emptyStateGe').style.display='flex';
@@ -3540,6 +3620,21 @@ function computeGeneseLambdas(){
     const leagueWeight = Math.min(0.35, leagueStats.n/30);
     lambdaA = lambdaA*(1-leagueWeight) + leagueStats.avgHomeGoals*leagueWeight;
     lambdaB = lambdaB*(1-leagueWeight) + leagueStats.avgAwayGoals*leagueWeight;
+  } else if(lambdaA!==null && lambdaB!==null){
+    // Repli, UNIQUEMENT tant que ni la communauté ni vous n'avez encore assez de matchs
+    // vérifiés pour cette ligue (< 8, seuil ci-dessus) : ancrage externe léger (poids fixe
+    // 15%, jamais 35%) sur la moyenne RÉELLE de buts/match de la saison 2024-25 des 10
+    // grands championnats européens (sources publiques — Wikipedia/FootyStats/fbref,
+    // recherchées le 09/09/2026). Split domicile/extérieur estimé à 55/45 (avantage du
+    // terrain moyen observé en football européen), le modèle garde la main sur QUI est
+    // favori — seul le niveau de buts global est recalé. Retiré automatiquement dès que
+    // l'ancrage communautaire ci-dessus prend le relais.
+    const extPrior = getExternalLeagueGoalPrior(matchFlags.league);
+    if(extPrior){
+      const extWeight = 0.15;
+      lambdaA = lambdaA*(1-extWeight) + extPrior.avgHomeGoals*extWeight;
+      lambdaB = lambdaB*(1-extWeight) + extPrior.avgAwayGoals*extWeight;
+    }
   }
   const qualityIdx=classementQualityIndex(standings), eIdx=eloIndex(standings);
   const {idx:enjeuIdx, zoneA, zoneB, phaseLabel}=enjeuInfo(standings);
@@ -3555,14 +3650,14 @@ function computeGeneseLambdas(){
   }
   // Marqueurs contextuels déclaratifs : nudges modestes et transparents, jamais dominants.
   if(lambdaA!==null){
-    if(matchFlags.injuryA) lambdaA *= 0.92;
-    if(matchFlags.fatigueA) lambdaA *= 0.95;
-    if(matchFlags.uncertainA) lambdaA *= 0.94;
+    if(matchFlags.injuryA) lambdaA *= BK_SEVERITY_MULT.injury[matchFlags.injurySeverityA];
+    if(matchFlags.fatigueA) lambdaA *= BK_SEVERITY_MULT.fatigue[matchFlags.fatigueSeverityA];
+    if(matchFlags.uncertainA) lambdaA *= BK_SEVERITY_MULT.uncertain[matchFlags.uncertainSeverityA];
   }
   if(lambdaB!==null){
-    if(matchFlags.injuryB) lambdaB *= 0.92;
-    if(matchFlags.fatigueB) lambdaB *= 0.95;
-    if(matchFlags.uncertainB) lambdaB *= 0.94;
+    if(matchFlags.injuryB) lambdaB *= BK_SEVERITY_MULT.injury[matchFlags.injurySeverityB];
+    if(matchFlags.fatigueB) lambdaB *= BK_SEVERITY_MULT.fatigue[matchFlags.fatigueSeverityB];
+    if(matchFlags.uncertainB) lambdaB *= BK_SEVERITY_MULT.uncertain[matchFlags.uncertainSeverityB];
   }
   const posAdjA = positionAdjustment(matchFlags.posA);
   const posAdjB = positionAdjustment(matchFlags.posB);
@@ -3922,10 +4017,10 @@ function runAnalysisGe(){
   // Aperçu enrichi façon "AI Insights" — sections structurées, contexte complet
   let absencesTxt = '';
   const absA=[], absB=[];
-  if(matchFlags.injuryA) absA.push('joueur(s) blessé(s)/suspendu(s) signalé(s)');
-  if(matchFlags.fatigueA) absA.push('fatigue/enchaînement de matchs signalé');
-  if(matchFlags.injuryB) absB.push('joueur(s) blessé(s)/suspendu(s) signalé(s)');
-  if(matchFlags.fatigueB) absB.push('fatigue/enchaînement de matchs signalé');
+  if(matchFlags.injuryA) absA.push(`joueur(s) blessé(s)/suspendu(s) signalé(s) (${BK_SEVERITY_LABEL[matchFlags.injurySeverityA]})`);
+  if(matchFlags.fatigueA) absA.push(`fatigue/enchaînement de matchs signalé (${BK_SEVERITY_LABEL[matchFlags.fatigueSeverityA]})`);
+  if(matchFlags.injuryB) absB.push(`joueur(s) blessé(s)/suspendu(s) signalé(s) (${BK_SEVERITY_LABEL[matchFlags.injurySeverityB]})`);
+  if(matchFlags.fatigueB) absB.push(`fatigue/enchaînement de matchs signalé (${BK_SEVERITY_LABEL[matchFlags.fatigueSeverityB]})`);
   if(absA.length) absencesTxt += `Côté ${nameA} : ${absA.join(', ')}. `;
   if(absB.length) absencesTxt += `Côté ${nameB} : ${absB.join(', ')}. `;
   const insightsCtx = {
@@ -4810,10 +4905,25 @@ function renderBets(sport){
   // analyses du jour, publiées ou non — structure différente (groupée par niveau de
   // risque), donc rendu à part, avant la logique "liste plate" des autres sous-onglets.
   if(sub==='combos'){
-    const combos = buildPrivateCombos(sport);
-    panel.innerHTML = combos.length
-      ? combos.map(renderPrivateComboCard).join('')
-      : `<div class="glass empty-state"><div class="glyph">Ø</div><p>Pas assez d'analyses aujourd'hui pour former un combiné (il faut au moins 2 matchs analysés, publiés ou non, par niveau de risque). Analysez d'autres matchs et revenez ici.</p></div>`;
+    const todayKeyBe = todayISO();
+    const archivedKeys = getArchiveDayKeys().filter(k=>{
+      // Ne proposer, dans le sélecteur, que les jours où CE sport a effectivement des paris
+      // vérifiés archivés — sinon on afficherait des jours vides pour rien.
+      const day = ARCHIVE[k];
+      return day && day.bets.some(b=>b.sport===sport);
+    });
+    if(comboSelectedDay!=='today' && !archivedKeys.includes(comboSelectedDay)) comboSelectedDay='today';
+    const dayChips = ['today', ...archivedKeys].map(k=>{
+      const active = k===comboSelectedDay ? 'active' : '';
+      const label = k==='today' ? "Aujourd'hui" : new Date(k+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit', month:'short'});
+      return `<button class="journal-day-chip sfx-tap combo-day-chip ${active}" data-day="${k}">${label}</button>`;
+    }).join('');
+    const scrollerHtml = `<div class="day-scroller" id="comboDayScroller" style="display:flex; gap:8px; overflow-x:auto; margin-bottom:14px; padding-bottom:2px;">${dayChips}</div>`;
+    const combos = comboSelectedDay==='today' ? buildPrivateCombos(sport) : buildArchivedCombos(sport, comboSelectedDay);
+    const emptyMsg = comboSelectedDay==='today'
+      ? `<div class="glass empty-state"><div class="glyph">Ø</div><p>Pas assez d'analyses aujourd'hui pour former un combiné (il faut au moins 2 matchs analysés, publiés ou non, par niveau de risque). Analysez d'autres matchs et revenez ici.</p></div>`
+      : `<div class="glass empty-state"><div class="glyph">Ø</div><p>Aucun combiné reconstitué pour ce jour (pas assez de paris vérifiés ce jour-là pour ce sport).</p></div>`;
+    panel.innerHTML = scrollerHtml + (combos.length ? combos.map(renderPrivateComboCard).join('') : emptyMsg);
     return;
   }
 
@@ -5114,6 +5224,7 @@ async function initApp(){
   loadDB();
   await loadTrack();
   loadArchive();
+  pruneArchiveOlderThan20Days();
   renderHistoryUnified();
   renderBets(betsSelectedSport);
   updateCountdowns();
