@@ -3739,7 +3739,13 @@ function computeGeneseLambdas(){
     // se faisait déjà écrêter par le clamp fixe avant même de pouvoir se traduire en écart de
     // buts — ce qui aplatissait les cas les plus déséquilibrés (ex. Barcelone-Feyenoord).
     const dynCap = clamp(0.22 + Math.abs(strengthGap)*0.30, 0.22, 0.50);
-    totalAdj = clamp(qualityIdx*.05 + eIdx*.05 + enjeuIdx*.10 + trendDiffIdx*.05 + h2hGap*.08 + defGap*.10, -dynCap, dynCap);
+    // Poids réalignés sur ceux, déjà bien calibrés, de computeStrengthGap (classement .28,
+    // Elo .22, H2H .20, défense .18, forme .12) : avant, classement et Elo ne pesaient que
+    // .05 chacun ici contre .10 pour l'enjeu et .10 pour la défense — un gros écart Elo
+    // (ex. 2000+ points) ne déplaçait quasiment pas les lambdas, alors qu'il faisait déjà
+    // basculer le 1X2 via strengthGap plus bas. Score exact et 1X2 pouvaient donc se
+    // contredire sur l'équipe favorite. Classement/Elo redeviennent les signaux dominants.
+    totalAdj = clamp(qualityIdx*.16 + eIdx*.14 + enjeuIdx*.08 + trendDiffIdx*.04 + h2hGap*.10 + defGap*.08, -dynCap, dynCap);
     // En coupe, le classement/enjeu de championnat est moins pertinent (les tirages
     // opposent des niveaux hétérogènes) — on amortit cette correction de 30%.
     if(matchFlags.matchType==='coupe') totalAdj *= 0.7;
@@ -4416,9 +4422,19 @@ function computeBasketPoints(){
   const {idx:enjeuIdx, zoneA, zoneB, phaseLabel}=enjeuInfo(bkStandings);
   const trendA=trendIndex(bkStore.aSerie), trendB=trendIndex(bkStore.bSerie);
   const trendDiffIdx=Math.tanh((trendA-trendB)/8); // échelle points, plus large que les buts
+  // Même correction que pour Genèse (football) : H2H/défense calculés une seule fois ici et
+  // réutilisés (au lieu d'être recalculés plus bas pour le seul 1X2), et le plafond devient
+  // dynamique — un mismatch de force réel (gros écart Elo/classement) élargit désormais
+  // jusqu'à ±40% l'ajustement des points au lieu d'être bridé à ±18% quoi qu'il arrive.
+  const {h2hGap:h2hGapBk, defGap:defGapBk} = computeGapComponents({abFor, baFor, h2hCount: bkStore.ab.length, aDomAg, bExtAg});
+  const strengthGap = computeStrengthGap({qualityIdx, eloIdx:eIdx, trendDiffIdx, abFor, baFor, h2hCount: bkStore.ab.length, aDomAg, bExtAg});
   let totalAdj=0;
   if(ptsA!==null && ptsB!==null){
-    totalAdj = clamp(qualityIdx*.05 + eIdx*.05 + enjeuIdx*.10 + trendDiffIdx*.05, -0.18, 0.18);
+    const dynCap = clamp(0.18 + Math.abs(strengthGap)*0.22, 0.18, 0.40);
+    // Poids réalignés sur ceux de computeStrengthGap (classement .28, Elo .22, H2H .20,
+    // défense .18, forme .12) : classement et Elo redeviennent les signaux dominants au lieu
+    // de peser .05 chacun contre .10 pour l'enjeu — voir le même correctif côté football.
+    totalAdj = clamp(qualityIdx*.16 + eIdx*.14 + enjeuIdx*.08 + trendDiffIdx*.04 + h2hGapBk*.10 + defGapBk*.08, -dynCap, dynCap);
     if(bkMatchFlags.matchType==='coupe') totalAdj *= 0.7; // playoffs/coupe : classement saison régulière moins transposable
     ptsA = Math.max(60, ptsA*(1+totalAdj)); ptsB = Math.max(60, ptsB*(1-totalAdj));
   }
@@ -4441,7 +4457,7 @@ function computeBasketPoints(){
   const bkAggAdj = bkAggregateAdjustment(bkMatchFlags.leg, bkMatchFlags.aggAllerA, bkMatchFlags.aggAllerB, bkMatchFlags.league);
   if(ptsA!==null) ptsA *= bkAggAdj.factorA;
   if(ptsB!==null) ptsB *= bkAggAdj.factorB;
-  return {ptsA, ptsB, totalAdj, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:bkStageAdj.sigmaDamp, aggregateNote:bkAggAdj.note, components:basketComponents,
+  return {ptsA, ptsB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:bkStageAdj.sigmaDamp, aggregateNote:bkAggAdj.note, components:basketComponents,
     stage: bkStageIsKO ? bkMatchFlags.stage : null, leg: bkMatchFlags.leg, tensionUsed: bkStageIsKO ? bkStageAdj.tensionUsed : null,
     aggFactorUsed: bkMatchFlags.leg==='retour' ? {factorA:bkAggAdj.factorA, factorB:bkAggAdj.factorB} : null, aggDiff: bkAggAdj.diff||0};
 }
@@ -4519,7 +4535,7 @@ function runAnalysisBk(){
   // Plus aucun blocage strict (1.3) — voir la même logique côté football pour le détail.
   const completenessBk = computeCompletenessBasket();
 
-  const {ptsA, ptsB, totalAdj, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff}=computeBasketPoints();
+  const {ptsA, ptsB, totalAdj, strengthGap:strengthGapBk, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff}=computeBasketPoints();
   const convictionIdxBk = computeConvictionIdx(enjeuIdx, trendDiffIdx, tensionUsed, aggDiff);
   if(ptsA===null||ptsB===null) return;
 
@@ -4536,11 +4552,8 @@ function runAnalysisBk(){
   const pWinARaw = winsA/sims.length;
   // Même logique que pour le football : un écart de force réel (classement, ELO, H2H, forme)
   // peut exister même quand les points attendus sont proches — on nuance le vainqueur ici.
-  const strengthGapBk = computeStrengthGap({
-    qualityIdx, eloIdx, trendDiffIdx: Math.tanh((trendA-trendB)/8),
-    abFor: avg(bkStore.ab,0), baFor: avg(bkStore.ba,0), h2hCount: bkStore.ab.length,
-    aDomAg: avg(bkStore.aDom,1), bExtAg: avg(bkStore.bExt,1)
-  });
+  // strengthGapBk vient désormais de computeBasketPoints (calculé une seule fois, plus de
+  // recalcul redondant ici avec les mêmes entrées).
   const pWinA = clamp01(pWinARaw + strengthGapBk*0.07);
   const pWinB = 1-pWinA;
   const favTeam = pWinA>=pWinB ? nameA : nameB, favP = Math.max(pWinA,pWinB);
