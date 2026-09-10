@@ -2743,7 +2743,11 @@ function calibrateRho(sport, league){
    Même principe de repli : poids propres à une ligue une fois ≥40 vérifications
    cumulées POUR CETTE LIGUE, sinon on utilise les poids globaux en attendant. */
 const ADAPTIVE_SOURCES = ['domicile','serie','h2h','defense_adverse'];
-const DEFAULT_SOURCE_WEIGHTS = {domicile:.35, serie:.25, h2h:.25, defense_adverse:.15};
+// Rééquilibré : defense_adverse était la source la plus faible (0.15) alors qu'elle porte
+// souvent le signal le plus direct d'un mismatch net (une petite équipe qui encaisse
+// beaucoup face à du lourd). Remonté à 0.25 par défaut, avant toute calibration adaptative
+// (qui prend le relais dès 40 vérifications cumulées pour la ligue/sport concerné).
+const DEFAULT_SOURCE_WEIGHTS = {domicile:.30, serie:.22, h2h:.23, defense_adverse:.25};
 function weightsKey(sport, league){ const s=leagueSlug(league); return 'ea_weights_'+sport+(s?('__'+s):''); }
 function srcperfKey(sport, league){ const s=leagueSlug(league); return 'ea_srcperf_'+sport+(s?('__'+s):''); }
 function loadAdaptiveWeights(sport, league){
@@ -3615,9 +3619,16 @@ function computeGeneseLambdas(){
   // vérifiés par la communauté pour cette ligue. Poids croissant avec le nombre de matchs
   // déjà vérifiés (n), plafonné à 35% pour ne jamais écraser la forme réelle des deux
   // équipes — un simple repli de fond, pas une réécriture du calcul.
+  // Compétitions à plateau hétérogène (coupes nationales, C1/C3...) : la "moyenne de la
+  // compétition" mélange des cartons et des matchs très serrés, donc elle tire vers la
+  // médiocrité un match où l'écart de niveau est déjà connu par ailleurs (Elo, classement) —
+  // on réduit fortement ce double ancrage plutôt que de le laisser peser jusqu'à 35%/15%
+  // comme en championnat à plateau homogène.
+  const heterogeneousComp = (matchFlags.matchType==='europe' || matchFlags.matchType==='coupe');
   const leagueStats = getCachedLeagueStats('football', matchFlags.league);
   if(leagueStats && lambdaA!==null && lambdaB!==null){
-    const leagueWeight = Math.min(0.35, leagueStats.n/30);
+    const leagueWeightCap = heterogeneousComp ? 0.12 : 0.35;
+    const leagueWeight = Math.min(leagueWeightCap, leagueStats.n/30);
     lambdaA = lambdaA*(1-leagueWeight) + leagueStats.avgHomeGoals*leagueWeight;
     lambdaB = lambdaB*(1-leagueWeight) + leagueStats.avgAwayGoals*leagueWeight;
   } else if(lambdaA!==null && lambdaB!==null){
@@ -3631,7 +3642,7 @@ function computeGeneseLambdas(){
     // l'ancrage communautaire ci-dessus prend le relais.
     const extPrior = getExternalLeagueGoalPrior(matchFlags.league);
     if(extPrior){
-      const extWeight = 0.15;
+      const extWeight = heterogeneousComp ? 0.05 : 0.15;
       lambdaA = lambdaA*(1-extWeight) + extPrior.avgHomeGoals*extWeight;
       lambdaB = lambdaB*(1-extWeight) + extPrior.avgAwayGoals*extWeight;
     }
@@ -3640,9 +3651,22 @@ function computeGeneseLambdas(){
   const {idx:enjeuIdx, zoneA, zoneB, phaseLabel}=enjeuInfo(standings);
   const trendA=trendIndex(store.aSerie), trendB=trendIndex(store.bSerie);
   const trendDiffIdx=Math.tanh((trendA-trendB)*1.5);
+  // Écart de force calculé une seule fois ici (classement + Elo + H2H + solidité défensive +
+  // forme) : il nourrit désormais l'ajustement des buts ci-dessous ET reste réutilisé plus
+  // loin pour nuancer le 1X2 (même valeur, pas de recalcul). Avant, le H2H et l'écart
+  // défensif (h2hGap/defGap) restaient cantonnés au seul 1X2 alors qu'ils sont souvent le
+  // signal le plus direct qu'une équipe plus faible va aussi encaisser davantage.
+  const h2hCountGe = store.ab.length;
+  const {h2hGap, defGap} = computeGapComponents({abFor, baFor, h2hCount: h2hCountGe, aDomAg, bExtAg});
+  const strengthGap = computeStrengthGap({qualityIdx, eloIdx:eIdx, trendDiffIdx, abFor, baFor, h2hCount: h2hCountGe, aDomAg, bExtAg});
   let totalAdj=0;
   if(lambdaA!==null && lambdaB!==null){
-    totalAdj = clamp(qualityIdx*.06 + eIdx*.06 + enjeuIdx*.12 + trendDiffIdx*.06, -0.22, 0.22);
+    // Le plafond n'est plus fixe à ±22% : il s'élargit avec l'ampleur réelle de l'écart de
+    // force (|strengthGap|), jusqu'à ±50%. Avant, un gros mismatch Elo/classement/H2H/défense
+    // se faisait déjà écrêter par le clamp fixe avant même de pouvoir se traduire en écart de
+    // buts — ce qui aplatissait les cas les plus déséquilibrés (ex. Barcelone-Feyenoord).
+    const dynCap = clamp(0.22 + Math.abs(strengthGap)*0.30, 0.22, 0.50);
+    totalAdj = clamp(qualityIdx*.05 + eIdx*.05 + enjeuIdx*.10 + trendDiffIdx*.05 + h2hGap*.08 + defGap*.10, -dynCap, dynCap);
     // En coupe, le classement/enjeu de championnat est moins pertinent (les tirages
     // opposent des niveaux hétérogènes) — on amortit cette correction de 30%.
     if(matchFlags.matchType==='coupe') totalAdj *= 0.7;
@@ -3672,7 +3696,7 @@ function computeGeneseLambdas(){
   const aggAdj = aggregateAdjustment(matchFlags.leg, matchFlags.aggAllerA, matchFlags.aggAllerB, 'football', matchFlags.league);
   if(lambdaA!==null) lambdaA *= aggAdj.factorA;
   if(lambdaB!==null) lambdaB *= aggAdj.factorB;
-  return {lambdaA, lambdaB, totalAdj, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:stageAdj.sigmaDamp, aggregateNote:aggAdj.note, components:geneseComponents,
+  return {lambdaA, lambdaB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:stageAdj.sigmaDamp, aggregateNote:aggAdj.note, components:geneseComponents,
     stage: stageIsKO ? matchFlags.stage : null, leg: matchFlags.leg, tensionUsed: stageIsKO ? stageAdj.tensionUsed : null,
     aggFactorUsed: matchFlags.leg==='retour' ? {factorA:aggAdj.factorA, factorB:aggAdj.factorB} : null, aggDiff: aggAdj.diff||0};
 }
@@ -3746,10 +3770,14 @@ function pickShotsMarket(){
    puis vient nuancer le 1X2/double-chance — sans jamais toucher aux
    marchés buts (over/under, BTTS, score exact) qui restent bien calibrés.
 ================================================================= */
-function computeStrengthGap({qualityIdx, eloIdx, trendDiffIdx, abFor, baFor, h2hCount, aDomAg, bExtAg}){
+function computeGapComponents({abFor, baFor, h2hCount, aDomAg, bExtAg}){
   const h2hGap = h2hCount>0 ? Math.tanh((abFor-baFor)*0.6) : 0;
   const hasDef = (aDomAg!=null && bExtAg!=null);
   const defGap = hasDef ? Math.tanh((bExtAg-aDomAg)*0.5) : 0;
+  return {h2hGap, defGap};
+}
+function computeStrengthGap({qualityIdx, eloIdx, trendDiffIdx, abFor, baFor, h2hCount, aDomAg, bExtAg}){
+  const {h2hGap, defGap} = computeGapComponents({abFor, baFor, h2hCount, aDomAg, bExtAg});
   const raw = (qualityIdx||0)*.28 + (eloIdx||0)*.22 + h2hGap*.20 + defGap*.18 + (trendDiffIdx||0)*.12;
   return clamp(raw, -1, 1);
 }
@@ -3903,7 +3931,7 @@ function runAnalysisGe(){
   // seulement, via la pastille de complétude affichée sur le résultat, jamais un mur.
   const completenessGe = computeCompletenessFootball();
 
-  const {lambdaA, lambdaB, totalAdj, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff}=computeGeneseLambdas();
+  const {lambdaA, lambdaB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff}=computeGeneseLambdas();
   const convictionIdx = computeConvictionIdx(enjeuIdx, trendDiffIdx, tensionUsed, aggDiff);
   if(lambdaA===null||lambdaB===null) return;
 
@@ -3922,17 +3950,34 @@ function runAnalysisGe(){
   const sorted=[...matrix].sort((x,y)=>y.p-x.p);
   const top2=sorted.slice(0,2);
 
-  const pHomeRaw=sumWhereMatrix(matrix,(a,b)=>a>b), pDrawRaw=sumWhereMatrix(matrix,(a,b)=>a===b), pAwayRaw=sumWhereMatrix(matrix,(a,b)=>a<b);
+  let pHomeRaw=sumWhereMatrix(matrix,(a,b)=>a>b), pDrawRaw=sumWhereMatrix(matrix,(a,b)=>a===b), pAwayRaw=sumWhereMatrix(matrix,(a,b)=>a<b);
   const pBTTSyes=sumWhereMatrix(matrix,(a,b)=>a>=1&&b>=1), pBTTSno=1-pBTTSyes;
 
-  // Le lambda Poisson dit "combien de buts" ; le score de force dit "qui est structurellement
-  // le plus fort" — les deux peuvent diverger quand les lambdas sont proches malgré un vrai
-  // écart de niveau. On nuance ici le 1X2/double-chance uniquement (jamais les marchés buts).
-  const strengthGap = computeStrengthGap({
-    qualityIdx, eloIdx, trendDiffIdx: Math.tanh((trendA-trendB)*1.5),
-    abFor: avg(store.ab,0), baFor: avg(store.ba,0), h2hCount: store.ab.length,
-    aDomAg: avg(store.aDom,1), bExtAg: avg(store.bExt,1)
-  });
+  // Ancrage 1X2 sur les vrais taux victoire domicile / nul / victoire extérieur de la
+  // ligue (déjà calculés par getCachedLeagueStats pour le prior de buts, mais jusqu'ici
+  // jamais utilisés pour le 1X2 lui-même) — utile car Poisson sous-estime souvent le nul
+  // dans les championnats qui en produisent beaucoup. Même poids progressif que pour les
+  // buts (jusqu'à 35%, proportionnel au nombre de matchs déjà vérifiés pour cette ligue) ;
+  // ne s'applique qu'une fois au moins 8 matchs vérifiés (seuil LEAGUE_STATS_MIN_N_CLIENT).
+  const leagueStatsResult = getCachedLeagueStats('football', matchFlags.league);
+  if(leagueStatsResult){
+    // Même correction que pour l'ancrage buts (voir computeGeneseLambdas) : en coupe/coupe
+    // d'Europe, le plateau est hétérogène (cartons et matchs serrés mélangés), donc on amortit
+    // fortement ce recalage plutôt que de le laisser peser jusqu'à 35% comme en championnat.
+    const heterogeneousCompGe = (matchFlags.matchType==='europe' || matchFlags.matchType==='coupe');
+    const resultWeightCap = heterogeneousCompGe ? 0.12 : 0.35;
+    const resultWeight = Math.min(resultWeightCap, leagueStatsResult.n/30);
+    pHomeRaw = pHomeRaw*(1-resultWeight) + leagueStatsResult.homeWinPct*resultWeight;
+    pDrawRaw = pDrawRaw*(1-resultWeight) + leagueStatsResult.drawPct*resultWeight;
+    pAwayRaw = pAwayRaw*(1-resultWeight) + leagueStatsResult.awayWinPct*resultWeight;
+    const tResult = pHomeRaw+pDrawRaw+pAwayRaw;
+    pHomeRaw/=tResult; pDrawRaw/=tResult; pAwayRaw/=tResult;
+  }
+
+  // Le même écart de force (strengthGap) qui vient d'alimenter l'ajustement des buts (voir
+  // computeGeneseLambdas) sert aussi ici à nuancer le 1X2/double-chance — sans retoucher une
+  // seconde fois les marchés buts (over/under, BTTS, score exact restent pilotés uniquement
+  // par lambdaA/lambdaB déjà ajustés en amont).
   const {pHome, pDraw, pAway} = applyStrengthToResult(pHomeRaw, pDrawRaw, pAwayRaw, strengthGap);
 
   const resultBet=pickResultMarket(pHome,pDraw,pAway,nameA,nameB);
@@ -5134,10 +5179,12 @@ async function exportAllData(){
     settings: {}
   };
   // Récupère tous les réglages de calibration (rho / poids / perf de sources),
-  // y compris les variantes par ligue, quel que soit leur nombre.
+  // y compris les variantes par ligue, quel que soit leur nombre — plus les moyennes
+  // locales par ligue (buts + victoires/nuls/défaites, alimentées à chaque match vérifié),
+  // qui servent d'ancrage réel pour la ligue et étaient jusqu'ici oubliées de l'export.
   for(let i=0;i<localStorage.length;i++){
     const k = localStorage.key(i);
-    if(k && (k.startsWith('ea_rho_')||k.startsWith('ea_weights_')||k.startsWith('ea_srcperf_'))){
+    if(k && (k.startsWith('ea_rho_')||k.startsWith('ea_weights_')||k.startsWith('ea_srcperf_')||k===LOCAL_LEAGUE_STATS_KEY)){
       payload.settings[k] = localStorage.getItem(k);
     }
   }
