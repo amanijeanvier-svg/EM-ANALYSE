@@ -2466,13 +2466,86 @@ function betStatusFromRecord(rec, bet){
   const hit = ev ? ev.hit : null;
   return hit===true?'hit':hit===false?'miss':'pending';
 }
+// -- Persistance des combinés du jour (6.x) : évite que le combiné se
+// reconstruise entièrement à chaque affichage (ce qui changeait les paris
+// choisis dès qu'un match était ajouté/retiré de DB[sport]), et évite que
+// des matchs d'un jour précédent — encore présents dans DB[sport] à cause
+// des 24h de TTL — viennent alimenter le combiné du jour en cours. Une fois
+// une jambe enregistrée pour aujourd'hui, elle reste jusqu'au changement de
+// jour ; seul son statut (hit/miss/pending) est rafraîchi en direct. --
+const PRIVATE_COMBO_STATE_KEY = 'ea_private_combo_state';
+let PRIVATE_COMBO_STATE = {};
+function loadPrivateComboState(){ try{ PRIVATE_COMBO_STATE = JSON.parse(localStorage.getItem(PRIVATE_COMBO_STATE_KEY)||'null') || {}; }catch(e){ PRIVATE_COMBO_STATE = {}; } }
+function persistPrivateComboState(){ localStorage.setItem(PRIVATE_COMBO_STATE_KEY, JSON.stringify(PRIVATE_COMBO_STATE)); }
 function buildPrivateCombos(sport){
-  const list = DB[sport]||[];
-  const matches = list.map(r=>({
-    matchKey:r.id, nameA:r.nameA, nameB:r.nameB,
-    bets:(r.bets||[]).map(b=>({label:b.label, p:b.p, marketType:marketTypeFromEval(b.eval), status:betStatusFromRecord(r,b)})),
-  }));
-  return buildCombosGeneric(matches);
+  const today = todayISO();
+  let state = PRIVATE_COMBO_STATE[sport];
+  if(!state || state.day !== today){
+    state = {day: today, legsByRisk: {faible:[], modere:[], eleve:[]}};
+    PRIVATE_COMBO_STATE[sport] = state;
+  }
+
+  // Seuls les matchs analysés AUJOURD'HUI (jour calendaire) peuvent fournir de
+  // nouvelles jambes — un match d'hier qui traîne encore dans DB[sport] (TTL
+  // 24h) ne doit plus être proposé, même s'il est techniquement toujours là.
+  const list = (DB[sport]||[]).filter(r=>dayKey(r.timestamp)===today);
+  const matchById = {};
+  list.forEach(r=>{ matchById[r.id] = r; });
+
+  const combos = [];
+  Object.entries(PRIVATE_COMBO_BANDS).forEach(([riskLevel, cfg])=>{
+    let legs = state.legsByRisk[riskLevel] || [];
+
+    // Rafraîchit le statut (et la proba, si recalibrée depuis) des jambes déjà
+    // enregistrées, sans jamais les retirer ni les remplacer.
+    legs = legs.map(l=>{
+      const rec = matchById[l.matchKey];
+      if(!rec) return l; // match plus dans la fenêtre du jour : on garde la jambe telle quelle
+      const bet = (rec.bets||[]).find(b=>b.label===l.label);
+      if(!bet) return l;
+      return {...l, p:bet.p, status:betStatusFromRecord(rec, bet)};
+    });
+
+    // Complète les emplacements restants avec de nouveaux matchs du jour, pas
+    // encore utilisés dans ce niveau de risque — jamais en touchant aux jambes
+    // déjà là.
+    if(legs.length < cfg.legsWanted){
+      const usedMatchKeys = new Set(legs.map(l=>l.matchKey));
+      const usedMarketTypes = new Set(legs.map(l=>l.marketType));
+      const candidates = list
+        .filter(r=>!usedMatchKeys.has(r.id))
+        .map(r=>{
+          const eligible = (r.bets||[]).filter(b=>cfg.filter({p:b.p}));
+          if(!eligible.length) return null;
+          const options = eligible.slice().sort((a,b)=>b.p-a.p)
+            .map(bet=>({matchKey:r.id, nameA:r.nameA, nameB:r.nameB, label:bet.label, p:bet.p, marketType:marketTypeFromEval(bet.eval), status:betStatusFromRecord(r,bet)}));
+          return {options, matchKey:r.id};
+        }).filter(Boolean);
+
+      let round = 0;
+      while(legs.length < cfg.legsWanted && round < candidates.length*3){
+        const idx = round % candidates.length;
+        if(!candidates.length) break;
+        const {options, matchKey} = candidates[idx];
+        if(legs.some(l=>l.matchKey===matchKey)){ round++; continue; }
+        const chosen = options.find(o=>!usedMarketTypes.has(o.marketType)) || options[0];
+        if(chosen){ legs.push(chosen); usedMarketTypes.add(chosen.marketType); }
+        round++;
+      }
+    }
+
+    state.legsByRisk[riskLevel] = legs;
+    if(legs.length < 2) return; // pas assez de matchs analysés pour ce niveau ce jour-là
+
+    const combinedP = legs.reduce((acc,l)=>acc*l.p,1);
+    const combinedOdds = legs.reduce((acc,l)=>acc*(1/l.p),1);
+    let allVerified = true, anyLost = false;
+    legs.forEach(l=>{ if(l.status==='pending') allVerified=false; if(l.status==='miss') anyLost=true; });
+    combos.push({riskLevel, legs, combinedP, combinedOdds, status: anyLost?'perdu':(allVerified?'gagne':'en_cours')});
+  });
+
+  persistPrivateComboState();
+  return combos;
 }
 // Journal des combinés (jours passés) : reconstruits depuis ARCHIVE (paris déjà vérifiés
 // ce jour-là), regroupés par match — donc toujours entièrement tranchés (gagné/perdu),
@@ -5271,6 +5344,7 @@ async function initApp(){
   loadDB();
   await loadTrack();
   loadArchive();
+  loadPrivateComboState();
   pruneArchiveOlderThan20Days();
   renderHistoryUnified();
   renderBets(betsSelectedSport);
