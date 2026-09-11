@@ -599,10 +599,11 @@ input{font-family:inherit;}
           <div class="dossier-head">
             <div class="eyebrow">Dossier football — pièce n°1</div>
             <div class="matchup">
-              <input id="nameA" class="team-input" value="A" maxlength="14">
+              <input id="nameA" class="team-input" list="teamListGe" value="A" maxlength="14">
+              <datalist id="teamListGe"></datalist>
               <button id="autoFillBtnA" class="auto-fill-btn sfx-tap" title="Auto-remplir depuis les stats en ligne">🔎</button>
               <span class="vs">VS</span>
-              <input id="nameB" class="team-input" value="B" maxlength="14">
+              <input id="nameB" class="team-input" list="teamListGe" value="B" maxlength="14">
               <button id="autoFillBtnB" class="auto-fill-btn sfx-tap" title="Auto-remplir depuis les stats en ligne">🔎</button>
             </div>
             <div id="autoFillStatusA" class="auto-fill-status"></div>
@@ -679,6 +680,7 @@ input{font-family:inherit;}
               <label style="display:block; font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--text-faint); margin-bottom:4px;">Ligue / championnat (optionnel — affine la calibration par ligue)</label>
               <input type="text" id="leagueGe" list="leagueListGe" placeholder="ex: Ligue 1, Premier League..." style="width:100%; background:var(--panel2,#0d0f16); border:1px solid var(--line); border-radius:8px; padding:9px 10px; color:var(--text); font-size:13px;">
               <datalist id="leagueListGe"></datalist>
+              <div id="leagueGoalAvgInfo" style="margin-top:5px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--text-faint);"></div>
             </div>
             <div class="flags-grid">
               <div class="flags-col">
@@ -1707,6 +1709,101 @@ function getLocalLeagueStats(sport, league){
   const store = loadLocalLeagueStatsStore();
   return store[leagueStatsKey(sport, league)] || null; // sommes brutes {homeGoals, awayGoals, homeWins, awayWins, draws, n}
 }
+
+// -- Mémoire d'équipe (nouveau) : l'app reconnaît une équipe déjà croisée et lui construit
+// sa propre force interne à partir des scores que VOUS avez validés — pas besoin de taper
+// un Elo à la main pour que ça marche. Alimenté à chaque vérification, comme les stats de
+// ligue ci-dessus, avec le même principe de confiance : ça reste discret (K modeste, seuil
+// minimum de matchs) et ça ne joue QUE le rôle que l'Elo manuel jouait déjà (eloIndex) —
+// jamais utilisé pour écraser un Elo que vous avez renseigné vous-même.
+//
+// Problème identifié : deux clubs qui ne se rencontrent JAMAIS (ex. Arsenal en Premier
+// League, Sabah FC dans un championnat isolé) forment deux groupes fermés. Un club qui
+// écrase répétitivement son propre groupe faible peut voir son rating grimper sans limite,
+// même s'il resterait largement dominé par un club d'un grand championnat — l'Elo classique
+// ne corrige ça qu'en connectant les groupes par des matchs communs (coupes continentales),
+// qu'on n'a pas ici. Deux garde-fous, pas une solution parfaite :
+// 1) Le point de DÉPART dépend du championnat (voir LEAGUE_ELO_SEED, basé sur les vrais
+//    coefficients UEFA par pays — recherchés le 10/09/2026) plutôt qu'un neutre 1500 pour
+//    tout le monde : un club d'un championnat non reconnu démarre plus bas par défaut,
+//    car la plupart des ~2000 championnats du monde sont, en moyenne, sous le niveau des
+//    10 grands championnats européens suivis ici. Approximatif, pas un jugement du club
+//    précis — juste un point de départ raisonnable en l'absence d'autre info.
+// 2) Le rating ne peut plus dériver de plus de ±300 points depuis ce point de départ,
+//    quel que soit le nombre de victoires larges enchaînées dans un groupe fermé — ça
+//    borne le dégât d'un biais "petit poisson dans un petit bocal".
+const TEAM_RATING_KEY = 'ea_team_rating_v1';
+const TEAM_RATING_MIN_N = 3; // sous ce seuil, trop peu de matchs pour être fiable : pas utilisé
+const TEAM_RATING_MAX_DRIFT = 300;
+// Amorçage précis pour les clubs reconnus : vraies valeurs Elo actuelles (clubelo.com,
+// relevées le 10/09/2026 — Arsenal 1er à 2061, Bayern 2e à 1999, devant Barcelone,
+// PSG, Real Madrid...). Prioritaire sur l'amorçage par championnat ci-dessous : un club
+// du top européen démarre à sa vraie force, pas à la moyenne de son championnat.
+const TEAM_ELO_SEED = {
+  arsenal:2061, bayern:1999, bayern_munich:1999, barcelona:1989, paris_sg:1954, psg:1954,
+  real_madrid:1946, man_city:1941, manchester_city:1941, liverpool:1926, inter:1892,
+  aston_villa:1885, man_united:1881, manchester_united:1881, sporting:1874, chelsea:1869,
+  atletico:1863, atletico_madrid:1863, dortmund:1846, borussia_dortmund:1846, brighton:1844,
+  newcastle:1840, brentford:1832, everton:1831, bournemouth:1822, benfica:1819, porto:1811,
+  leverkusen:1808, bayer_leverkusen:1808, milan:1808, ac_milan:1808, napoli:1806, fulham:1801,
+};
+// Amorçage générique par championnat (pour tout club non listé ci-dessus) — échelle
+// remontée pour rester cohérente avec les vraies valeurs ci-dessus (même un club moyen
+// d'un grand championnat tourne réellement autour de 1500-1750, pas 1400-1650).
+const LEAGUE_ELO_SEED = {
+  premier_league: 1750, serie_a: 1700, laliga: 1680, la_liga: 1680, bundesliga: 1670,
+  ligue_1: 1620, primeira_liga: 1580, liga_portugal: 1580, belgian_pro_league: 1560,
+  jupiler_pro_league: 1560, pro_league: 1560, eredivisie: 1550, championship: 1480,
+};
+const LEAGUE_ELO_SEED_DEFAULT = 1400; // championnat non reconnu (la grande majorité des cas dans le monde)
+function leagueEloSeed(league){ return LEAGUE_ELO_SEED[leagueSlug(league)] ?? LEAGUE_ELO_SEED_DEFAULT; }
+function teamEloSeed(name, league){
+  const known = TEAM_ELO_SEED[leagueSlug(name)];
+  return known ?? leagueEloSeed(league);
+}
+function loadTeamRatingsStore(){
+  try{ return JSON.parse(localStorage.getItem(TEAM_RATING_KEY)||'{}'); }catch(e){ return {}; }
+}
+function saveTeamRatingsStore(store){
+  try{ localStorage.setItem(TEAM_RATING_KEY, JSON.stringify(store)); }catch(e){}
+}
+function teamRatingKey(sport, name){ return sport+'__'+leagueSlug(name); }
+function getTeamRatingRaw(store, sport, name, league){
+  const key = teamRatingKey(sport, name);
+  if(store[key]) return store[key];
+  const seed = teamEloSeed(name, league);
+  return {rating:seed, seed, n:0};
+}
+// Rating utilisable pour le calcul (null tant qu'il n'y a pas assez de matchs vérifiés
+// pour CETTE équipe précise — pas de bruit sur la base d'un ou deux résultats).
+function getTeamRating(sport, name){
+  if(!(name||'').trim()) return null;
+  const store = loadTeamRatingsStore();
+  const key = teamRatingKey(sport, name);
+  const rec = store[key];
+  return (rec && rec.n >= TEAM_RATING_MIN_N) ? rec.rating : null;
+}
+// Mise à jour Elo classique à chaque match vérifié : K plus élevé (40) tant que l'équipe a
+// peu d'historique pour converger plus vite, puis K=20 une fois établie (>=10 matchs) —
+// principe standard du "rating provisoire". Le résultat est ensuite recadré autour du seed
+// de départ (±300, voir plus haut).
+function updateTeamRatings(sport, nameA, nameB, finalScore, leagueA, leagueB){
+  if(!(nameA||'').trim() || !(nameB||'').trim() || finalScore.a==null || finalScore.b==null) return;
+  const store = loadTeamRatingsStore();
+  const recA = getTeamRatingRaw(store, sport, nameA, leagueA);
+  const recB = getTeamRatingRaw(store, sport, nameB, leagueB);
+  const actualA = finalScore.a>finalScore.b ? 1 : finalScore.a<finalScore.b ? 0 : 0.5;
+  const expectedA = 1/(1+Math.pow(10, (recB.rating-recA.rating)/400));
+  const kA = recA.n<10 ? 40 : 20, kB = recB.n<10 ? 40 : 20;
+  recA.rating = clamp(Math.round(recA.rating + kA*(actualA-expectedA)), recA.seed-TEAM_RATING_MAX_DRIFT, recA.seed+TEAM_RATING_MAX_DRIFT);
+  recB.rating = clamp(Math.round(recB.rating + kB*((1-actualA)-(1-expectedA))), recB.seed-TEAM_RATING_MAX_DRIFT, recB.seed+TEAM_RATING_MAX_DRIFT);
+  recA.n++; recB.n++;
+  recA.displayName = nameA.trim(); recB.displayName = nameB.trim();
+  store[teamRatingKey(sport, nameA)] = recA;
+  store[teamRatingKey(sport, nameB)] = recB;
+  saveTeamRatingsStore(store);
+}
+
 // Fusion des deux sources — c'est CETTE fonction que computeGeneseLambdas/computeBasketPoints
 // utilisent, jamais les deux sources séparément.
 function getCachedLeagueStats(sport, league){
@@ -2877,6 +2974,22 @@ function listKnownLeagues(sport){
   (TRACK[sport]||[]).forEach(e=>{ if(e.league) set.add(e.league); });
   return [...set].sort((a,b)=>a.localeCompare(b));
 }
+function refreshTeamDatalist(sport, datalistId){
+  const el = document.getElementById(datalistId);
+  if(!el) return;
+  const store = loadTeamRatingsStore();
+  const prefix = sport+'__';
+  const names = new Set();
+  Object.keys(store).forEach(k=>{
+    if(k.startsWith(prefix)){
+      // La clé est slugifiée (accents/casse perdus) — on retombe sur le nom tel que tapé
+      // la dernière fois qu'on l'a, mémorisé séparément pour l'affichage du datalist.
+      const rec = store[k];
+      if(rec.displayName) names.add(rec.displayName);
+    }
+  });
+  el.innerHTML = [...names].sort((a,b)=>a.localeCompare(b)).map(n=>`<option value="${n}"></option>`).join('');
+}
 async function refreshLeagueDatalist(sport, datalistId){
   const el = document.getElementById(datalistId);
   if(!el) return;
@@ -3289,6 +3402,8 @@ function markResult(sport, recordId, finalA, finalB, finalStats){
   // sinon il serait compté deux fois côté serveur (une fois via la vérification communauté,
   // une fois via cette contribution silencieuse).
   updateLocalLeagueStats(sport, rec.league, {a:finalA, b:finalB});
+  updateTeamRatings(sport, rec.nameA, rec.nameB, {a:finalA, b:finalB}, rec.league, rec.league);
+  if(sport==='football') refreshTeamDatalist('football','teamListGe');
   if(rec.communityId==null) contributeLeagueScoreSilently(sport, rec.league, {a:finalA, b:finalB});
   fetchLeagueStats(sport, rec.league); // idem pour les moyennes par ligue (football + basket)
   archiveResult(sport, rec, finalA, finalB);
@@ -3414,9 +3529,43 @@ function updateRankPreview(prefix){
   const z=zoneInfo(rank,total); el.textContent=`${ordinal(rank)} / ${total} — ${z?z.short:''}`;
 }
 ['rankA','ptsA','rankB','ptsB','totalTeams','eloA','eloB'].forEach(id=>{
-  document.getElementById(id).addEventListener('input', e=>{ standings[id]= e.target.value===''?null:parseFloat(e.target.value); updateRankPreview('A'); updateRankPreview('B'); });
+  document.getElementById(id).addEventListener('input', e=>{
+    standings[id]= e.target.value===''?null:parseFloat(e.target.value);
+    if(id==='eloA'||id==='eloB') e.target.dataset.autofilled=''; // saisie manuelle : plus jamais écrasé automatiquement
+    updateRankPreview('A'); updateRankPreview('B');
+  });
 });
 document.getElementById('matchday').addEventListener('input', e=>{ standings.matchday = e.target.value || null; });
+
+// Auto-remplissage Elo depuis le nom d'équipe : dès que vous quittez le champ nom (blur),
+// si l'app reconnaît l'équipe — club listé (TEAM_ELO_SEED, vraies valeurs) ou déjà vu
+// localement avec au moins 3 matchs vérifiés — le champ Elo se remplit seul. Ne touche
+// JAMAIS un Elo que vous avez tapé vous-même (dataset.autofilled distingue les deux) ;
+// si vous changez de nom d'équipe après coup, l'ancienne valeur auto-remplie est retirée
+// (pas laissée à tort sur le nouveau nom).
+function autoFillEloFromTeamName(nameInputId, eloInputId){
+  const name = document.getElementById(nameInputId).value.trim();
+  const eloField = document.getElementById(eloInputId);
+  const wasAutoFilled = eloField.dataset.autofilled==='1';
+  if(eloField.value!=='' && !wasAutoFilled) return; // Elo déjà tapé à la main : on n'y touche pas
+  let value = null;
+  if(name){
+    const known = TEAM_ELO_SEED[leagueSlug(name)];
+    if(known!=null) value = known;
+    else {
+      const store = loadTeamRatingsStore();
+      const rec = store[teamRatingKey('football', name)];
+      if(rec && rec.n>=TEAM_RATING_MIN_N) value = rec.rating;
+    }
+  }
+  if(value!=null){
+    eloField.value = value; eloField.dataset.autofilled='1'; standings[eloInputId] = value;
+  } else if(wasAutoFilled){
+    eloField.value = ''; eloField.dataset.autofilled=''; standings[eloInputId] = null;
+  }
+}
+document.getElementById('nameA').addEventListener('blur', ()=>autoFillEloFromTeamName('nameA','eloA'));
+document.getElementById('nameB').addEventListener('blur', ()=>autoFillEloFromTeamName('nameB','eloB'));
 
 /* -- Auto-remplissage par API sportive (1.1) --
    La clé API reste côté serveur ; ici on ne fait qu'appeler /api/team-lookup et
@@ -3496,10 +3645,30 @@ document.getElementById('legGe').addEventListener('change', e=>{ matchFlags.leg 
 document.getElementById('aggAllerA').addEventListener('input', e=>{ matchFlags.aggAllerA = e.target.value===''?null:parseInt(e.target.value,10); });
 document.getElementById('aggAllerB').addEventListener('input', e=>{ matchFlags.aggAllerB = e.target.value===''?null:parseInt(e.target.value,10); });
 let leagueGeDebounce;
+function updateLeagueGoalAvgInfo(){
+  const el = document.getElementById('leagueGoalAvgInfo');
+  if(!el) return;
+  const league = matchFlags.league;
+  if(!league){ el.textContent=''; return; }
+  const stats = getCachedLeagueStats('football', league);
+  if(stats){
+    const total = (stats.avgHomeGoals+stats.avgAwayGoals).toFixed(2);
+    el.textContent = `⚽ ${total} buts/match observés — ${stats.n} match${stats.n>1?'s':''} vérifié${stats.n>1?'s':''} (domicile ${stats.avgHomeGoals.toFixed(2)} / extérieur ${stats.avgAwayGoals.toFixed(2)})`;
+    return;
+  }
+  const ext = getExternalLeagueGoalPrior(league);
+  if(ext){
+    const total = (ext.avgHomeGoals+ext.avgAwayGoals).toFixed(2);
+    el.textContent = `⚽ ${total} buts/match — moyenne saison 2024-25 (pas encore assez de matchs vérifiés pour une moyenne propre)`;
+    return;
+  }
+  el.textContent = 'Championnat non reconnu — pas de moyenne de buts disponible pour l\'instant.';
+}
 document.getElementById('leagueGe').addEventListener('input', e=>{
   matchFlags.league = normalizeLeagueName(e.target.value);
+  updateLeagueGoalAvgInfo();
   clearTimeout(leagueGeDebounce);
-  leagueGeDebounce = setTimeout(()=>{ fetchSharedCalibration('football', matchFlags.league); fetchLeagueStats('football', matchFlags.league); }, 600);
+  leagueGeDebounce = setTimeout(()=>{ fetchSharedCalibration('football', matchFlags.league); fetchLeagueStats('football', matchFlags.league).then(updateLeagueGoalAvgInfo); }, 600);
 });
 ['injuryA','fatigueA','uncertainA','injuryB','fatigueB','uncertainB'].forEach(id=>{
   const flag = id.slice(0,-1), team = id.slice(-1);
@@ -3523,7 +3692,7 @@ document.getElementById('advToggleGe').addEventListener('click', ()=>{
 });
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   CATS.forEach(c=>{ store[c.key]=[]; renderChips(c.key); });
-  ['rankA','ptsA','rankB','ptsB','totalTeams','eloA','eloB'].forEach(id=>{ document.getElementById(id).value=''; standings[id]=null; });
+  ['rankA','ptsA','rankB','ptsB','totalTeams','eloA','eloB'].forEach(id=>{ const el=document.getElementById(id); el.value=''; el.dataset.autofilled=''; standings[id]=null; });
   document.getElementById('matchday').value=''; standings.matchday=null;
   document.getElementById('rankPreviewA').textContent=''; document.getElementById('rankPreviewB').textContent='';
   ADV_FIELDS.forEach(id=>{ document.getElementById(id).value=''; advStats[id]=null; });
@@ -3720,7 +3889,17 @@ function computeGeneseLambdas(){
       lambdaB = lambdaB*(1-extWeight) + extPrior.avgAwayGoals*extWeight;
     }
   }
-  const qualityIdx=classementQualityIndex(standings), eIdx=eloIndex(standings);
+  // Repli Elo : si vous n'avez pas rempli le champ Elo (optionnel) pour une équipe, on
+  // regarde si l'app la reconnaît déjà (au moins 3 matchs vérifiés à son nom) et on utilise
+  // sa force interne, construite au fil de VOS résultats validés — jamais l'inverse : un Elo
+  // que vous avez tapé vous-même n'est jamais remplacé. Ne touche que le calcul (eIdx) ; le
+  // champ à l'écran et l'objet "standings" restent inchangés.
+  const nameAForRating = document.getElementById('nameA').value.trim()||'A';
+  const nameBForRating = document.getElementById('nameB').value.trim()||'B';
+  const effStandings = (standings.eloA==null || standings.eloB==null) ? {...standings} : standings;
+  if(effStandings.eloA==null) effStandings.eloA = getTeamRating('football', nameAForRating);
+  if(effStandings.eloB==null) effStandings.eloB = getTeamRating('football', nameBForRating);
+  const qualityIdx=classementQualityIndex(standings), eIdx=eloIndex(effStandings);
   const {idx:enjeuIdx, zoneA, zoneB, phaseLabel}=enjeuInfo(standings);
   const trendA=trendIndex(store.aSerie), trendB=trendIndex(store.bSerie);
   const trendDiffIdx=Math.tanh((trendA-trendB)*1.5);
@@ -3745,10 +3924,17 @@ function computeGeneseLambdas(){
     // (ex. 2000+ points) ne déplaçait quasiment pas les lambdas, alors qu'il faisait déjà
     // basculer le 1X2 via strengthGap plus bas. Score exact et 1X2 pouvaient donc se
     // contredire sur l'équipe favorite. Classement/Elo redeviennent les signaux dominants.
-    totalAdj = clamp(qualityIdx*.16 + eIdx*.14 + enjeuIdx*.08 + trendDiffIdx*.04 + h2hGap*.10 + defGap*.08, -dynCap, dynCap);
-    // En coupe, le classement/enjeu de championnat est moins pertinent (les tirages
-    // opposent des niveaux hétérogènes) — on amortit cette correction de 30%.
-    if(matchFlags.matchType==='coupe') totalAdj *= 0.7;
+    // En coupe ET en compétition européenne, le classement/enjeu de championnat est moins
+    // fiable comme signal (les tirages opposent parfois des niveaux de compétition
+    // différents, ex. un cador de championnat majeur contre une équipe d'un championnat
+    // plus modeste) — mais Elo, H2H et écart défensif restent comparables d'une compétition
+    // à l'autre, eux. Avant, un amortissement plat ×0.7 réduisait TOUT le totalAdj (y compris
+    // Elo/H2H/défense, pourtant fiables), et seulement pour 'coupe' — jamais pour 'europe',
+    // pourtant la compétition la plus susceptible d'un vrai fossé de niveau (Barcelone-
+    // Feyenoord). On amortit maintenant seulement les deux composantes concernées, pour les
+    // deux types de compétition hétérogène.
+    const classementFactor = heterogeneousComp ? 0.5 : 1;
+    totalAdj = clamp(qualityIdx*.16*classementFactor + eIdx*.14 + enjeuIdx*.08*classementFactor + trendDiffIdx*.04 + h2hGap*.10 + defGap*.08, -dynCap, dynCap);
     lambdaA=Math.max(.15, lambdaA*(1+totalAdj)); lambdaB=Math.max(.15, lambdaB*(1-totalAdj));
   }
   // Marqueurs contextuels déclaratifs : nudges modestes et transparents, jamais dominants.
@@ -5270,7 +5456,7 @@ async function exportAllData(){
   // qui servent d'ancrage réel pour la ligue et étaient jusqu'ici oubliées de l'export.
   for(let i=0;i<localStorage.length;i++){
     const k = localStorage.key(i);
-    if(k && (k.startsWith('ea_rho_')||k.startsWith('ea_weights_')||k.startsWith('ea_srcperf_')||k===LOCAL_LEAGUE_STATS_KEY)){
+    if(k && (k.startsWith('ea_rho_')||k.startsWith('ea_weights_')||k.startsWith('ea_srcperf_')||k===LOCAL_LEAGUE_STATS_KEY||k===TEAM_RATING_KEY)){
       payload.settings[k] = localStorage.getItem(k);
     }
   }
@@ -5368,6 +5554,7 @@ async function initApp(){
   fetchSharedCalibration('football', '');
   fetchSharedCalibration('basketball', '');
   refreshLeagueDatalist('football','leagueListGe');
+  refreshTeamDatalist('football','teamListGe');
   refreshLeagueDatalist('basketball','leagueListBk');
 }
 </script>
