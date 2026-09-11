@@ -3564,6 +3564,9 @@ function autoFillEloFromTeamName(nameInputId, eloInputId){
     eloField.value = ''; eloField.dataset.autofilled=''; standings[eloInputId] = null;
   }
 }
+let nameAEloDebounce, nameBEloDebounce;
+document.getElementById('nameA').addEventListener('input', ()=>{ clearTimeout(nameAEloDebounce); nameAEloDebounce=setTimeout(()=>autoFillEloFromTeamName('nameA','eloA'), 400); });
+document.getElementById('nameB').addEventListener('input', ()=>{ clearTimeout(nameBEloDebounce); nameBEloDebounce=setTimeout(()=>autoFillEloFromTeamName('nameB','eloB'), 400); });
 document.getElementById('nameA').addEventListener('blur', ()=>autoFillEloFromTeamName('nameA','eloA'));
 document.getElementById('nameB').addEventListener('blur', ()=>autoFillEloFromTeamName('nameB','eloB'));
 
@@ -3917,7 +3920,22 @@ function computeGeneseLambdas(){
     // force (|strengthGap|), jusqu'à ±50%. Avant, un gros mismatch Elo/classement/H2H/défense
     // se faisait déjà écrêter par le clamp fixe avant même de pouvoir se traduire en écart de
     // buts — ce qui aplatissait les cas les plus déséquilibrés (ex. Barcelone-Feyenoord).
-    const dynCap = clamp(0.22 + Math.abs(strengthGap)*0.30, 0.22, 0.50);
+    // Le plafond ±50% (ci-dessous, base) reste juste pour la grande majorité des matchs, mais
+    // il s'est révélé encore insuffisant sur les écarts VRAIMENT extrêmes (cador européen contre
+    // petit poisson d'un championnat modeste, ex. Barcelone-Feyenoord) : même avec un strengthGap
+    // proche de son maximum (±1), un lambda de base "raisonnable" (~2 à 2.5 buts) plafonné à ±50%
+    // ne dépasse jamais ~3.5-3.8 buts attendus — largement insuffisant pour que la matrice Monte
+    // Carlo fasse remonter un score comme 5-1 ou 4-0 en tête des scores probables (le mode d'une
+    // loi de Poisson reste proche de son lambda, donc un score exact "large" a besoin d'un lambda
+    // franchement élevé pour devenir la case la plus probable, pas seulement une case possible).
+    // On ajoute donc un second palier, qui ne se déclenche QUE passé 0.65 de |strengthGap| (donc
+    // seulement quand classement, Elo, H2H et défense pointent déjà fortement dans le même sens :
+    // un vrai mismatch structurel, pas un simple léger favori) et grimpe alors jusqu'à ±72% pour
+    // les cas les plus extrêmes. Les matchs serrés ou moyennement déséquilibrés (|strengthGap|
+    // sous 0.65) ne sont eux jamais concernés : ils gardent exactement l'ancien plafond ±50%.
+    const dynCapBase = clamp(0.22 + Math.abs(strengthGap)*0.30, 0.22, 0.50);
+    const blowoutExtra = Math.max(0, Math.abs(strengthGap)-0.65) * 0.85;
+    const dynCap = clamp(dynCapBase + blowoutExtra, 0.22, 0.72);
     // Poids réalignés sur ceux, déjà bien calibrés, de computeStrengthGap (classement .28,
     // Elo .22, H2H .20, défense .18, forme .12) : avant, classement et Elo ne pesaient que
     // .05 chacun ici contre .10 pour l'enjeu et .10 pour la défense — un gros écart Elo
