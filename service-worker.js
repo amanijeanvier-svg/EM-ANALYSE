@@ -7,7 +7,7 @@
    d'autre à ce fichier. C'est ce qui garantit que les utilisateurs
    reçoivent la nouvelle version sans avoir à désinstaller/réinstaller.
 ================================================================= */
-const CACHE_NAME = 'ea-cabinet-cache-v4';
+const CACHE_NAME = 'ea-cabinet-cache-v5';
 const STATIC_ASSETS = ['manifest.json', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
 
 self.addEventListener('install', (event) => {

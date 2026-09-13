@@ -599,11 +599,11 @@ input{font-family:inherit;}
           <div class="dossier-head">
             <div class="eyebrow">Dossier football — pièce n°1</div>
             <div class="matchup">
-              <input id="nameA" class="team-input" list="teamListGe" value="A" maxlength="14">
+              <input id="nameA" class="team-input" list="teamListGe" value="A" maxlength="30">
               <datalist id="teamListGe"></datalist>
               <button id="autoFillBtnA" class="auto-fill-btn sfx-tap" title="Auto-remplir depuis les stats en ligne">🔎</button>
               <span class="vs">VS</span>
-              <input id="nameB" class="team-input" list="teamListGe" value="B" maxlength="14">
+              <input id="nameB" class="team-input" list="teamListGe" value="B" maxlength="30">
               <button id="autoFillBtnB" class="auto-fill-btn sfx-tap" title="Auto-remplir depuis les stats en ligne">🔎</button>
             </div>
             <div id="autoFillStatusA" class="auto-fill-status"></div>
@@ -771,10 +771,10 @@ input{font-family:inherit;}
           <div class="dossier-head">
             <div class="eyebrow">Dossier basketball — pièce n°1</div>
             <div class="matchup">
-              <input id="bkNameA" class="team-input" value="A" maxlength="14">
+              <input id="bkNameA" class="team-input" value="A" maxlength="30">
               <button id="bkAutoFillBtnA" class="auto-fill-btn sfx-tap" title="Auto-remplir depuis les stats en ligne">🔎</button>
               <span class="vs">VS</span>
-              <input id="bkNameB" class="team-input" value="B" maxlength="14">
+              <input id="bkNameB" class="team-input" value="B" maxlength="30">
               <button id="bkAutoFillBtnB" class="auto-fill-btn sfx-tap" title="Auto-remplir depuis les stats en ligne">🔎</button>
             </div>
             <div id="bkAutoFillStatusA" class="auto-fill-status"></div>
@@ -1747,6 +1747,23 @@ const TEAM_ELO_SEED = {
   newcastle:1840, brentford:1832, everton:1831, bournemouth:1822, benfica:1819, porto:1811,
   leverkusen:1808, bayer_leverkusen:1808, milan:1808, ac_milan:1808, napoli:1806, fulham:1801,
 };
+// Alias vers les clés ci-dessus : orthographes françaises et variantes courantes du nom
+// complet — "Barcelone", "Naples" (nom français de Napoli), "Paris Saint-Germain" en
+// entier, "Inter Milan"... Grâce au correctif d'accents ci-dessus, "Atlético" et
+// "Atletico" matchent maintenant tous les deux directement sans avoir besoin d'alias.
+const TEAM_NAME_ALIASES = {
+  barcelone: 'barcelona', fc_barcelone: 'barcelona', fc_barcelona: 'barcelona',
+  naples: 'napoli', ssc_naples: 'napoli',
+  paris_saint_germain: 'psg', paris: 'psg',
+  munich: 'bayern', fc_bayern: 'bayern',
+  inter_milan: 'inter', inter_de_milan: 'inter',
+  milan_ac: 'milan', ac_milan_1899: 'milan',
+  atletico_de_madrid: 'atletico_madrid',
+  sporting_cp: 'sporting', sporting_portugal: 'sporting', sporting_lisbonne: 'sporting',
+  manchester_utd: 'manchester_united', man_utd: 'manchester_united',
+  fc_porto: 'porto', real_sociedad_madrid: 'real_madrid',
+};
+function resolveTeamAlias(slug){ return TEAM_NAME_ALIASES[slug] || slug; }
 // Amorçage générique par championnat (pour tout club non listé ci-dessus) — échelle
 // remontée pour rester cohérente avec les vraies valeurs ci-dessus (même un club moyen
 // d'un grand championnat tourne réellement autour de 1500-1750, pas 1400-1650).
@@ -1758,7 +1775,7 @@ const LEAGUE_ELO_SEED = {
 const LEAGUE_ELO_SEED_DEFAULT = 1400; // championnat non reconnu (la grande majorité des cas dans le monde)
 function leagueEloSeed(league){ return LEAGUE_ELO_SEED[leagueSlug(league)] ?? LEAGUE_ELO_SEED_DEFAULT; }
 function teamEloSeed(name, league){
-  const known = TEAM_ELO_SEED[leagueSlug(name)];
+  const known = TEAM_ELO_SEED[resolveTeamAlias(leagueSlug(name))];
   return known ?? leagueEloSeed(league);
 }
 function loadTeamRatingsStore(){
@@ -1767,7 +1784,7 @@ function loadTeamRatingsStore(){
 function saveTeamRatingsStore(store){
   try{ localStorage.setItem(TEAM_RATING_KEY, JSON.stringify(store)); }catch(e){}
 }
-function teamRatingKey(sport, name){ return sport+'__'+leagueSlug(name); }
+function teamRatingKey(sport, name){ return sport+'__'+resolveTeamAlias(leagueSlug(name)); }
 function getTeamRatingRaw(store, sport, name, league){
   const key = teamRatingKey(sport, name);
   if(store[key]) return store[key];
@@ -3550,7 +3567,7 @@ function autoFillEloFromTeamName(nameInputId, eloInputId){
   if(eloField.value!=='' && !wasAutoFilled) return; // Elo déjà tapé à la main : on n'y touche pas
   let value = null;
   if(name){
-    const known = TEAM_ELO_SEED[leagueSlug(name)];
+    const known = TEAM_ELO_SEED[resolveTeamAlias(leagueSlug(name))];
     if(known!=null) value = known;
     else {
       const store = loadTeamRatingsStore();
@@ -3569,6 +3586,17 @@ document.getElementById('nameA').addEventListener('input', ()=>{ clearTimeout(na
 document.getElementById('nameB').addEventListener('input', ()=>{ clearTimeout(nameBEloDebounce); nameBEloDebounce=setTimeout(()=>autoFillEloFromTeamName('nameB','eloB'), 400); });
 document.getElementById('nameA').addEventListener('blur', ()=>autoFillEloFromTeamName('nameA','eloA'));
 document.getElementById('nameB').addEventListener('blur', ()=>autoFillEloFromTeamName('nameB','eloB'));
+
+// Rétrécit la police d'un nom d'équipe au fur et à mesure qu'il s'allonge (ex. "Borussia
+// Mönchengladbach"), pour qu'il reste lisible dans la case sans la faire déborder.
+function shrinkTeamInputFont(el){
+  const len = el.value.length;
+  el.style.fontSize = len<=14 ? '18px' : len<=20 ? '15px' : len<=25 ? '13px' : '11px';
+}
+['nameA','nameB','bkNameA','bkNameB'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el){ shrinkTeamInputFont(el); el.addEventListener('input', ()=>shrinkTeamInputFont(el)); }
+});
 
 /* -- Auto-remplissage par API sportive (1.1) --
    La clé API reste côté serveur ; ici on ne fait qu'appeler /api/team-lookup et
@@ -3636,7 +3664,14 @@ function syncSeveritySegGe(flag, team, checked){
   document.getElementById(flag+'Severity'+team).classList.toggle('show', checked);
 }
 function normalizeLeagueName(raw){ return (raw||'').trim(); }
-function leagueSlug(name){ return normalizeLeagueName(name).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,''); }
+// Avant : un "é", "ü", "ç"... n'était pas reconnu comme lettre par le slug (tombait dans
+// [^a-z0-9], donc devenait un "_") — "Atlético" et "Atletico" ne matchaient PAS la même
+// clé. On décompose Unicode (NFD) puis on retire les diacritiques avant de slugifier :
+// "Atlético", "atletico", "ATLÉTICO" donnent maintenant tous "atletico".
+function leagueSlug(name){
+  return normalizeLeagueName(name).normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+}
 function syncStageBlockGe(){
   const isKO = matchFlags.matchType==='coupe' || matchFlags.matchType==='europe';
   document.getElementById('stageBlockGe').classList.toggle('hidden', !isKO);
@@ -5333,12 +5368,62 @@ function renderBets(sport){
 ================================================================= */
 /* -- Réglages (notifications, push communauté, sauvegarde) — toujours visibles en haut de
    l'Histoire fusionnée (5.11), quel que soit le jour sélectionné. -- */
+// Compare le vrai taux de réussite des paris simples (chaque pari vérifié, indépendamment)
+// à celui des combinés reconstitués (aujourd'hui + les 20 jours du journal, les deux
+// sports) — pour objectiver, avec vos propres chiffres, si les combinés pèsent vraiment
+// plus lourd que les simples sur le résultat global.
+function computeSimplesVsCombosStats(){
+  let simpleHits=0, simpleTotal=0;
+  ['football','basketball'].forEach(sport=>{
+    (TRACK[sport]||[]).forEach(e=>{
+      (e.evaluations||[]).forEach(ev=>{
+        if(ev.hit===true||ev.hit===false) simpleTotal++;
+        if(ev.hit===true) simpleHits++;
+      });
+    });
+  });
+  let comboWins=0, comboLosses=0;
+  const byRisk = {faible:{w:0,l:0}, modere:{w:0,l:0}, eleve:{w:0,l:0}};
+  const tallyCombo = c=>{
+    if(c.status==='gagne'){ comboWins++; byRisk[c.riskLevel].w++; }
+    else if(c.status==='perdu'){ comboLosses++; byRisk[c.riskLevel].l++; }
+  };
+  ['football','basketball'].forEach(sport=>{
+    buildPrivateCombos(sport).forEach(tallyCombo);
+    getArchiveDayKeys().forEach(day=>buildArchivedCombos(sport, day).forEach(tallyCombo));
+  });
+  const comboTotal = comboWins+comboLosses;
+  return {
+    simple:{hits:simpleHits, total:simpleTotal, rate: simpleTotal ? simpleHits/simpleTotal : null},
+    combo:{wins:comboWins, losses:comboLosses, total:comboTotal, rate: comboTotal ? comboWins/comboTotal : null},
+    byRisk,
+  };
+}
 async function renderHistorySettingsCards(){
   const host = document.getElementById('historySettingsCards');
   if(!host) return;
   const notifOn = notificationsEnabled();
   const commPushOn = await isCommunityPushActive();
-  host.innerHTML = `
+  const svc = computeSimplesVsCombosStats();
+  const simpleRateStr = svc.simple.total ? fmtPct(svc.simple.rate) : '—';
+  const comboRateStr = svc.combo.total ? fmtPct(svc.combo.rate) : '—';
+  const comboWorse = svc.simple.total && svc.combo.total && svc.combo.rate < svc.simple.rate;
+  const svcHtml = (svc.simple.total || svc.combo.total) ? `
+    <div class="summary-row" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:${svc.combo.total?4:16}px;">
+      <div class="summary-card" style="flex:1; min-width:150px;">
+        <div class="lbl" style="font-size:10.5px;">🎯 Paris simples</div>
+        <div class="num" style="color:var(--teal); font-size:22px; margin-top:4px;">${simpleRateStr}</div>
+        <div style="font-size:10.5px; color:var(--text-faint); margin-top:4px;">${svc.simple.hits}/${svc.simple.total} gagnés</div>
+      </div>
+      <div class="summary-card" style="flex:1; min-width:150px;">
+        <div class="lbl" style="font-size:10.5px;">🎰 Combinés (reconstitués)</div>
+        <div class="num" style="color:${comboWorse?'var(--red,#F2545B)':'var(--teal)'}; font-size:22px; margin-top:4px;">${comboRateStr}</div>
+        <div style="font-size:10.5px; color:var(--text-faint); margin-top:4px;">${svc.combo.wins}/${svc.combo.total} gagnés</div>
+      </div>
+    </div>
+    ${svc.combo.total ? `<div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--text-faint); margin:0 0 16px;">Combinés par niveau — faible : ${svc.byRisk.faible.w}/${svc.byRisk.faible.w+svc.byRisk.faible.l} · modéré : ${svc.byRisk.modere.w}/${svc.byRisk.modere.w+svc.byRisk.modere.l} · élevé : ${svc.byRisk.eleve.w}/${svc.byRisk.eleve.w+svc.byRisk.eleve.l} — calculé sur aujourd'hui + les 20 derniers jours du journal.</div>` : ''}
+  ` : '';
+  host.innerHTML = svcHtml + `
     <div class="summary-row" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
       <div class="summary-card" style="flex:2; min-width:220px; cursor:pointer;" id="notifToggleCard">
         <div class="lbl" style="font-size:10.5px;">🔔 Notifications de résultats</div>
