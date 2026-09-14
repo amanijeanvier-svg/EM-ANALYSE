@@ -2830,6 +2830,105 @@ function enjeuInfo(st){
   if(!zA||!zB) return {idx:0,zoneA:null,zoneB:null,phaseLabel:label};
   return {idx:Math.tanh((zA.stake-zB.stake)*mult*1.3), zoneA:zA.zone, zoneB:zB.zone, phaseLabel:label};
 }
+
+// -- Commentaire varié et contextuel --------------------------------------------------
+// Sélection PSEUDO-ALÉATOIRE mais STABLE : même match (même seed) = toujours la même
+// formulation si vous rouvrez l'analyse depuis le journal ; deux matchs différents ont de
+// bonnes chances de tomber sur des formulations différentes. Pas un vrai hasard (ça
+// changerait le texte à chaque re-rendu du même match, ce qui serait plus déroutant
+// qu'utile), un hash simple du nom du match.
+function pickVariant(arr, seed){
+  let h=0; for(let i=0;i<seed.length;i++) h=(h*31+seed.charCodeAt(i))|0;
+  return arr[Math.abs(h)%arr.length];
+}
+// Croise la PHASE de saison (début/milieu/fin) et la ZONE de classement pour dire
+// précisément à quel point la position d'une équipe est urgente ou non — au lieu de
+// juste juxtaposer les deux labels bruts comme avant. C'est le cœur de la demande :
+// "début de saison + dernière place = pas d'urgence, milieu/fin de saison = ça compte".
+const STAKES_PHRASES = {
+  faible: [
+    "{team} occupe {zone}, mais la saison ne fait que commencer — rien d'alarmant à ce stade.",
+    "Être dans {zone} n'a pas encore le poids que ça aurait plus tard dans la saison pour {team} : trop tôt pour s'inquiéter.",
+    "{team} pointe dans {zone}, une position à ne pas surinterpréter si tôt dans l'exercice.",
+  ],
+  modere: [
+    "{team} évolue dans {zone} et la pression commence doucement à monter à ce stade de la saison.",
+    "À mi-saison, chaque match compte un peu plus pour {team}, dans {zone}.",
+    "{team}, dans {zone}, entre dans la phase où les points pris ou perdus commencent à peser sur la suite.",
+  ],
+  forte: [
+    "En {phase}, occuper {zone} devient un vrai motif d'inquiétude pour {team} — chaque point pèse lourd désormais.",
+    "{team} aborde ce match sous tension réelle : {zone} à ce stade de la saison laisse peu de marge d'erreur.",
+    "Le calendrier ne laisse plus de temps à {team} : {zone} en {phase}, c'est le moment où ça se joue.",
+  ],
+  a_confirmer: [
+    "{team} occupe {zone}, mais il est encore tôt pour en tirer des certitudes.",
+    "{zone} pour {team} — un début encourageant, à confirmer sur la durée.",
+  ],
+  installee: [
+    "{team} confirme sa position, {zone}, sur la durée de la saison.",
+    "{zone} pour {team} à ce stade : la tendance semble installée, pas un simple accident de parcours.",
+  ],
+  decisive: [
+    "Pour {team}, {zone} en {phase} : chaque détail compte désormais pour conclure sur cette dynamique.",
+    "{team} joue gros : {zone} à ce stade de la saison, la marge d'erreur est quasi nulle.",
+  ],
+  neutre: [
+    "{team} navigue dans {zone}, sans enjeu de classement immédiat particulier.",
+    "Rien de dramatique en jeu pour {team} côté classement ({zone}), l'envie de bien figurer reste toutefois intacte.",
+  ],
+};
+function stakesUrgency(zoneShort, phaseLabel){
+  const late = phaseLabel==='fin de saison', mid = phaseLabel==='milieu de saison', early = phaseLabel==='début de saison';
+  if(zoneShort==='zone basse du classement'){
+    if(early) return 'faible'; if(mid) return 'modere'; if(late) return 'forte'; return 'modere';
+  }
+  if(zoneShort==='sommet du classement'){
+    if(early) return 'a_confirmer'; if(mid) return 'installee'; if(late) return 'decisive'; return 'installee';
+  }
+  return 'neutre'; // haut de tableau / milieu de tableau : jamais l'urgence la plus vive
+}
+function stakesSentence(teamName, rank, totalTeams, phaseLabel, seed){
+  const z = zoneInfo(rank, totalTeams);
+  if(!z) return '';
+  const level = stakesUrgency(z.short, phaseLabel);
+  const tpl = pickVariant(STAKES_PHRASES[level], seed+level+teamName);
+  return tpl.replace(/\{team\}/g, teamName).replace(/\{zone\}/g, z.zone).replace(/\{phase\}/g, phaseLabel||'cette période de la saison');
+}
+// Interprétation de la FORME récente (trendIndex : delta de différence de buts entre la
+// 2e moitié et la 1re moitié de la série saisie) — plusieurs registres selon l'intensité,
+// pas la même phrase à chaque fois.
+const FORME_PHRASES = {
+  forte_hausse: ["{team} est clairement sur une dynamique ascendante — la tendance des derniers matchs tranche nettement avec le début de série.", "Nette progression pour {team} sur la période récente : la forme du moment est un vrai argument en sa faveur."],
+  hausse: ["{team} semble monter en puissance ces derniers temps.", "Légère amélioration de forme du côté de {team} sur la période récente."],
+  stable: ["{team} évolue sur un rythme régulier, sans embellie ni signal d'alerte particulier.", "Rien à signaler côté dynamique pour {team} — une forme stable, ni en progression ni en recul."],
+  baisse: ["{team} traverse un passage un peu plus délicat ces derniers matchs.", "Légère baisse de régime pour {team} sur la période récente — à surveiller sans dramatiser."],
+  forte_baisse: ["{team} connaît un vrai passage à vide sur la période récente — la dynamique s'est clairement dégradée.", "Signal d'alerte sur la forme de {team} : net recul par rapport au début de la série analysée."],
+};
+function formeSentence(teamName, trend, seed){
+  let level;
+  if(trend>=0.8) level='forte_hausse'; else if(trend>=0.2) level='hausse';
+  else if(trend>-0.2) level='stable'; else if(trend>-0.8) level='baisse'; else level='forte_baisse';
+  return pickVariant(FORME_PHRASES[level], seed+level+teamName).replace(/\{team\}/g, teamName);
+}
+// Interprétation de la CAPACITÉ À MARQUER (lambda, éventuellement confirmé/nuancé par
+// xG/tirs cadrés/possession quand disponibles) — encore une fois, plusieurs registres.
+const SCORING_PHRASES = {
+  forte: ["{team} présente un profil clairement porté vers l'avant ({lambda} but(s) attendu(s)).", "Sur le plan offensif, {team} affiche un potentiel élevé ({lambda} but(s) attendu(s))."],
+  moyenne: ["{team} conserve une capacité de nuisance correcte sans être flamboyante ({lambda} but(s) attendu(s)).", "Profil offensif dans la moyenne pour {team} ({lambda} but(s) attendu(s))."],
+  faible: ["{team} part avec un potentiel offensif limité sur ce match ({lambda} but(s) attendu(s)).", "Capacité de nuisance modeste attendue de {team} ({lambda} but(s) attendu(s))."],
+};
+function scoringSentence(teamName, lambda, seed){
+  const level = lambda>=1.8 ? 'forte' : lambda>=1.0 ? 'moyenne' : 'faible';
+  return pickVariant(SCORING_PHRASES[level], seed+level+teamName).replace(/\{team\}/g, teamName).replace(/\{lambda\}/g, lambda.toFixed(1));
+}
+function possessionNote(possA, possB, nameA, nameB){
+  if(possA==null || possB==null) return '';
+  const gap = Math.abs(possA-possB);
+  if(gap<8) return ` Possession équilibrée (${possA}% / ${possB}%) — ni l'un ni l'autre ne domine vraiment le ballon.`;
+  const dom = possA>possB ? nameA : nameB;
+  return ` ${dom} domine habituellement le ballon (${possA}% / ${possB}%), même si la possession seule ne garantit pas le danger créé.`;
+}
 function trendIndex(arr){
   if(!arr||arr.length<2) return 0;
   const mid=Math.ceil(arr.length/2), first=arr.slice(0,mid), second=arr.slice(mid);
@@ -3894,6 +3993,20 @@ function computeGeneseLambdas(){
   if(lambdaB===null) lambdaB = NEUTRAL_GOALS;
   if(lambdaA!==null && lambdaB!==null && advStats.xgA!=null && advStats.xgaB!=null){ lambdaA = lambdaA*.7 + (advStats.xgA*.6+advStats.xgaB*.4)*.3; }
   if(lambdaA!==null && lambdaB!==null && advStats.xgB!=null && advStats.xgaA!=null){ lambdaB = lambdaB*.7 + (advStats.xgB*.6+advStats.xgaA*.4)*.3; }
+  // Tirs cadrés : signal de repli quand le xG n'est pas renseigné pour ce côté (le xG
+  // reste prioritaire — il capture la QUALITÉ des occasions, pas juste leur nombre — donc
+  // on n'ajoute pas les deux, pour ne pas diluer un signal plus fin avec un plus grossier).
+  // ~0.32 but par tir cadré est une conversion standard observée en football européen.
+  // Poids modeste (15%, contre 30% pour le xG) : un tir cadré ne dit rien sur sa qualité.
+  const SHOT_TO_GOAL = 0.32;
+  if(lambdaA!==null && advStats.xgA==null && advStats.shotsA!=null){ lambdaA = lambdaA*.85 + (advStats.shotsA*SHOT_TO_GOAL)*.15; }
+  if(lambdaB!==null && advStats.xgB==null && advStats.shotsB!=null){ lambdaB = lambdaB*.85 + (advStats.shotsB*SHOT_TO_GOAL)*.15; }
+  // Possession et corners ne sont volontairement PAS injectés dans le calcul des buts :
+  // ce sont des indicateurs de contrôle du jeu, pas de conversion — une équipe portée sur
+  // la possession sans percussion (beaucoup de jeu latéral) peut avoir 60% de possession
+  // et moins de réel danger qu'une équipe plus directe. Les inclure ferait plus de bruit
+  // que de signal. Ils restent utiles tels quels : possession dans le narratif ci-dessous,
+  // corners comme marché prédit à part (déjà en place).
   // Moyennes par ligue (nouveau) : ancrage de fond vers la réalité de la ligue tapée
   // (buts moyens domicile/extérieur), construite côté serveur sur tous les matchs déjà
   // vérifiés par la communauté pour cette ligue. Poids croissant avec le nombre de matchs
@@ -4153,6 +4266,7 @@ function hlp(p){ return `<span class="hl-pct" style="color:${confidenceColor(p)}
 function sectionIf(cond, html){ return cond ? html : ''; }
 function buildFootballInsights(ctx){
   const nA=ctx.nameA, nB=ctx.nameB;
+  const narrSeed = nA+'|'+nB+'|'+(ctx.league||'');
   let html = '';
 
   // 1. Contexte du match
@@ -4160,24 +4274,30 @@ function buildFootballInsights(ctx){
   if(ctx.rankA!=null && ctx.rankB!=null){
     contexteParts.push(`${hl(nA)} pointe ${ctx.rankA}${ctx.rankA===1?'ère':'ème'} au classement${ctx.ptsA!=null?` (${ctx.ptsA} pts)`:''}, ${hl(nB,'b')} ${ctx.rankB}${ctx.rankB===1?'ère':'ème'}${ctx.ptsB!=null?` (${ctx.ptsB} pts)`:''}.`);
   }
-  if(ctx.zoneA && ctx.zoneB) contexteParts.push(`${nA} évolue dans ${ctx.zoneA}, ${nB} pointe dans ${ctx.zoneB}.`);
-  if(ctx.phaseLabel) contexteParts.push(`Match disputé ${ctx.phaseLabel}.`);
+  // Lecture croisée phase de saison × position — jamais la même interprétation entre un
+  // "début de saison, dernière place" (pas d'urgence) et un "fin de saison, dernière
+  // place" (urgence réelle) : voir stakesSentence/STAKES_PHRASES.
+  if(ctx.rankA!=null) contexteParts.push(stakesSentence(nA, ctx.rankA, standings.totalTeams, ctx.phaseLabel, narrSeed));
+  if(ctx.rankB!=null) contexteParts.push(stakesSentence(nB, ctx.rankB, standings.totalTeams, ctx.phaseLabel, narrSeed));
   contexteParts.push(`Le modèle donne ${hl(nA)} favori à ${fmtPct(ctx.pHome)} (nul ${fmtPct(ctx.pDraw)}, ${nB} ${fmtPct(ctx.pAway)}), avec BTTS à ${fmtPct(ctx.pBTTSyes)}.`);
   html += `<h4>📋 Contexte du match</h4><p>${contexteParts.join(' ')}</p>`;
 
-  // 2. Forme actuelle
+  // 2. Forme actuelle — capacité à marquer intégrée ici (registre varié, voir
+  // formeSentence/scoringSentence : plusieurs formulations possibles par palier, pas
+  // toujours la même phrase pour "en progression" ou "buts attendus élevés").
   let formeParts = [];
-  const formeTxt = (name, serie, trend) => {
-    if(!serie || !serie.length) return null;
-    const dyn = trend>0.2 ? 'en nette progression' : trend<-0.2 ? 'sur une dynamique déclinante' : 'stable';
-    const best = bestWorstResult(serie)?.best, worst = bestWorstResult(serie)?.worst;
-    let s = `${hl(name)} est ${dyn} sur les ${serie.length} derniers matchs fournis`;
-    if(best) s += `, avec un ${best[0]}-${best[1]} comme meilleure référence`;
-    if(worst) s += ` et un ${worst[0]}-${worst[1]} comme point le plus faible`;
-    return s + '.';
-  };
-  const fA = formeTxt(nA, ctx.storeASerie, ctx.trendA); if(fA) formeParts.push(fA);
-  const fB = formeTxt(nB, ctx.storeBSerie, ctx.trendB); if(fB) formeParts.push(fB);
+  if(ctx.storeASerie && ctx.storeASerie.length){
+    const best=bestWorstResult(ctx.storeASerie)?.best, worst=bestWorstResult(ctx.storeASerie)?.worst;
+    let s = formeSentence(nA, ctx.trendA, narrSeed);
+    if(best||worst) s += ` (${best?`meilleure référence ${best[0]}-${best[1]}`:''}${best&&worst?', ':''}${worst?`plus faible ${worst[0]}-${worst[1]}`:''})`;
+    formeParts.push(s + ' ' + scoringSentence(nA, ctx.lambdaA, narrSeed));
+  }
+  if(ctx.storeBSerie && ctx.storeBSerie.length){
+    const best=bestWorstResult(ctx.storeBSerie)?.best, worst=bestWorstResult(ctx.storeBSerie)?.worst;
+    let s = formeSentence(nB, ctx.trendB, narrSeed);
+    if(best||worst) s += ` (${best?`meilleure référence ${best[0]}-${best[1]}`:''}${best&&worst?', ':''}${worst?`plus faible ${worst[0]}-${worst[1]}`:''})`;
+    formeParts.push(s + ' ' + scoringSentence(nB, ctx.lambdaB, narrSeed));
+  }
   if(formeParts.length) html += `<h4>📈 Forme actuelle</h4><p>${formeParts.join(' ')}</p>`;
 
   // 3. Face-à-face
@@ -4185,11 +4305,13 @@ function buildFootballInsights(ctx){
     html += `<h4>🤝 Face-à-face</h4><p>Sur les ${ctx.h2hCount} confrontation${ctx.h2hCount>1?'s':''} directe${ctx.h2hCount>1?'s':''} fournie${ctx.h2hCount>1?'s':''}, ${nA} a marqué en moyenne ${ctx.abFor.toFixed(1)} but(s) contre ${ctx.baFor.toFixed(1)} pour ${nB}. ${Math.abs(ctx.abFor-ctx.baFor)<0.4?'Un historique globalement équilibré entre les deux équipes.':(ctx.abFor>ctx.baFor?nA:nB)+' a historiquement le dessus dans ce duel précis.'}</p>`;
   }
 
-  // 4. Aperçu des statistiques (domicile/extérieur, xG, absences)
+  // 4. Aperçu des statistiques (domicile/extérieur, xG ou tirs cadrés en repli, possession, absences)
   let statsParts = [];
   if(ctx.aDomFor!=null) statsParts.push(`${hl(nA)} affiche ${ctx.aDomFor.toFixed(1)} but(s) marqué(s) et ${ctx.aDomAg!=null?ctx.aDomAg.toFixed(1):'?'} encaissé(s) en moyenne à domicile.`);
   if(ctx.bExtFor!=null) statsParts.push(`${hl(nB,'b')} affiche ${ctx.bExtFor.toFixed(1)} but(s) marqué(s) et ${ctx.bExtAg!=null?ctx.bExtAg.toFixed(1):'?'} encaissé(s) en moyenne à l'extérieur.`);
   if(ctx.xgA!=null && ctx.xgB!=null) statsParts.push(`Les xG (buts attendus sous-jacents) confirment cette base : ${ctx.xgA.toFixed(1)} pour ${nA} contre ${ctx.xgB.toFixed(1)} pour ${nB}.`);
+  else if(ctx.shotsA!=null && ctx.shotsB!=null) statsParts.push(`Les tirs cadrés vont dans le même sens : ${ctx.shotsA.toFixed(1)} pour ${nA} contre ${ctx.shotsB.toFixed(1)} pour ${nB}.`);
+  const possTxt = possessionNote(ctx.possA, ctx.possB, nA, nB); if(possTxt) statsParts.push(possTxt.trim());
   if(ctx.absencesTxt) statsParts.push(ctx.absencesTxt);
   if(statsParts.length) html += `<h4>📊 Aperçu des statistiques</h4><p>${statsParts.join(' ')}</p>`;
 
@@ -4342,14 +4464,20 @@ function runAnalysisGe(){
 
   const totalExp=lambdaA+lambdaB, diff=lambdaA-lambdaB, favTeam=diff>=0?nameA:nameB, dogTeam=diff>=0?nameB:nameA, gapAbs=Math.abs(diff);
 
+  const narrSeed = nameA+'|'+nameB+'|'+(matchFlags.league||'');
   let contextSentence = '';
-  if(phaseLabel||zoneA){ const bits=[]; if(phaseLabel) bits.push(`en ${phaseLabel}`); if(zoneA&&zoneB) bits.push(`${nameA} évolue dans ${zoneA} tandis que ${nameB} pointe dans ${zoneB}`); if(bits.length) contextSentence = `Sur le plan du contexte, ${bits.join(', ')}.`; }
+  if(standings.rankA!=null && standings.totalTeams!=null) contextSentence += stakesSentence(nameA, standings.rankA, standings.totalTeams, phaseLabel, narrSeed) + ' ';
+  if(standings.rankB!=null && standings.totalTeams!=null) contextSentence += stakesSentence(nameB, standings.rankB, standings.totalTeams, phaseLabel, narrSeed) + ' ';
+  contextSentence += formeSentence(nameA, trendA, narrSeed) + ' ' + formeSentence(nameB, trendB, narrSeed) + ' ';
+  contextSentence += scoringSentence(nameA, lambdaA, narrSeed) + ' ' + scoringSentence(nameB, lambdaB, narrSeed);
   const STAGE_LABELS = {poules:'phase de groupes', '32e':'32e de finale', '16e':'16e de finale', '8e':'8e de finale', quart:'quart de finale', demi:'demi-finale', finale:'finale'};
   if((matchFlags.matchType==='coupe'||matchFlags.matchType==='europe') && STAGE_LABELS[matchFlags.stage]){
     contextSentence += ` Match de ${STAGE_LABELS[matchFlags.stage]} : l'enjeu resserre naturellement le jeu, moins de scénarios extrêmes que d'ordinaire.`;
   }
   if(aggregateNote) contextSentence += ` ${aggregateNote}`;
   if(advStats.xgA!=null && advStats.xgB!=null) contextSentence += ` Les xG confirment cette lecture : ${advStats.xgA.toFixed(1)} pour ${nameA} contre ${advStats.xgB.toFixed(1)} pour ${nameB}.`;
+  else if(advStats.shotsA!=null && advStats.shotsB!=null) contextSentence += ` Les tirs cadrés vont dans le même sens : ${advStats.shotsA.toFixed(1)} pour ${nameA} contre ${advStats.shotsB.toFixed(1)} pour ${nameB}.`;
+  contextSentence += possessionNote(advStats.possA, advStats.possB, nameA, nameB);
   if(eloIdx!==0){ const eloFav=eloIdx>0?nameA:nameB; contextSentence += ` L'écart Elo va dans le même sens, ${eloFav} y est favori.`; }
 
   const meilleur=[...finalBets].sort((a,b)=>b.p-a.p)[0];
@@ -4389,11 +4517,12 @@ function runAnalysisGe(){
   const insightsCtx = {
     ...narrCtx,
     rankA: standings.rankA, rankB: standings.rankB, ptsA: standings.ptsA, ptsB: standings.ptsB,
-    zoneA, zoneB, phaseLabel,
+    zoneA, zoneB, phaseLabel, league: matchFlags.league,
     pHome, pDraw, pAway,
     h2hCount: store.ab.length, abFor: avg(store.ab,0)||0, baFor: avg(store.ba,0)||0,
     aDomAg: avg(store.aDom,1), bExtAg: avg(store.bExt,1),
-    xgA: advStats.xgA, xgB: advStats.xgB,
+    xgA: advStats.xgA, xgB: advStats.xgB, shotsA: advStats.shotsA, shotsB: advStats.shotsB,
+    possA: advStats.possA, possB: advStats.possB,
     absencesTxt: absencesTxt.trim(),
   };
   const insightsHtml = `<div class="insights-block">${buildFootballInsights(insightsCtx)}</div>`;
