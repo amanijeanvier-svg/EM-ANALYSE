@@ -926,6 +926,16 @@ input{font-family:inherit;}
       <h2 class="shimmer-title">Histoire</h2>
       <div class="subtag">Vos analyses, jour par jour — aujourd'hui en direct, les jours précédents en archive</div>
       <div id="historySettingsCards"></div>
+      <div class="glass" style="margin-top:14px; padding:14px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" id="leagueManagerToggle">
+          <h4 style="margin:0;">🗑 Gérer les ligues enregistrées</h4>
+          <span id="leagueManagerCaret" style="font-family:'IBM Plex Mono',monospace; color:var(--text-faint);">▾</span>
+        </div>
+        <div id="leagueManagerBody" style="display:none; margin-top:10px;">
+          <p style="font-size:11px; color:var(--text-faint); margin:0 0 8px;">Supprime la calibration propre à une ligue (moyennes, poids appris) — les matchs vérifiés restent dans votre historique.</p>
+          <div id="leagueManagerList"></div>
+        </div>
+      </div>
       <div class="glass" style="padding:10px 6px; margin-bottom:14px;">
         <div id="historyDayScroller" style="display:flex; gap:8px; overflow-x:auto; padding:4px 6px;"></div>
       </div>
@@ -4279,7 +4289,13 @@ function buildFootballInsights(ctx){
   // place" (urgence réelle) : voir stakesSentence/STAKES_PHRASES.
   if(ctx.rankA!=null) contexteParts.push(stakesSentence(nA, ctx.rankA, standings.totalTeams, ctx.phaseLabel, narrSeed));
   if(ctx.rankB!=null) contexteParts.push(stakesSentence(nB, ctx.rankB, standings.totalTeams, ctx.phaseLabel, narrSeed));
-  contexteParts.push(`Le modèle donne ${hl(nA)} favori à ${fmtPct(ctx.pHome)} (nul ${fmtPct(ctx.pDraw)}, ${nB} ${fmtPct(ctx.pAway)}), avec BTTS à ${fmtPct(ctx.pBTTSyes)}.`);
+  const favIsA = ctx.pHome >= ctx.pAway;
+  const favName = favIsA ? nA : nB, favP = favIsA ? ctx.pHome : ctx.pAway;
+  const closeCall = Math.abs(ctx.pHome-ctx.pAway) < 0.06; // moins de 6 pts d'écart : pas de vrai favori net
+  const favSentence = closeCall
+    ? `Le modèle ne dégage pas de favori net (${nA} ${fmtPct(ctx.pHome)}, nul ${fmtPct(ctx.pDraw)}, ${nB} ${fmtPct(ctx.pAway)}), avec BTTS à ${fmtPct(ctx.pBTTSyes)}.`
+    : `Le modèle donne ${hl(favName, favIsA?'a':'b')} favori à ${fmtPct(favP)} (nul ${fmtPct(ctx.pDraw)}, ${favIsA?nB:nA} ${fmtPct(favIsA?ctx.pAway:ctx.pHome)}), avec BTTS à ${fmtPct(ctx.pBTTSyes)}.`;
+  contexteParts.push(favSentence);
   html += `<h4>📋 Contexte du match</h4><p>${contexteParts.join(' ')}</p>`;
 
   // 2. Forme actuelle — capacité à marquer intégrée ici (registre varié, voir
@@ -5528,6 +5544,60 @@ function computeSimplesVsCombosStats(){
     byRisk,
   };
 }
+// -- Gestion des ligues enregistrées : liste + suppression -----------------------------
+// Permet de repartir à zéro sur une ligue précise (ex. doublon "PREMIER LEAGUE" vs
+// "Premier League", ou une ligue mal identifiée) sans toucher le reste. Supprime : la
+// moyenne de buts/victoires-nuls-défaites locale, les poids de sources appris, et le
+// compteur de performance par source — pour cette ligue uniquement. Ne touche JAMAIS aux
+// matchs déjà vérifiés dans Track/Archive (l'historique de résultats reste intact ; seule
+// la calibration dérivée pour cette ligue est remise à zéro).
+function listKnownLeaguesWithStats(sport){
+  const lls = loadLocalLeagueStatsStore();
+  const out = [];
+  Object.keys(lls).forEach(k=>{
+    if(!k.startsWith(sport+'|')) return;
+    const league = k.slice(sport.length+1);
+    if(!league) return;
+    out.push({league, n: lls[k].n||0});
+  });
+  return out.sort((a,b)=>b.n-a.n);
+}
+function deleteLeagueData(sport, league){
+  const lls = loadLocalLeagueStatsStore();
+  delete lls[leagueStatsKey(sport, league)];
+  saveLocalLeagueStatsStore(lls);
+  try{ localStorage.removeItem(weightsKey(sport, league)); }catch(e){}
+  try{ localStorage.removeItem(srcperfKey(sport, league)); }catch(e){}
+}
+async function renderLeagueManager(){
+  const host = document.getElementById('leagueManagerList');
+  if(!host) return;
+  const leagues = [...listKnownLeaguesWithStats('football').map(l=>({...l,sport:'football'})),
+                    ...listKnownLeaguesWithStats('basketball').map(l=>({...l,sport:'basketball'}))];
+  if(!leagues.length){ host.innerHTML = `<p style="font-size:12px; color:var(--text-faint);">Aucune ligue avec des données de calibration pour l'instant.</p>`; return; }
+  host.innerHTML = leagues.map(l=>`
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--line);">
+      <div><div style="font-size:13px; color:var(--text);">${l.league}</div><div style="font-size:10px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace;">${l.sport==='football'?'⚽':'🏀'} ${l.n} match${l.n>1?'s':''} vérifié${l.n>1?'s':''}</div></div>
+      <button class="league-delete-btn sfx-tap" data-sport="${l.sport}" data-league="${l.league.replace(/"/g,'&quot;')}" style="background:none; border:1px solid var(--red,#F2545B); color:var(--red,#F2545B); border-radius:6px; padding:6px 10px; font-size:11px;">Supprimer</button>
+    </div>
+  `).join('');
+}
+document.getElementById('leagueManagerToggle').addEventListener('click', ()=>{
+  const body = document.getElementById('leagueManagerBody');
+  const caret = document.getElementById('leagueManagerCaret');
+  const show = body.style.display==='none';
+  body.style.display = show ? 'block' : 'none';
+  caret.textContent = show ? '▴' : '▾';
+  if(show) renderLeagueManager();
+});
+document.addEventListener('click', async e=>{
+  const btn = e.target.closest('.league-delete-btn');
+  if(!btn) return;
+  const {sport, league} = btn.dataset;
+  if(!confirm(`Supprimer les données de calibration de « ${league} » ? Les matchs déjà vérifiés restent dans Track/Archive — seule la calibration propre à cette ligue repart à zéro.`)) return;
+  deleteLeagueData(sport, league);
+  await renderLeagueManager();
+});
 async function renderHistorySettingsCards(){
   const host = document.getElementById('historySettingsCards');
   if(!host) return;
