@@ -5562,6 +5562,15 @@ function listKnownLeaguesWithStats(sport){
   });
   return out.sort((a,b)=>b.n-a.n);
 }
+// Un match vérifié n'alimente ce tableau QUE si le champ "Ligue/Championnat" (facultatif,
+// texte libre) avait été rempli au moment de l'analyse — updateLocalLeagueStats() l'ignore
+// sinon. Beaucoup de matchs peuvent donc avoir été analysés ET vérifiés sans jamais apparaître
+// ici (coupes, tours préliminaires, championnats étrangers tapés une seule fois puis oubliés...).
+// Ce n'est pas récupérable après coup (la ligue n'est pas conservée sur les paris/scores
+// archivés) — ce compteur sert juste à rendre ce point visible plutôt que silencieux.
+function countUnlabeledVerified(sport){
+  return (TRACK[sport]||[]).filter(e=>!(e.league||'').trim()).length;
+}
 function deleteLeagueData(sport, league){
   const lls = loadLocalLeagueStatsStore();
   delete lls[leagueStatsKey(sport, league)];
@@ -5574,8 +5583,13 @@ async function renderLeagueManager(){
   if(!host) return;
   const leagues = [...listKnownLeaguesWithStats('football').map(l=>({...l,sport:'football'})),
                     ...listKnownLeaguesWithStats('basketball').map(l=>({...l,sport:'basketball'}))];
-  if(!leagues.length){ host.innerHTML = `<p style="font-size:12px; color:var(--text-faint);">Aucune ligue avec des données de calibration pour l'instant.</p>`; return; }
-  host.innerHTML = leagues.map(l=>`
+  const unlabeled = countUnlabeledVerified('football') + countUnlabeledVerified('basketball');
+  const unlabeledRow = unlabeled>0 ? `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--line);">
+      <div><div style="font-size:13px; color:var(--text-dim);">Non renseigné</div><div style="font-size:10px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace;">ⓘ ${unlabeled} match${unlabeled>1?'s':''} vérifié${unlabeled>1?'s':''} sans ligue indiquée à l'analyse — invisible ici, non récupérable</div></div>
+    </div>` : '';
+  if(!leagues.length && !unlabeled){ host.innerHTML = `<p style="font-size:12px; color:var(--text-faint);">Aucune ligue avec des données de calibration pour l'instant.</p>`; return; }
+  host.innerHTML = unlabeledRow + leagues.map(l=>`
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--line);">
       <div><div style="font-size:13px; color:var(--text);">${l.league}</div><div style="font-size:10px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace;">${l.sport==='football'?'⚽':'🏀'} ${l.n} match${l.n>1?'s':''} vérifié${l.n>1?'s':''}</div></div>
       <button class="league-delete-btn sfx-tap" data-sport="${l.sport}" data-league="${l.league.replace(/"/g,'&quot;')}" style="background:none; border:1px solid var(--red,#F2545B); color:var(--red,#F2545B); border-radius:6px; padding:6px 10px; font-size:11px;">Supprimer</button>
