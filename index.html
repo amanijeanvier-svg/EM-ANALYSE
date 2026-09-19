@@ -728,12 +728,16 @@ input{font-family:inherit;}
             <div style="display:flex; flex-direction:column; gap:8px;">
               <div class="standing-inputs"><div><label>A — xG (moy.)</label><input type="number" step="0.1" id="xgA" placeholder="1.8"></div><div><label>A — xGA (moy.)</label><input type="number" step="0.1" id="xgaA" placeholder="1.1"></div></div>
               <div class="standing-inputs"><div><label>A — Tirs cadrés</label><input type="number" step="0.1" id="shotsA" placeholder="5.2"></div><div><label>A — Corners</label><input type="number" step="0.1" id="cornersA" placeholder="6.1"></div></div>
-              <div class="standing-inputs"><div><label>A — Possession %</label><input type="number" step="1" id="possA" placeholder="54"></div></div>
+              <div class="standing-inputs"><div><label>A — Occasions nettes</label><input type="number" step="0.1" id="chancesA" placeholder="3.0"></div><div><label>A — Possession %</label><input type="number" step="1" id="possA" placeholder="54"></div></div>
             </div>
             <div style="display:flex; flex-direction:column; gap:8px;">
               <div class="standing-inputs"><div><label>B — xG (moy.)</label><input type="number" step="0.1" id="xgB" placeholder="1.2"></div><div><label>B — xGA (moy.)</label><input type="number" step="0.1" id="xgaB" placeholder="1.6"></div></div>
               <div class="standing-inputs"><div><label>B — Tirs cadrés</label><input type="number" step="0.1" id="shotsB" placeholder="3.8"></div><div><label>B — Corners</label><input type="number" step="0.1" id="cornersB" placeholder="4.4"></div></div>
-              <div class="standing-inputs"><div><label>B — Possession %</label><input type="number" step="1" id="possB" placeholder="46"></div></div>
+              <div class="standing-inputs"><div><label>B — Occasions nettes</label><input type="number" step="0.1" id="chancesB" placeholder="2.1"></div><div><label>B — Possession %</label><input type="number" step="1" id="possB" placeholder="46"></div></div>
+            </div>
+            <div style="grid-column:1/-1; border-top:1px solid var(--line); margin-top:4px; padding-top:12px;">
+              <div style="font-size:10.5px; color:var(--text-faint); margin-bottom:8px;">Cotes bookmaker (option.) — juste pour comparer/nuancer le verdict, jamais pour le remplacer</div>
+              <div class="standing-inputs"><div><label>Cote 1</label><input type="number" step="0.01" id="coteHome" placeholder="1.85"></div><div><label>Cote N</label><input type="number" step="0.01" id="coteDraw" placeholder="3.60"></div><div><label>Cote 2</label><input type="number" step="0.01" id="coteAway" placeholder="4.20"></div></div>
             </div>
           </div>
 
@@ -1143,6 +1147,15 @@ input{font-family:inherit;}
       <div class="profil-card">
         <h4>📊 Mes indicateurs</h4>
         <div class="profil-indic-grid" id="profilIndicGrid"></div>
+      </div>
+
+      <div class="profil-card" id="bdeeaCard">
+        <div id="bdeeaToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+          <h4 style="margin:0;">🔒 BDEEA</h4>
+          <span id="bdeeaCaret" style="color:var(--text-faint); font-size:13px;">▾</span>
+        </div>
+        <div style="font-size:10.5px; color:var(--text-faint); margin-top:4px;">Base de Données des Évolutions EA — ce qui progresse vraiment, mesuré, pas affiché en vitrine.</div>
+        <div id="bdeeaBody" class="hidden" style="margin-top:10px;"></div>
       </div>
 
       <div class="profil-card">
@@ -2301,6 +2314,15 @@ function renderProfile(){
   renderProfilIndicateurs();
 }
 document.getElementById('profilRefreshAboBtn').addEventListener('click', renderProfilAbonnement);
+document.getElementById('bdeeaToggle').addEventListener('click', ()=>{
+  const body = document.getElementById('bdeeaBody');
+  const caret = document.getElementById('bdeeaCaret');
+  const show = body.style.display==='none' || !body.style.display;
+  body.classList.toggle('hidden', !show);
+  body.style.display = show ? 'block' : 'none';
+  caret.textContent = show ? '▴' : '▾';
+  if(show) renderBDEEA();
+});
 
 /* ================================================================
    3ter. COMMUNAUTÉ — publication, recherche, fil, classement
@@ -2554,14 +2576,15 @@ const PRIVATE_COMBO_BANDS = {
 // Cœur générique : construit les combinés à partir d'une liste de "matchs" déjà uniformisés
 // ({matchKey, nameA, nameB, bets:[{label,p,marketType,status}]}) — utilisé aussi bien pour
 // aujourd'hui (source: DB, en direct) que pour un jour archivé (source: ARCHIVE, figé).
-function buildCombosGeneric(matches){
+function buildCombosGeneric(matches, sport){
   const combos = [];
   for(const [riskLevel, cfg] of Object.entries(PRIVATE_COMBO_BANDS)){
     const perMatch = matches.map(m=>{
       const eligible = (m.bets||[]).filter(cfg.filter);
       if(!eligible.length) return null;
-      const options = eligible.slice().sort((a,b)=>b.p-a.p)
-        .map(bet=>({matchKey:m.matchKey, nameA:m.nameA, nameB:m.nameB, label:bet.label, p:bet.p, marketType:bet.marketType, status:bet.status}));
+      const options = eligible.slice()
+        .map(bet=>({matchKey:m.matchKey, nameA:m.nameA, nameB:m.nameB, label:bet.label, p:bet.p, marketType:bet.marketType, status:bet.status}))
+        .sort((a,b)=>(b.p+marketReliabilityBonus(sport,b.marketType)) - (a.p+marketReliabilityBonus(sport,a.marketType)));
       return {options, matchKey:m.matchKey};
     }).filter(Boolean);
     if(perMatch.length<2) continue; // pas assez de matchs analysés pour ce niveau ce jour-là
@@ -2601,6 +2624,22 @@ const PRIVATE_COMBO_STATE_KEY = 'ea_private_combo_state';
 let PRIVATE_COMBO_STATE = {};
 function loadPrivateComboState(){ try{ PRIVATE_COMBO_STATE = JSON.parse(localStorage.getItem(PRIVATE_COMBO_STATE_KEY)||'null') || {}; }catch(e){ PRIVATE_COMBO_STATE = {}; } }
 function persistPrivateComboState(){ localStorage.setItem(PRIVATE_COMBO_STATE_KEY, JSON.stringify(PRIVATE_COMBO_STATE)); }
+// Score de fiabilité par marché : au-delà de la probabilité annoncée (déjà recalibrée en
+// amont, voir applyMarketRecalibration), on regarde si CE marché a une longue habitude de
+// tenir sa parole (computeCalibrationByMarket, sur au moins 20 vérifications) — et on
+// avantage légèrement les jambes de combiné qui viennent d'un marché prouvé fiable, on
+// pénalise légèrement celles qui viennent d'un marché connu pour sur-promettre. C'est ça,
+// concrètement, "s'appuyer sur ce qui se vérifie le plus souvent dans les analyses" : jamais
+// un remplacement du calcul, juste un léger coup de pouce au moment de CHOISIR entre deux
+// jambes à probabilité proche.
+function marketReliabilityBonus(sport, marketType){
+  const calib = computeCalibrationByMarket(sport, null);
+  const c = calib ? calib[marketType] : null;
+  if(!c || c.n<RECAL_MIN_N) return 0;
+  if(c.wellCalibrated && c.hitRate>=c.avgP) return 0.03;
+  if(c.hitRate < c.avgP-0.08) return -0.05;
+  return 0;
+}
 function buildPrivateCombos(sport){
   const today = todayISO();
   let state = PRIVATE_COMBO_STATE[sport];
@@ -2641,8 +2680,9 @@ function buildPrivateCombos(sport){
         .map(r=>{
           const eligible = (r.bets||[]).filter(b=>cfg.filter({p:b.p}));
           if(!eligible.length) return null;
-          const options = eligible.slice().sort((a,b)=>b.p-a.p)
-            .map(bet=>({matchKey:r.id, nameA:r.nameA, nameB:r.nameB, label:bet.label, p:bet.p, marketType:marketTypeFromEval(bet.eval), status:betStatusFromRecord(r,bet)}));
+          const options = eligible.slice()
+            .map(bet=>({matchKey:r.id, nameA:r.nameA, nameB:r.nameB, label:bet.label, p:bet.p, marketType:marketTypeFromEval(bet.eval), status:betStatusFromRecord(r,bet)}))
+            .sort((a,b)=>(b.p+marketReliabilityBonus(sport,b.marketType)) - (a.p+marketReliabilityBonus(sport,a.marketType)));
           return {options, matchKey:r.id};
         }).filter(Boolean);
 
@@ -2684,7 +2724,7 @@ function buildArchivedCombos(sport, dayKey){
     if(!grouped[key]) grouped[key] = {matchKey:key, nameA:b.nameA, nameB:b.nameB, bets:[]};
     grouped[key].bets.push({label:b.label, p:b.p, marketType:b.marketType, status: b.hit===true?'hit':b.hit===false?'miss':'pending'});
   });
-  return buildCombosGeneric(Object.values(grouped));
+  return buildCombosGeneric(Object.values(grouped), sport);
 }
 function renderPrivateComboCard(combo){
   const risk = RISK_LABELS[combo.riskLevel] || {label:combo.riskLevel, color:'var(--text)'};
@@ -3043,7 +3083,11 @@ const ADAPTIVE_SOURCES = ['domicile','serie','h2h','defense_adverse'];
 // souvent le signal le plus direct d'un mismatch net (une petite équipe qui encaisse
 // beaucoup face à du lourd). Remonté à 0.25 par défaut, avant toute calibration adaptative
 // (qui prend le relais dès 40 vérifications cumulées pour la ligue/sport concerné).
-const DEFAULT_SOURCE_WEIGHTS = {domicile:.30, serie:.22, h2h:.23, defense_adverse:.25};
+// Poids H2H volontairement faible (0.08 contre 0.23 avant) : un face-à-face porte sur un
+// tout petit échantillon (souvent 1 à 3 matchs), avec des compositions et un contexte qui
+// ont pu changer entièrement depuis — un signal réel mais qui ne doit jamais peser autant
+// que la forme récente ou la solidité défensive, mesurées sur bien plus de matchs.
+const DEFAULT_SOURCE_WEIGHTS = {domicile:.34, serie:.30, h2h:.08, defense_adverse:.28};
 function weightsKey(sport, league){ const s=leagueSlug(league); return 'ea_weights_'+sport+(s?('__'+s):''); }
 function srcperfKey(sport, league){ const s=leagueSlug(league); return 'ea_srcperf_'+sport+(s?('__'+s):''); }
 function loadAdaptiveWeights(sport, league){
@@ -3513,7 +3557,7 @@ function markResult(sport, recordId, finalA, finalB, finalStats){
   rec.evaluations = evaluations;
   persistDB();
   const trackEntry = {timestamp:Date.now(), nameA:rec.nameA, nameB:rec.nameB, league:rec.league||'', evaluations, lambdaA:rec.lambdaA, lambdaB:rec.lambdaB, finalScore:{a:finalA,b:finalB}, finalStats,
-    stage:rec.stage||null, leg:rec.leg||null, tensionUsed:rec.tensionUsed||null, aggFactorUsed:rec.aggFactorUsed||null, aggDiff:rec.aggDiff||0, components:rec.components||null};
+    stage:rec.stage||null, leg:rec.leg||null, tensionUsed:rec.tensionUsed||null, aggFactorUsed:rec.aggFactorUsed||null, aggDiff:rec.aggDiff||0, components:rec.components||null, ishikawa:rec.ishikawa||null};
   pushTrackEntry(sport, trackEntry);
   pushTrackEntryToServer(sport, trackEntry); // alimente le moteur partagé, profite à tous les utilisateurs
   if(rec.communityId!=null) verifyCommunityAnalysis(rec.communityId, {a:finalA,b:finalB}, evaluations); // bonus XP à l'auteur si ce match avait été publié
@@ -3619,7 +3663,7 @@ const CATS = [
 ];
 const store = {aSerie:[], aDom:[], bSerie:[], bExt:[], ab:[], ba:[]};
 const standings = {rankA:null, ptsA:null, rankB:null, ptsB:null, totalTeams:null, matchday:null, eloA:null, eloB:null};
-const advStats = {xgA:null,xgaA:null,shotsA:null,cornersA:null,possA:null, xgB:null,xgaB:null,shotsB:null,cornersB:null,possB:null};
+const advStats = {xgA:null,xgaA:null,shotsA:null,cornersA:null,possA:null,chancesA:null, xgB:null,xgaB:null,shotsB:null,cornersB:null,possB:null,chancesB:null, coteHome:null,coteDraw:null,coteAway:null};
 const ADV_FIELDS = Object.keys(advStats);
 
 const fieldsEl = document.getElementById('fields');
@@ -4003,14 +4047,25 @@ function computeGeneseLambdas(){
   if(lambdaB===null) lambdaB = NEUTRAL_GOALS;
   if(lambdaA!==null && lambdaB!==null && advStats.xgA!=null && advStats.xgaB!=null){ lambdaA = lambdaA*.7 + (advStats.xgA*.6+advStats.xgaB*.4)*.3; }
   if(lambdaA!==null && lambdaB!==null && advStats.xgB!=null && advStats.xgaA!=null){ lambdaB = lambdaB*.7 + (advStats.xgB*.6+advStats.xgaA*.4)*.3; }
-  // Tirs cadrés : signal de repli quand le xG n'est pas renseigné pour ce côté (le xG
-  // reste prioritaire — il capture la QUALITÉ des occasions, pas juste leur nombre — donc
-  // on n'ajoute pas les deux, pour ne pas diluer un signal plus fin avec un plus grossier).
-  // ~0.32 but par tir cadré est une conversion standard observée en football européen.
-  // Poids modeste (15%, contre 30% pour le xG) : un tir cadré ne dit rien sur sa qualité.
-  const SHOT_TO_GOAL = 0.32;
-  if(lambdaA!==null && advStats.xgA==null && advStats.shotsA!=null){ lambdaA = lambdaA*.85 + (advStats.shotsA*SHOT_TO_GOAL)*.15; }
-  if(lambdaB!==null && advStats.xgB==null && advStats.shotsB!=null){ lambdaB = lambdaB*.85 + (advStats.shotsB*SHOT_TO_GOAL)*.15; }
+  // Tirs cadrés + occasions nettes créées : signal de repli quand le xG n'est pas renseigné
+  // pour ce côté (le xG reste prioritaire — il capture la QUALITÉ des occasions, pas juste
+  // leur nombre — donc on n'ajoute pas les trois, pour ne pas diluer un signal plus fin avec
+  // un plus grossier). ~0.32 but par tir cadré et ~0.18 but par occasion nette (une "occasion
+  // nette" est plus large qu'un tir cadré — actions dangereuses non tirées comprises — donc
+  // logiquement un taux de conversion plus faible) sont des conversions standard observées en
+  // football européen. Poids modeste (15% au total, contre 30% pour le xG) : ni un tir cadré
+  // ni une occasion ne disent grand-chose sur leur qualité individuelle. Si les deux sont
+  // renseignés, on les moyenne (60% tirs cadrés — plus proche du but marqué — 40% occasions) ;
+  // si un seul est renseigné, on ne prend que celui-là.
+  const SHOT_TO_GOAL = 0.32, CHANCE_TO_GOAL = 0.18;
+  function shotTierEstimate(shots, chances){
+    if(shots!=null && chances!=null) return shots*SHOT_TO_GOAL*.6 + chances*CHANCE_TO_GOAL*.4;
+    if(shots!=null) return shots*SHOT_TO_GOAL;
+    if(chances!=null) return chances*CHANCE_TO_GOAL;
+    return null;
+  }
+  if(lambdaA!==null && advStats.xgA==null){ const est=shotTierEstimate(advStats.shotsA, advStats.chancesA); if(est!=null) lambdaA = lambdaA*.85 + est*.15; }
+  if(lambdaB!==null && advStats.xgB==null){ const est=shotTierEstimate(advStats.shotsB, advStats.chancesB); if(est!=null) lambdaB = lambdaB*.85 + est*.15; }
   // Possession et corners ne sont volontairement PAS injectés dans le calcul des buts :
   // ce sont des indicateurs de contrôle du jeu, pas de conversion — une équipe portée sur
   // la possession sans percussion (beaucoup de jeu latéral) peut avoir 60% de possession
@@ -4110,7 +4165,9 @@ function computeGeneseLambdas(){
     // Feyenoord). On amortit maintenant seulement les deux composantes concernées, pour les
     // deux types de compétition hétérogène.
     const classementFactor = heterogeneousComp ? 0.5 : 1;
-    totalAdj = clamp(qualityIdx*.16*classementFactor + eIdx*.14 + enjeuIdx*.08*classementFactor + trendDiffIdx*.04 + h2hGap*.10 + defGap*.08, -dynCap, dynCap);
+    // H2H ramené à .04 (contre .10 avant) — cohérent avec le même choix fait dans
+    // computeStrengthGap et DEFAULT_SOURCE_WEIGHTS : trop peu de matchs pour peser lourd ici.
+    totalAdj = clamp(qualityIdx*.19*classementFactor + eIdx*.14 + enjeuIdx*.08*classementFactor + trendDiffIdx*.04 + h2hGap*.04 + defGap*.11, -dynCap, dynCap);
     lambdaA=Math.max(.15, lambdaA*(1+totalAdj)); lambdaB=Math.max(.15, lambdaB*(1-totalAdj));
   }
   // Marqueurs contextuels déclaratifs : nudges modestes et transparents, jamais dominants.
@@ -4137,7 +4194,7 @@ function computeGeneseLambdas(){
   const aggAdj = aggregateAdjustment(matchFlags.leg, matchFlags.aggAllerA, matchFlags.aggAllerB, 'football', matchFlags.league);
   if(lambdaA!==null) lambdaA *= aggAdj.factorA;
   if(lambdaB!==null) lambdaB *= aggAdj.factorB;
-  return {lambdaA, lambdaB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:stageAdj.sigmaDamp, aggregateNote:aggAdj.note, components:geneseComponents,
+  return {lambdaA, lambdaB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, eloA:effStandings.eloA, eloB:effStandings.eloB, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:stageAdj.sigmaDamp, aggregateNote:aggAdj.note, components:geneseComponents,
     stage: stageIsKO ? matchFlags.stage : null, leg: matchFlags.leg, tensionUsed: stageIsKO ? stageAdj.tensionUsed : null,
     aggFactorUsed: matchFlags.leg==='retour' ? {factorA:aggAdj.factorA, factorB:aggAdj.factorB} : null, aggDiff: aggAdj.diff||0};
 }
@@ -4219,9 +4276,60 @@ function computeGapComponents({abFor, baFor, h2hCount, aDomAg, bExtAg}){
 }
 function computeStrengthGap({qualityIdx, eloIdx, trendDiffIdx, abFor, baFor, h2hCount, aDomAg, bExtAg}){
   const {h2hGap, defGap} = computeGapComponents({abFor, baFor, h2hCount, aDomAg, bExtAg});
-  const raw = (qualityIdx||0)*.28 + (eloIdx||0)*.22 + h2hGap*.20 + defGap*.18 + (trendDiffIdx||0)*.12;
+  // H2H ramené à .08 (contre .20 avant), redistribué sur classement/Elo/défense — même
+  // raisonnement que DEFAULT_SOURCE_WEIGHTS : un face-à-face reste un signal réel mais
+  // trop rare (souvent 1 à 3 matchs) pour peser presque autant que l'Elo ou le classement.
+  const raw = (qualityIdx||0)*.31 + (eloIdx||0)*.25 + h2hGap*.08 + defGap*.22 + (trendDiffIdx||0)*.14;
   return clamp(raw, -1, 1);
 }
+/* ================================================================
+   5quinquies. ENSEMBLE DE MODÈLES — jusqu'ici, Elo n'était qu'un ingrédient dilué dans
+   strengthGap/totalAdj, jamais un verdict à part entière. Ici, trois modèles INDÉPENDANTS
+   produisent chacun leur propre 1X2, puis on les fusionne :
+   1) Modèle statistique (Poisson + Dixon-Coles + Monte-Carlo, déjà recalé sur classement,
+      Elo interne, forme, moyennes de ligue, H2H à faible poids...) — le cœur du moteur,
+      celui qui utilise toutes les données saisies match par match depuis le début.
+   2) Modèle Elo pur — force relative brute, sans rien d'autre, pour vérifier que le
+      modèle statistique ne s'égare pas trop loin d'un signal simple et éprouvé.
+   3) Modèle marché — cotes du bookmaker saisies à la main, marge retirée — un troisième
+      avis, indépendant des deux premiers, qui ne remplace jamais le verdict mais vient
+      le nuancer (esprit manuel : aucune cote n'est jamais allée chercher automatiquement).
+================================================================= */
+// Conversion Elo → 1X2 : diff d'Elo (+ avantage du terrain, ~60 points, valeur usuelle en
+// football) → probabilité "attendue" façon Elo classique (0 à 1) → nul plus fréquent entre
+// équipes proches, plus rare quand l'écart est marqué (approximation empirique courante,
+// proche de celle utilisée par plusieurs sites de pronostics — pas une vérité absolue).
+function eloWinProbabilities(eloA, eloB, homeAdv=60){
+  if(eloA==null || eloB==null) return null;
+  const expectedA = 1/(1+Math.pow(10, -((eloA+homeAdv)-eloB)/400));
+  const pDraw = clamp(0.30 - Math.abs(2*expectedA-1)*0.20, 0.06, 0.30);
+  return {pHome: expectedA*(1-pDraw), pDraw, pAway:(1-expectedA)*(1-pDraw)};
+}
+// Dévigage proportionnel (méthode standard, la plus simple) : chaque cote donne une
+// probabilité brute 1/cote ; leur somme dépasse 100% (marge du bookmaker, l'"overround") ;
+// on redistribue cette marge au prorata pour retrouver des probabilités qui somment à 1.
+function computeMarketProbabilities(coteHome, coteDraw, coteAway){
+  if(!(coteHome>1) || !(coteDraw>1) || !(coteAway>1)) return null;
+  const rawHome=1/coteHome, rawDraw=1/coteDraw, rawAway=1/coteAway;
+  const overround = rawHome+rawDraw+rawAway;
+  return {pHome:rawHome/overround, pDraw:rawDraw/overround, pAway:rawAway/overround, overround};
+}
+function blendEnsembleProbabilities(pStat, pElo, pMarket){
+  // Le modèle statistique reste toujours majoritaire (c'est lui qui a vu TOUTES vos données
+  // manuelles) ; Elo et marché confirment ou nuancent, jamais ne remplacent. Les poids se
+  // redistribuent proportionnellement quand un modèle manque (pas d'Elo saisi ni reconnu,
+  // ou pas de cotes saisies), pour garder le même ratio stat/elo/marché à chaque fois.
+  const w = {stat:0.5, elo: pElo?0.2:0, market: pMarket?0.3:0};
+  if(!pElo && !pMarket) w.stat = 1;
+  else if(!pElo) { w.stat=0.65; w.market=0.35; }
+  else if(!pMarket) { w.stat=0.70; w.elo=0.30; }
+  const pHome = pStat.pHome*w.stat + (pElo?pElo.pHome:0)*w.elo + (pMarket?pMarket.pHome:0)*w.market;
+  const pDraw = pStat.pDraw*w.stat + (pElo?pElo.pDraw:0)*w.elo + (pMarket?pMarket.pDraw:0)*w.market;
+  const pAway = pStat.pAway*w.stat + (pElo?pElo.pAway:0)*w.elo + (pMarket?pMarket.pAway:0)*w.market;
+  const t=pHome+pDraw+pAway;
+  return {pHome:pHome/t, pDraw:pDraw/t, pAway:pAway/t, weights:w, usedElo:!!pElo, usedMarket:!!pMarket};
+}
+
 function applyStrengthToResult(pHome, pDraw, pAway, strengthGap){
   const g = clamp(strengthGap, -1, 1);
   const shift = g * 0.09; // amplitude modeste et plafonnée : un nudge, jamais un verdict
@@ -4387,7 +4495,7 @@ function runAnalysisGe(){
   // seulement, via la pastille de complétude affichée sur le résultat, jamais un mur.
   const completenessGe = computeCompletenessFootball();
 
-  const {lambdaA, lambdaB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff}=computeGeneseLambdas();
+  const {lambdaA, lambdaB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, eloA, eloB, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff}=computeGeneseLambdas();
   const convictionIdx = computeConvictionIdx(enjeuIdx, trendDiffIdx, tensionUsed, aggDiff);
   if(lambdaA===null||lambdaB===null) return;
 
@@ -4402,7 +4510,10 @@ function runAnalysisGe(){
   const sigmaMult = (matchFlags.matchType==='coupe' ? 1.25 : matchFlags.matchType==='europe' ? 1.12 : 1.0) * (sigmaDamp||1);
   const rhoCal = getCalibratedRho('football', matchFlags.league);
 
-  const matrix=simulateMonteCarloMatrix(lambdaA, lambdaB, dataConfidence, 15000, rhoCal, sigmaMult);
+  // 60 000 itérations (contre 15 000 avant) : dans la fourchette 50-100k qui stabilise
+  // vraiment les probabilités des scores les plus rares (score exact, notamment) — un
+  // navigateur moderne encaisse ça en quelques dizaines de millisecondes, sans geler l'UI.
+  const matrix=simulateMonteCarloMatrix(lambdaA, lambdaB, dataConfidence, 60000, rhoCal, sigmaMult);
   const sorted=[...matrix].sort((x,y)=>y.p-x.p);
   const top2=sorted.slice(0,2);
 
@@ -4434,7 +4545,14 @@ function runAnalysisGe(){
   // computeGeneseLambdas) sert aussi ici à nuancer le 1X2/double-chance — sans retoucher une
   // seconde fois les marchés buts (over/under, BTTS, score exact restent pilotés uniquement
   // par lambdaA/lambdaB déjà ajustés en amont).
-  const {pHome, pDraw, pAway} = applyStrengthToResult(pHomeRaw, pDrawRaw, pAwayRaw, strengthGap);
+  const {pHome:pHomeStat, pDraw:pDrawStat, pAway:pAwayStat} = applyStrengthToResult(pHomeRaw, pDrawRaw, pAwayRaw, strengthGap);
+  // Ensemble final : le modèle statistique ci-dessus (Poisson+Dixon-Coles+Monte-Carlo, déjà
+  // recalé sur classement/Elo interne/forme/H2H) reste majoritaire, mais est désormais
+  // confirmé/nuancé par un modèle Elo indépendant et, si vous les avez saisies, par les
+  // cotes du bookmaker (marge retirée) — voir blendEnsembleProbabilities ci-dessus.
+  const pEloModel = eloWinProbabilities(eloA, eloB);
+  const pMarketModel = computeMarketProbabilities(advStats.coteHome, advStats.coteDraw, advStats.coteAway);
+  const {pHome, pDraw, pAway, usedElo:ensembleUsedElo, usedMarket:ensembleUsedMarket} = blendEnsembleProbabilities({pHome:pHomeStat, pDraw:pDrawStat, pAway:pAwayStat}, pEloModel, pMarketModel);
 
   const resultBet=pickResultMarket(pHome,pDraw,pAway,nameA,nameB);
   const goalsBet={...pickGoalsLineMarket(lambdaA+lambdaB, matrix), cat:'buts'};
@@ -4495,6 +4613,13 @@ function runAnalysisGe(){
   else if(advStats.shotsA!=null && advStats.shotsB!=null) contextSentence += ` Les tirs cadrés vont dans le même sens : ${advStats.shotsA.toFixed(1)} pour ${nameA} contre ${advStats.shotsB.toFixed(1)} pour ${nameB}.`;
   contextSentence += possessionNote(advStats.possA, advStats.possB, nameA, nameB);
   if(eloIdx!==0){ const eloFav=eloIdx>0?nameA:nameB; contextSentence += ` L'écart Elo va dans le même sens, ${eloFav} y est favori.`; }
+  if(pMarketModel){
+    const statFav = pHomeStat>=pAwayStat ? nameA : nameB;
+    const marketFav = pMarketModel.pHome>=pMarketModel.pAway ? nameA : nameB;
+    contextSentence += statFav===marketFav
+      ? ` Les cotes du bookmaker vont dans le même sens (${statFav} favori).`
+      : ` À noter : les cotes du bookmaker penchent plutôt pour ${marketFav}, à l'inverse de cette lecture — le verdict final en tient compte sans s'y aligner aveuglément.`;
+  }
 
   const meilleur=[...finalBets].sort((a,b)=>b.p-a.p)[0];
 
@@ -4552,12 +4677,25 @@ function runAnalysisGe(){
   resultsGeEl.classList.remove('reveal'); void resultsGeEl.offsetWidth; resultsGeEl.classList.add('reveal');
   try{ AudioFX.reveal(); }catch(e){}
 
+  // Profil Ishikawa (6 branches) : capturé au moment de l'analyse, pas reconstruit après
+  // coup — sert de matière première à la jauge "Qualité des données" (voir BDEEA / Profil).
+  // "force" compte comme complet même si l'Elo n'a pas été tapé mais que l'app reconnaît déjà
+  // l'équipe (force interne) — cohérent avec le repli déjà en place dans computeGeneseLambdas.
+  const ishikawa = {
+    histo: store.aSerie.length>0 && store.bSerie.length>0 && store.aDom.length>0 && store.bExt.length>0,
+    h2h: store.ab.length>0 || store.ba.length>0,
+    classement: standings.rankA!=null && standings.ptsA!=null && standings.rankB!=null && standings.ptsB!=null,
+    force: eloA!=null && eloB!=null,
+    avancees: (advStats.xgA!=null && advStats.xgB!=null) || (advStats.shotsA!=null && advStats.shotsB!=null) || (advStats.chancesA!=null && advStats.chancesB!=null),
+    marche: advStats.coteHome!=null && advStats.coteDraw!=null && advStats.coteAway!=null,
+  };
+
   addRecord('football', {
     id: recordId, timestamp: Date.now(), nameA, nameB,
     league: matchFlags.league||'',
     stage, leg, tensionUsed, aggFactorUsed, aggDiff,
     lambdaA: +lambdaA.toFixed(2), lambdaB: +lambdaB.toFixed(2),
-    components, contextSentence, convictionIdx,
+    components, contextSentence, convictionIdx, ishikawa,
     topScores: top2.map(s=>({label:`${s.a}-${s.b}`, p:s.p, eval:{type:'exactScore', a:s.a, b:s.b}})),
     bets: finalBets.map(b=>({label:b.label, p:b.p, cat:b.cat, eval:b.eval})),
   });
@@ -5544,7 +5682,154 @@ function computeSimplesVsCombosStats(){
     byRisk,
   };
 }
-// -- Gestion des ligues enregistrées : liste + suppression -----------------------------
+/* ================================================================
+   9ter. BDEEA — Base de Données des Évolutions EA. Trois jauges de
+   maturité indépendantes (jamais un onglet à part — accessibles depuis
+   Profil, dans un coffre qu'on ouvre volontairement), plafonnées à
+   100%, construites uniquement à partir de données déjà réelles et
+   vérifiées de l'app — jamais une valeur illustrative ou aléatoire.
+================================================================= */
+function computeCalibrationCoverage(){
+  let scopesWithData=0, scopesCalibrated=0;
+  for(let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if(k && k.indexOf('ea_srcperf_')===0){
+      scopesWithData++;
+      if(localStorage.getItem(k.replace('ea_srcperf_','ea_weights_'))) scopesCalibrated++;
+    }
+  }
+  return {scopesWithData, scopesCalibrated};
+}
+// Jauge 1 — maturité du moteur d'analyse : volume de matchs vérifiés depuis le tout début,
+// part des ligues/sports déjà auto-calibrés (poids appris, pas juste les poids de départ),
+// et tendance récente du taux de réussite réel — pour voir si le moteur progresse plus vite
+// qu'attendu, ou stagne.
+function computeMaturiteAnalyse(){
+  const totalVerified = (TRACK.football||[]).length + (TRACK.basketball||[]).length;
+  const volumeScore = clamp((totalVerified/150)*100, 0, 100);
+  const {scopesWithData, scopesCalibrated} = computeCalibrationCoverage();
+  const calibrationScore = scopesWithData>0 ? clamp((scopesCalibrated/scopesWithData)*100,0,100) : 0;
+  const verifiable = ['football','basketball'].flatMap(sport=>(TRACK[sport]||[]))
+    .sort((a,b)=>a.timestamp-b.timestamp)
+    .flatMap(e=>(e.evaluations||[]).filter(x=>x.hit!==null));
+  let trendScore = 50, trendLabel = 'pas encore assez de recul';
+  if(verifiable.length>=20){
+    const mid = Math.floor(verifiable.length/2);
+    const rate = arr => arr.filter(x=>x.hit).length/arr.length;
+    const delta = rate(verifiable.slice(mid)) - rate(verifiable.slice(0,mid));
+    trendScore = clamp(50 + delta*150, 0, 100);
+    trendLabel = delta>0.03 ? 'progresse plus vite que la moyenne' : delta<-0.03 ? 'ralentit, à surveiller' : 'stable';
+  }
+  const score = clamp(volumeScore*0.35 + calibrationScore*0.35 + trendScore*0.30, 0, 100);
+  return {score, volumeScore, calibrationScore, trendScore, trendLabel, totalVerified, scopesWithData, scopesCalibrated};
+}
+// Jauge 2 — maturité des combinés : volume de combinés déjà tranchés, tendance récente de
+// leur taux de réussite, et part des jambes qui s'appuient sur des marchés PROUVÉS fiables
+// (calibration réelle sur ≥20 vérifications, bien calibrés — voir marketReliabilityBonus)
+// plutôt que sur la seule probabilité affichée : le raffinement demandé, mesuré, pas affirmé.
+function computeMaturiteCombines(){
+  const stats = computeSimplesVsCombosStats();
+  const volumeScore = clamp((stats.combo.total/40)*100, 0, 100);
+  const timed = [];
+  ['football','basketball'].forEach(sport=>{
+    getArchiveDayKeys().forEach(day=>{
+      buildArchivedCombos(sport, day).forEach(c=>{
+        if(c.status==='gagne') timed.push({day, won:true});
+        else if(c.status==='perdu') timed.push({day, won:false});
+      });
+    });
+  });
+  timed.sort((a,b)=>a.day.localeCompare(b.day));
+  let trendScore = 50;
+  if(timed.length>=10){
+    const mid = Math.floor(timed.length/2);
+    const rate = arr => arr.filter(x=>x.won).length/arr.length;
+    trendScore = clamp(50 + (rate(timed.slice(mid))-rate(timed.slice(0,mid)))*150, 0, 100);
+  }
+  let reliableLegs=0, totalLegs=0;
+  ['football','basketball'].forEach(sport=>{
+    buildPrivateCombos(sport).forEach(c=> c.legs.forEach(l=>{
+      totalLegs++;
+      if(marketReliabilityBonus(sport, l.marketType) > 0) reliableLegs++;
+    }));
+  });
+  const refinementScore = totalLegs>0 ? clamp((reliableLegs/totalLegs)*100,0,100) : 0;
+  const score = clamp(volumeScore*0.30 + trendScore*0.35 + refinementScore*0.35, 0, 100);
+  return {score, volumeScore, trendScore, refinementScore, comboTotal:stats.combo.total, comboRate:stats.combo.rate};
+}
+// Jauge 3 — maturité "qualité des données" (diagramme d'Ishikawa) : la plus stricte des
+// trois. Ne compte comme "analyse à 100%" QUE les vérifications dont les 6 branches sont
+// TOUTES complètes — pas de moyenne indulgente. Démarre à 0%/n=0 tant qu'aucune vérification
+// postérieure à l'ajout de ce suivi n'existe : c'est voulu, pas un bug — rien à rattraper sur
+// les analyses passées, qui n'ont jamais porté cette donnée (voir ishikawa dans addRecord).
+const ISHIKAWA_BRANCHES = [
+  {key:'histo', label:'Historique équipes (série + domicile/extérieur)'},
+  {key:'h2h', label:'Face-à-face'},
+  {key:'classement', label:'Classement & enjeu'},
+  {key:'force', label:'Force mesurable (Elo saisi ou reconnu)'},
+  {key:'avancees', label:'Statistiques avancées (xG/tirs/occasions)'},
+  {key:'marche', label:'Cotes du marché'},
+];
+function computeMaturiteQualite(){
+  const entries = ['football','basketball'].flatMap(sport=>(TRACK[sport]||[])).filter(e=>e.ishikawa);
+  if(entries.length===0) return {score:0, n:0, branches:ISHIKAWA_BRANCHES.map(b=>({...b,completePct:0})), insufficientData:true};
+  const branches = ISHIKAWA_BRANCHES.map(b=>{
+    const complete = entries.filter(e=>e.ishikawa[b.key]).length;
+    return {...b, completePct: (complete/entries.length)*100};
+  });
+  const fullyComplete = entries.filter(e=> ISHIKAWA_BRANCHES.every(b=>e.ishikawa[b.key])).length;
+  const score = clamp((fullyComplete/entries.length)*100, 0, 100);
+  const weakest = [...branches].sort((a,b)=>a.completePct-b.completePct)[0];
+  return {score, n:entries.length, branches, weakest, insufficientData: entries.length<5};
+}
+function svgMaturityRing(pct, color, size){
+  const r=36, c=2*Math.PI*r, off=c*(1-clamp(pct,0,100)/100);
+  return `<div class="countdown-ring" style="width:${size}px; height:${size}px;">
+    <svg width="${size}" height="${size}" viewBox="0 0 88 88">
+      <circle class="bg" cx="44" cy="44" r="${r}" fill="none" stroke-width="7"/>
+      <circle cx="44" cy="44" r="${r}" fill="none" stroke="${color}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" style="transition:stroke-dashoffset .6s ease;"/>
+    </svg>
+    <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:${size>90?'17px':'14px'}; color:${color};">${Math.round(pct)}%</div>
+  </div>`;
+}
+function renderBDEEA(){
+  const host = document.getElementById('bdeeaBody');
+  if(!host) return;
+  const gAnalyse = computeMaturiteAnalyse();
+  const gCombines = computeMaturiteCombines();
+  const gQualite = computeMaturiteQualite();
+  const block = (title, ring, lines)=>`
+    <div style="display:flex; gap:14px; align-items:center; padding:14px 0; border-bottom:1px solid var(--line);">
+      ${ring}
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:12.5px; font-weight:700; color:var(--text); margin-bottom:4px;">${title}</div>
+        ${lines.map(l=>`<div style="font-size:10.5px; color:var(--text-faint); line-height:1.5;">${l}</div>`).join('')}
+      </div>
+    </div>`;
+  let html = '';
+  html += block('🧠 Maturité du moteur d\'analyse', svgMaturityRing(gAnalyse.score,'var(--teal)',96), [
+    `${gAnalyse.totalVerified} match${gAnalyse.totalVerified>1?'s':''} vérifié${gAnalyse.totalVerified>1?'s':''} depuis le début`,
+    `${gAnalyse.scopesCalibrated}/${gAnalyse.scopesWithData} ligue${gAnalyse.scopesWithData>1?'s':''}/sport${gAnalyse.scopesWithData>1?'s':''} déjà auto-calibré${gAnalyse.scopesCalibrated>1?'s':''}`,
+    `Tendance récente : ${gAnalyse.trendLabel}`,
+  ]);
+  html += block('🎯 Maturité des combinés', svgMaturityRing(gCombines.score,'var(--gold)',96), [
+    `${gCombines.comboTotal} combiné${gCombines.comboTotal>1?'s':''} tranché${gCombines.comboTotal>1?'s':''}${gCombines.comboRate!=null?` · ${fmtPct(gCombines.comboRate)} de réussite`:''}`,
+    `${Math.round(gCombines.refinementScore)}% des jambes actuelles s'appuient sur un marché prouvé fiable`,
+  ]);
+  const qLines = gQualite.insufficientData
+    ? [`${gQualite.n} vérification${gQualite.n>1?'s':''} avec ce suivi — pas encore assez pour un verdict strict`]
+    : [`${gQualite.n} vérification${gQualite.n>1?'s':''} suivies`, `Point le plus faible : ${gQualite.weakest.label} (${Math.round(gQualite.weakest.completePct)}% complet)`];
+  html += block('🔬 Maturité qualité des données (Ishikawa)', svgMaturityRing(gQualite.score,'var(--red)',96), qLines);
+  html += `<div style="margin-top:12px;">
+    <div style="font-size:10px; color:var(--text-faint); margin-bottom:6px; text-transform:uppercase; letter-spacing:.04em;">Diagramme — complétude par branche</div>
+    ${gQualite.branches.map(b=>`
+      <div style="margin-bottom:7px;">
+        <div style="display:flex; justify-content:space-between; font-size:10.5px; color:var(--text-dim); margin-bottom:3px;"><span>${b.label}</span><span>${Math.round(b.completePct)}%</span></div>
+        <div style="height:4px; background:var(--line); border-radius:2px; overflow:hidden;"><div style="height:100%; width:${b.completePct}%; background:var(--red); border-radius:2px;"></div></div>
+      </div>`).join('')}
+  </div>`;
+  host.innerHTML = html;
+}
 // Permet de repartir à zéro sur une ligue précise (ex. doublon "PREMIER LEAGUE" vs
 // "Premier League", ou une ligue mal identifiée) sans toucher le reste. Supprime : la
 // moyenne de buts/victoires-nuls-défaites locale, les poids de sources appris, et le
