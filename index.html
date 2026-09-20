@@ -2640,6 +2640,28 @@ function marketReliabilityBonus(sport, marketType){
   if(c.hitRate < c.avgP-0.08) return -0.05;
   return 0;
 }
+// Cote d'une jambe : si le match a des cotes bookmaker saisies (voir advStats.coteHome/
+// coteDraw/coteAway dans Genèse) ET que le pari est un résultat 1X2 ou une double chance,
+// on prend la VRAIE cote du bookmaker pour cette issue (ou la combinaison mathématique des
+// deux cotes concernées pour une double chance) plutôt que la cote "juste" recalculée depuis
+// notre propre probabilité. Sinon (cotes non saisies, ou marché différent — score exact,
+// BTTS, over/under...), on retombe sur le système habituel de l'app (1/p). Jamais un mélange
+// à l'intérieur d'une même jambe : soit la vraie cote du bookmaker, soit notre calcul, jamais
+// une moyenne des deux.
+function legOddsFromRecord(rec, evalSpec, fallbackP){
+  if(rec && rec.odds && evalSpec){
+    if(evalSpec.type==='result1x2'){
+      const o = evalSpec.outcome==='A' ? rec.odds.home : rec.odds.away;
+      if(o>1) return {cote:o, source:'bookmaker'};
+    } else if(evalSpec.type==='resultDC'){
+      const map = {A:rec.odds.home, B:rec.odds.away, draw:rec.odds.draw};
+      const outs = evalSpec.outcomes||[];
+      const o1 = map[outs[0]], o2 = map[outs[1]];
+      if(o1>1 && o2>1) return {cote: 1/(1/o1+1/o2), source:'bookmaker'};
+    }
+  }
+  return {cote: 1/fallbackP, source:'interne'};
+}
 function buildPrivateCombos(sport){
   const today = todayISO();
   let state = PRIVATE_COMBO_STATE[sport];
@@ -2666,7 +2688,8 @@ function buildPrivateCombos(sport){
       if(!rec) return l; // match plus dans la fenêtre du jour : on garde la jambe telle quelle
       const bet = (rec.bets||[]).find(b=>b.label===l.label);
       if(!bet) return l;
-      return {...l, p:bet.p, status:betStatusFromRecord(rec, bet)};
+      const {cote, source} = legOddsFromRecord(rec, bet.eval, bet.p);
+      return {...l, p:bet.p, cote, oddsSource:source, status:betStatusFromRecord(rec, bet)};
     });
 
     // Complète les emplacements restants avec de nouveaux matchs du jour, pas
@@ -2681,7 +2704,10 @@ function buildPrivateCombos(sport){
           const eligible = (r.bets||[]).filter(b=>cfg.filter({p:b.p}));
           if(!eligible.length) return null;
           const options = eligible.slice()
-            .map(bet=>({matchKey:r.id, nameA:r.nameA, nameB:r.nameB, label:bet.label, p:bet.p, marketType:marketTypeFromEval(bet.eval), status:betStatusFromRecord(r,bet)}))
+            .map(bet=>{
+              const {cote, source} = legOddsFromRecord(r, bet.eval, bet.p);
+              return {matchKey:r.id, nameA:r.nameA, nameB:r.nameB, label:bet.label, p:bet.p, marketType:marketTypeFromEval(bet.eval), status:betStatusFromRecord(r,bet), cote, oddsSource:source};
+            })
             .sort((a,b)=>(b.p+marketReliabilityBonus(sport,b.marketType)) - (a.p+marketReliabilityBonus(sport,a.marketType)));
           return {options, matchKey:r.id};
         }).filter(Boolean);
@@ -2702,10 +2728,11 @@ function buildPrivateCombos(sport){
     if(legs.length < 2) return; // pas assez de matchs analysés pour ce niveau ce jour-là
 
     const combinedP = legs.reduce((acc,l)=>acc*l.p,1);
-    const combinedOdds = legs.reduce((acc,l)=>acc*(1/l.p),1);
+    const combinedOdds = legs.reduce((acc,l)=>acc*(l.cote!=null?l.cote:1/l.p),1);
+    const anyBookmakerLeg = legs.some(l=>l.oddsSource==='bookmaker');
     let allVerified = true, anyLost = false;
     legs.forEach(l=>{ if(l.status==='pending') allVerified=false; if(l.status==='miss') anyLost=true; });
-    combos.push({riskLevel, legs, combinedP, combinedOdds, status: anyLost?'perdu':(allVerified?'gagne':'en_cours')});
+    combos.push({riskLevel, legs, combinedP, combinedOdds, anyBookmakerLeg, status: anyLost?'perdu':(allVerified?'gagne':'en_cours')});
   });
 
   persistPrivateComboState();
@@ -2715,16 +2742,28 @@ function buildPrivateCombos(sport){
 // ce jour-là), regroupés par match — donc toujours entièrement tranchés (gagné/perdu),
 // jamais "en cours" contrairement à aujourd'hui. Fenêtre limitée à 20 jours (voir
 // pruneArchiveOlderThan20Days) : au-delà, le jour n'existe simplement plus dans ARCHIVE.
+// Un jour archivé ne doit JAMAIS changer de visage après coup : sans ce gel, buildArchivedCombos
+// reconstruisait les combinés à la volée à CHAQUE consultation, à partir des paris archivés bruts,
+// en utilisant la calibration ACTUELLE (computeCalibrationByMarket évolue chaque jour avec les
+// nouvelles vérifications) — donc le combiné "risque élevé" d'hier pouvait très bien afficher des
+// jambes différentes ce matin par rapport à hier soir, alors que rien n'avait changé dans les
+// résultats eux-mêmes. On calcule donc une seule fois, à la première consultation de ce jour, et
+// on fige le résultat dans l'archive elle-même — un ticket ne change plus après avoir été vu.
 function buildArchivedCombos(sport, dayKey){
   const day = ARCHIVE[dayKey];
   if(!day) return [];
+  day.combosFrozen = day.combosFrozen || {};
+  if(day.combosFrozen[sport]) return day.combosFrozen[sport];
   const grouped = {};
   day.bets.filter(b=>b.sport===sport).forEach(b=>{
     const key = b.nameA+'|'+b.nameB;
     if(!grouped[key]) grouped[key] = {matchKey:key, nameA:b.nameA, nameB:b.nameB, bets:[]};
     grouped[key].bets.push({label:b.label, p:b.p, marketType:b.marketType, status: b.hit===true?'hit':b.hit===false?'miss':'pending'});
   });
-  return buildCombosGeneric(Object.values(grouped), sport);
+  const combos = buildCombosGeneric(Object.values(grouped), sport);
+  day.combosFrozen[sport] = combos;
+  persistArchive();
+  return combos;
 }
 function renderPrivateComboCard(combo){
   const risk = RISK_LABELS[combo.riskLevel] || {label:combo.riskLevel, color:'var(--text)'};
@@ -2737,13 +2776,14 @@ function renderPrivateComboCard(combo){
     ${combo.legs.map(l=>{
       const dot = l.status==='hit' ? '✓' : l.status==='miss' ? '✗' : '•';
       const dotColor = l.status==='hit' ? 'var(--teal,#6EE7B7)' : l.status==='miss' ? 'var(--red,#F2545B)' : 'var(--text-faint)';
+      const bkTag = l.oddsSource==='bookmaker' ? ' <span title="Cote bookmaker" style="font-size:9px;">📊</span>' : '';
       return `<div style="display:flex; justify-content:space-between; font-size:11.5px; padding:5px 0; border-bottom:1px dashed var(--line);">
-        <span><span style="color:${dotColor}; font-weight:700;">${dot}</span> ${l.nameA} — ${l.nameB} <span style="color:var(--text-faint);">(${l.label})</span></span>
+        <span><span style="color:${dotColor}; font-weight:700;">${dot}</span> ${l.nameA} — ${l.nameB} <span style="color:var(--text-faint);">(${l.label})</span>${bkTag}</span>
         <span style="color:var(--text-dim);">${fmtPct(l.p)}</span>
       </div>`;
     }).join('')}
     <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); font-size:12.5px;">
-      <span>Cote combinée estimée</span>
+      <span>Cote combinée ${combo.anyBookmakerLeg ? '<span style="font-size:9.5px; color:var(--text-faint);">(cotes bookmaker incluses)</span>' : '<span style="font-size:9.5px; color:var(--text-faint);">(estimée en interne)</span>'}</span>
       <span style="font-weight:700; color:var(--gold);">${combo.combinedOdds.toFixed(2)}</span>
     </div>
   </div>`;
@@ -4696,6 +4736,7 @@ function runAnalysisGe(){
     stage, leg, tensionUsed, aggFactorUsed, aggDiff,
     lambdaA: +lambdaA.toFixed(2), lambdaB: +lambdaB.toFixed(2),
     components, contextSentence, convictionIdx, ishikawa,
+    odds: (advStats.coteHome>1 && advStats.coteDraw>1 && advStats.coteAway>1) ? {home:advStats.coteHome, draw:advStats.coteDraw, away:advStats.coteAway} : null,
     topScores: top2.map(s=>({label:`${s.a}-${s.b}`, p:s.p, eval:{type:'exactScore', a:s.a, b:s.b}})),
     bets: finalBets.map(b=>({label:b.label, p:b.p, cat:b.cat, eval:b.eval})),
   });
