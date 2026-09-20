@@ -4164,7 +4164,11 @@ function computeGeneseLambdas(){
   // loin pour nuancer le 1X2 (même valeur, pas de recalcul). Avant, le H2H et l'écart
   // défensif (h2hGap/defGap) restaient cantonnés au seul 1X2 alors qu'ils sont souvent le
   // signal le plus direct qu'une équipe plus faible va aussi encaisser davantage.
-  const h2hCountGe = store.ab.length;
+  // Correctif : le comptage H2H ne regardait QUE "A vs B" (store.ab) pour décider s'il y
+  // avait assez d'historique — donc si seul "B vs A" était rempli, l'écart H2H était
+  // forcé à 0 comme s'il n'y avait rien, alors que la donnée existait et nourrissait déjà
+  // le λ de B en coulisses. On compte maintenant les deux sens.
+  const h2hCountGe = store.ab.length + store.ba.length;
   const {h2hGap, defGap} = computeGapComponents({abFor, baFor, h2hCount: h2hCountGe, aDomAg, bExtAg});
   const strengthGap = computeStrengthGap({qualityIdx, eloIdx:eIdx, trendDiffIdx, abFor, baFor, h2hCount: h2hCountGe, aDomAg, bExtAg});
   let totalAdj=0;
@@ -4700,7 +4704,7 @@ function runAnalysisGe(){
     rankA: standings.rankA, rankB: standings.rankB, ptsA: standings.ptsA, ptsB: standings.ptsB,
     zoneA, zoneB, phaseLabel, league: matchFlags.league,
     pHome, pDraw, pAway,
-    h2hCount: store.ab.length, abFor: avg(store.ab,0)||0, baFor: avg(store.ba,0)||0,
+    h2hCount: store.ab.length+store.ba.length, abFor: avg(store.ab,0)||0, baFor: avg(store.ba,0)||0,
     aDomAg: avg(store.aDom,1), bExtAg: avg(store.bExt,1),
     xgA: advStats.xgA, xgB: advStats.xgB, shotsA: advStats.shotsA, shotsB: advStats.shotsB,
     possA: advStats.possA, possB: advStats.possB,
@@ -4989,8 +4993,8 @@ function computeBasketPoints(){
   // réutilisés (au lieu d'être recalculés plus bas pour le seul 1X2), et le plafond devient
   // dynamique — un mismatch de force réel (gros écart Elo/classement) élargit désormais
   // jusqu'à ±40% l'ajustement des points au lieu d'être bridé à ±18% quoi qu'il arrive.
-  const {h2hGap:h2hGapBk, defGap:defGapBk} = computeGapComponents({abFor, baFor, h2hCount: bkStore.ab.length, aDomAg, bExtAg});
-  const strengthGap = computeStrengthGap({qualityIdx, eloIdx:eIdx, trendDiffIdx, abFor, baFor, h2hCount: bkStore.ab.length, aDomAg, bExtAg});
+  const {h2hGap:h2hGapBk, defGap:defGapBk} = computeGapComponents({abFor, baFor, h2hCount: bkStore.ab.length+bkStore.ba.length, aDomAg, bExtAg});
+  const strengthGap = computeStrengthGap({qualityIdx, eloIdx:eIdx, trendDiffIdx, abFor, baFor, h2hCount: bkStore.ab.length+bkStore.ba.length, aDomAg, bExtAg});
   let totalAdj=0;
   if(ptsA!==null && ptsB!==null){
     const dynCap = clamp(0.18 + Math.abs(strengthGap)*0.22, 0.18, 0.40);
@@ -5206,7 +5210,7 @@ function runAnalysisBk(){
     rankA: bkStandings.rankA, rankB: bkStandings.rankB, ptsAst: bkStandings.ptsA, ptsBst: bkStandings.ptsB,
     zoneA, zoneB, phaseLabel,
     pWinA, pWinB, favP, favTeam,
-    h2hCount: bkStore.ab.length, abFor: avg(bkStore.ab,0)||0, baFor: avg(bkStore.ba,0)||0,
+    h2hCount: bkStore.ab.length+bkStore.ba.length, abFor: avg(bkStore.ab,0)||0, baFor: avg(bkStore.ba,0)||0,
     bkSerieA: bkStore.aSerie, bkSerieB: bkStore.bSerie,
     absencesTxt: absencesTxtBk.trim(),
   };
