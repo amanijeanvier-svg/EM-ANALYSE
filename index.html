@@ -436,6 +436,7 @@ input{font-family:inherit;}
 .bet-pct{font-family:'IBM Plex Mono',monospace; font-size:16px; color:var(--teal); font-weight:600;}
 .odds-row{display:flex; align-items:center; gap:8px; margin-top:10px;}
 .odds-input-bet{width:150px; background:var(--ink); border:1px solid var(--line); color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:11.5px; padding:6px 9px; border-radius:6px;}
+.closing-odds-input{opacity:.82;} .odds-row{flex-wrap:wrap;} .edge-out{flex:1 1 100%; min-height:15px;}
 .edge-out{font-family:'IBM Plex Mono',monospace; font-size:11.5px; font-weight:600;}
 .interp{font-family:'Fraunces',serif; font-size:14.5px; line-height:1.75;}
 .fragility-note{margin-top:16px; padding:12px 14px; background:rgba(155,93,229,0.06); border:1px solid rgba(155,93,229,0.3); border-radius:8px; font-family:'Inter',sans-serif; font-size:12.5px; line-height:1.6; color:var(--text-dim);}
@@ -624,6 +625,7 @@ input{font-family:inherit;}
                   <div><label>Points</label><input type="number" id="ptsA" min="0" placeholder="34"></div>
                 </div>
                 <div class="standing-inputs" style="margin-top:8px;"><div><label>Elo (option.)</label><input type="number" id="eloA" placeholder="1750"></div></div>
+                <div class="standing-inputs" style="margin-top:8px;"><div><label>Force adversaires série (option.)</label><input type="number" id="oppStrengthA" min="0" max="100" placeholder="ex: 42"></div></div>
                 <div class="rank-preview" id="rankPreviewA"></div>
               </div>
               <div class="standing-col">
@@ -633,9 +635,11 @@ input{font-family:inherit;}
                   <div><label>Points</label><input type="number" id="ptsB" min="0" placeholder="22"></div>
                 </div>
                 <div class="standing-inputs" style="margin-top:8px;"><div><label>Elo (option.)</label><input type="number" id="eloB" placeholder="1600"></div></div>
+                <div class="standing-inputs" style="margin-top:8px;"><div><label>Force adversaires série (option.)</label><input type="number" id="oppStrengthB" min="0" max="100" placeholder="ex: 65"></div></div>
                 <div class="rank-preview" id="rankPreviewB"></div>
               </div>
             </div>
+            <div style="font-size:9.5px; color:var(--text-faint); margin-top:8px;">💡 Force adversaires série : niveau moyen (0–100) des équipes affrontées dans les matchs saisis en "Série" — 50 = niveau neutre, laisser vide si inconnu (aucune correction n'est alors appliquée). Une série de victoires contre des équipes faibles pèse moins qu'une série équivalente contre des équipes fortes.</div>
           </div>
 
           <div class="field-group">
@@ -682,6 +686,15 @@ input{font-family:inherit;}
               <datalist id="leagueListGe"></datalist>
               <div id="leagueGoalAvgInfo" style="margin-top:5px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--text-faint);"></div>
             </div>
+            <div style="margin-bottom:12px;">
+              <label style="display:block; font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--text-faint); margin-bottom:4px;">Météo & terrain (optionnel, section 41)</label>
+              <div class="standing-inputs" style="grid-template-columns:1fr 1fr 1fr;">
+                <div><label style="font-size:9px;">Vent</label><select id="weatherWind" class="match-type-select"><option value="">—</option><option value="aucun">Aucun</option><option value="modere">Modéré</option><option value="fort">Fort</option></select></div>
+                <div><label style="font-size:9px;">Pluie</label><select id="weatherRain" class="match-type-select"><option value="">—</option><option value="non">Non</option><option value="legere">Légère</option><option value="forte">Forte</option></select></div>
+                <div><label style="font-size:9px;">Terrain</label><select id="weatherPitch" class="match-type-select"><option value="">—</option><option value="bon">Bon</option><option value="moyen">Moyen</option><option value="mauvais">Mauvais</option></select></div>
+              </div>
+              <p style="font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--text-faint); margin-top:5px;">Purement informatif : sans données historiques suffisantes pour valider un lien chiffré, aucune correction n'est appliquée au lambda — seul un niveau d'impact potentiel (AUCUN/FAIBLE/MOYEN/ÉLEVÉ) est affiché.</p>
+            </div>
             <div class="flags-grid">
               <div class="flags-col">
                 <div class="flags-team-lbl" id="flagsNameA">A</div>
@@ -689,6 +702,13 @@ input{font-family:inherit;}
                 <div class="severity-seg" id="injurySeverityA" data-flag="injury" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <label class="flag-check"><input type="checkbox" id="fatigueA"> Enchaînement fatigant</label>
                 <div class="severity-seg" id="fatigueSeverityA" data-flag="fatigue" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
+                <div class="pos-abs-lbl">Fatigue calculée (option., affine le curseur ci-dessus)</div>
+                <div class="pos-abs-grid">
+                  <div><label>Repos (j)</label><input type="number" id="restDaysA" min="0" max="30" placeholder="4"></div>
+                  <div><label>Matchs/7j</label><input type="number" id="matches7dA" min="0" max="5" placeholder="1"></div>
+                  <div><label>Matchs/14j</label><input type="number" id="matches14dA" min="0" max="8" placeholder="2"></div>
+                  <div style="display:flex; align-items:center;"><label style="font-size:9px;"><input type="checkbox" id="extraTimeA" style="width:auto; margin-right:4px;">Prolong.</label></div>
+                </div>
                 <label class="flag-check"><input type="checkbox" id="uncertainA"> Doute sur la composition</label>
                 <div class="severity-seg" id="uncertainSeverityA" data-flag="uncertain" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <div class="pos-abs-lbl">Titulaires clés absents, par poste</div>
@@ -705,6 +725,13 @@ input{font-family:inherit;}
                 <div class="severity-seg" id="injurySeverityB" data-flag="injury" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <label class="flag-check"><input type="checkbox" id="fatigueB"> Enchaînement fatigant</label>
                 <div class="severity-seg" id="fatigueSeverityB" data-flag="fatigue" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
+                <div class="pos-abs-lbl">Fatigue calculée (option., affine le curseur ci-dessus)</div>
+                <div class="pos-abs-grid">
+                  <div><label>Repos (j)</label><input type="number" id="restDaysB" min="0" max="30" placeholder="6"></div>
+                  <div><label>Matchs/7j</label><input type="number" id="matches7dB" min="0" max="5" placeholder="1"></div>
+                  <div><label>Matchs/14j</label><input type="number" id="matches14dB" min="0" max="8" placeholder="2"></div>
+                  <div style="display:flex; align-items:center;"><label style="font-size:9px;"><input type="checkbox" id="extraTimeB" style="width:auto; margin-right:4px;">Prolong.</label></div>
+                </div>
                 <label class="flag-check"><input type="checkbox" id="uncertainB"> Doute sur la composition</label>
                 <div class="severity-seg" id="uncertainSeverityB" data-flag="uncertain" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <div class="pos-abs-lbl">Titulaires clés absents, par poste</div>
@@ -728,11 +755,13 @@ input{font-family:inherit;}
             <div style="display:flex; flex-direction:column; gap:8px;">
               <div class="standing-inputs"><div><label>A — xG (moy.)</label><input type="number" step="0.1" id="xgA" placeholder="1.8"></div><div><label>A — xGA (moy.)</label><input type="number" step="0.1" id="xgaA" placeholder="1.1"></div></div>
               <div class="standing-inputs"><div><label>A — Tirs cadrés</label><input type="number" step="0.1" id="shotsA" placeholder="5.2"></div><div><label>A — Corners</label><input type="number" step="0.1" id="cornersA" placeholder="6.1"></div></div>
+              <div class="standing-inputs"><div><label>A — Cartons (moy.)</label><input type="number" step="0.1" id="cardsA" placeholder="2.1"></div><div></div></div>
               <div class="standing-inputs"><div><label>A — Occasions nettes</label><input type="number" step="0.1" id="chancesA" placeholder="3.0"></div><div><label>A — Possession %</label><input type="number" step="1" id="possA" placeholder="54"></div></div>
             </div>
             <div style="display:flex; flex-direction:column; gap:8px;">
               <div class="standing-inputs"><div><label>B — xG (moy.)</label><input type="number" step="0.1" id="xgB" placeholder="1.2"></div><div><label>B — xGA (moy.)</label><input type="number" step="0.1" id="xgaB" placeholder="1.6"></div></div>
               <div class="standing-inputs"><div><label>B — Tirs cadrés</label><input type="number" step="0.1" id="shotsB" placeholder="3.8"></div><div><label>B — Corners</label><input type="number" step="0.1" id="cornersB" placeholder="4.4"></div></div>
+              <div class="standing-inputs"><div><label>B — Cartons (moy.)</label><input type="number" step="0.1" id="cardsB" placeholder="1.8"></div><div></div></div>
               <div class="standing-inputs"><div><label>B — Occasions nettes</label><input type="number" step="0.1" id="chancesB" placeholder="2.1"></div><div><label>B — Possession %</label><input type="number" step="1" id="possB" placeholder="46"></div></div>
             </div>
             <div style="grid-column:1/-1; border-top:1px solid var(--line); margin-top:4px; padding-top:12px;">
@@ -757,6 +786,7 @@ input{font-family:inherit;}
             <div style="padding:22px 22px 0;"><div class="section-title">Moteurs actifs</div><div id="enginesRowGe" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div><div id="completenessGe" style="margin-bottom:18px;"></div></div>
             <div style="padding:0 22px 22px;"><div class="section-title">Scores exacts probables</div><div class="scores-row" id="scoresRowGe"></div><div class="lambda-row" id="lambdaRowGe"></div></div>
             <div style="padding:0 22px 22px;"><div class="section-title">Paris retenus</div><div id="betsListGe"></div></div>
+            <div style="padding:0 22px 22px;" id="valueProGe"></div>
             <div style="padding:0 22px 22px;">
               <button id="communityPublishBtnGe" style="background:linear-gradient(135deg, var(--gold), var(--gold-dim)); color:var(--ink); font-weight:700; border:none; border-radius:8px; padding:10px 18px; font-size:12px; cursor:pointer;">🌐 Publier à la communauté</button>
               <div id="communityPublishStatusGe" style="font-size:11.5px; color:var(--text-faint); margin-top:6px;"></div>
@@ -799,6 +829,7 @@ input{font-family:inherit;}
                   <div><label>Victoires</label><input type="number" id="bkPtsA" min="0" placeholder="42"></div>
                 </div>
                 <div class="standing-inputs" style="margin-top:8px;"><div><label>Elo (option.)</label><input type="number" id="bkEloA" placeholder="1620"></div></div>
+                <div class="standing-inputs" style="margin-top:8px;"><div><label>Force adversaires série (option.)</label><input type="number" id="bkOppStrengthA" min="0" max="100" placeholder="ex: 42"></div></div>
                 <div class="rank-preview" id="bkRankPreviewA"></div>
               </div>
               <div class="standing-col">
@@ -808,9 +839,11 @@ input{font-family:inherit;}
                   <div><label>Victoires</label><input type="number" id="bkPtsB" min="0" placeholder="18"></div>
                 </div>
                 <div class="standing-inputs" style="margin-top:8px;"><div><label>Elo (option.)</label><input type="number" id="bkEloB" placeholder="1480"></div></div>
+                <div class="standing-inputs" style="margin-top:8px;"><div><label>Force adversaires série (option.)</label><input type="number" id="bkOppStrengthB" min="0" max="100" placeholder="ex: 65"></div></div>
                 <div class="rank-preview" id="bkRankPreviewB"></div>
               </div>
             </div>
+            <div style="font-size:9.5px; color:var(--text-faint); margin-top:8px;">💡 Force adversaires série : niveau moyen (0–100) des équipes affrontées dans les matchs saisis en "Série" — 50 = neutre, laisser vide si inconnu.</div>
           </div>
 
           <div class="field-group">
@@ -862,6 +895,10 @@ input{font-family:inherit;}
                 <div class="severity-seg" id="bkInjurySeverityA" data-flag="injury" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <label class="flag-check"><input type="checkbox" id="bkFatigueA"> Enchaînement fatigant</label>
                 <div class="severity-seg" id="bkFatigueSeverityA" data-flag="fatigue" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
+                <div class="standing-inputs" style="margin-top:6px;">
+                  <div><label>Repos (j)</label><input type="number" id="restDaysBkA" min="0" max="30" placeholder="2"></div>
+                  <div><label>Matchs/7j</label><input type="number" id="matches7dBkA" min="0" max="5" placeholder="3"></div>
+                </div>
                 <label class="flag-check"><input type="checkbox" id="bkUncertainA"> Doute sur l'effectif</label>
                 <div class="severity-seg" id="bkUncertainSeverityA" data-flag="uncertain" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <div class="standing-inputs" style="margin-top:8px;"><div><label>Joueurs clés absents</label><input type="number" id="bkAbsA" min="0" max="5" placeholder="0"></div></div>
@@ -872,6 +909,10 @@ input{font-family:inherit;}
                 <div class="severity-seg" id="bkInjurySeverityB" data-flag="injury" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <label class="flag-check"><input type="checkbox" id="bkFatigueB"> Enchaînement fatigant</label>
                 <div class="severity-seg" id="bkFatigueSeverityB" data-flag="fatigue" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
+                <div class="standing-inputs" style="margin-top:6px;">
+                  <div><label>Repos (j)</label><input type="number" id="restDaysBkB" min="0" max="30" placeholder="1"></div>
+                  <div><label>Matchs/7j</label><input type="number" id="matches7dBkB" min="0" max="5" placeholder="4"></div>
+                </div>
                 <label class="flag-check"><input type="checkbox" id="bkUncertainB"> Doute sur l'effectif</label>
                 <div class="severity-seg" id="bkUncertainSeverityB" data-flag="uncertain" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
                 <div class="standing-inputs" style="margin-top:8px;"><div><label>Joueurs clés absents</label><input type="number" id="bkAbsB" min="0" max="5" placeholder="0"></div></div>
@@ -988,7 +1029,7 @@ input{font-family:inherit;}
       </div>
       <div class="subnav">
         <button class="active sfx-tap" data-sub="best" data-group="be"><svg class="chest-ic" style="color:var(--green)" viewBox="0 0 24 24" width="15" height="15"><path d="M12 2l2.6 6.2L21 9l-5 4.6L17.4 21 12 17.3 6.6 21 8 13.6 3 9l6.4-.8z" fill="currentColor"/></svg> Meilleurs Paris</button>
-        <button class="sfx-tap" data-sub="safe" data-group="be"><svg class="chest-ic" style="color:var(--gold)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Safe Bets 82%+</button>
+        <button class="sfx-tap" data-sub="safe" data-group="be"><svg class="chest-ic" style="color:var(--gold)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Probabilité élevée 82%+</button>
         <button class="sfx-tap" data-sub="value" data-group="be"><svg class="chest-ic" style="color:var(--sky)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Value Bets (edge réel)</button>
         <button class="sfx-tap" data-sub="score" data-group="be"><svg class="chest-ic" style="color:var(--violet)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Score Exact 15%+</button>
         <button class="sfx-tap" data-sub="combos" data-group="be">🎰 Combinés</button>
@@ -1008,7 +1049,7 @@ input{font-family:inherit;}
       <div class="subnav">
         <button class="sfx-tap" data-sub="all" data-group="commsub">Tout</button>
         <button class="sfx-tap" data-sub="best" data-group="commsub">🏆 Meilleurs Paris</button>
-        <button class="active sfx-tap" data-sub="safe" data-group="commsub">Safe Bets 82%+</button>
+        <button class="active sfx-tap" data-sub="safe" data-group="commsub">Probabilité élevée 82%+</button>
         <button class="sfx-tap" data-sub="value" data-group="commsub">Value Bets</button>
         <button class="sfx-tap" data-sub="score" data-group="commsub">Score exact 15%+</button>
       </div>
@@ -1147,6 +1188,25 @@ input{font-family:inherit;}
       <div class="profil-card">
         <h4>📊 Mes indicateurs</h4>
         <div class="profil-indic-grid" id="profilIndicGrid"></div>
+      </div>
+
+      <div class="profil-card">
+        <h4>🎲 Simulateur de croissance de bankroll</h4>
+        <div style="font-size:10.5px; color:var(--text-faint); margin-bottom:10px;">Projection statistique, pas une prévision garantie — section 22/68 du cahier des charges. Le scénario optimiste n'est jamais à prendre pour un objectif réaliste.</div>
+        <div class="context-row" style="margin-bottom:8px;">
+          <div><label>Bankroll initiale</label><input type="number" id="simBankroll" min="1" value="500"></div>
+          <div><label>Nombre de paris</label><input type="number" id="simNbBets" min="1" max="2000" value="100"></div>
+        </div>
+        <div class="context-row" style="margin-bottom:8px;">
+          <div><label>Mise (% bankroll)</label><input type="number" id="simStakePct" min="0.1" max="10" step="0.1" value="2"></div>
+          <div><label>Cote moyenne</label><input type="number" id="simOdds" min="1.01" step="0.01" value="1.90"></div>
+        </div>
+        <div class="context-row" style="margin-bottom:10px;">
+          <div><label>Win rate estimé (%)</label><input type="number" id="simWinRate" min="1" max="99" value="55"></div>
+          <div></div>
+        </div>
+        <button id="simRunBtn" class="sfx-tap" style="width:100%; background:var(--gold); color:#000; border:none; border-radius:8px; padding:10px; font-weight:600; cursor:pointer;">Simuler</button>
+        <div id="simResultBody" style="margin-top:12px;"></div>
       </div>
 
       <div class="profil-card" id="bdeeaCard">
@@ -2314,6 +2374,59 @@ function renderProfile(){
   renderProfilIndicateurs();
 }
 document.getElementById('profilRefreshAboBtn').addEventListener('click', renderProfilAbonnement);
+// -- Simulateur de croissance de bankroll (section 22/68) : Monte Carlo simple sur des paris
+// à cote et win rate fixes saisis par l'utilisateur. Ce n'est PAS une prévision — juste une
+// façon honnête de montrer la dispersion réelle des trajectoires possibles (y compris les
+// mauvaises), avec un risque de ruine explicite. Mise en % de la bankroll COURANTE (donc
+// composée), plafonnée par l'utilisateur lui-même via simStakePct — l'appli ne force aucun
+// plafond ici puisque c'est un simulateur exploratoire, pas une recommandation de mise réelle
+// (celle-ci reste gérée par le Kelly fractionné existant ailleurs dans l'appli).
+function runBankrollSims(bankroll0, nBets, stakePct, odds, winRate, nSims=3000){
+  const p = clamp(winRate/100, 0, 1);
+  const finals = [];
+  let ruinCount = 0, ddSum = 0;
+  for(let s=0; s<nSims; s++){
+    let bk = bankroll0, peak = bankroll0, maxDD = 0, ruined = false;
+    for(let i=0; i<nBets; i++){
+      if(bk<=0.01*bankroll0){ ruined = true; break; }
+      const stake = bk*(stakePct/100);
+      const win = Math.random() < p;
+      bk += win ? stake*(odds-1) : -stake;
+      if(bk > peak) peak = bk;
+      const dd = peak>0 ? (peak-bk)/peak : 0;
+      if(dd > maxDD) maxDD = dd;
+    }
+    finals.push(Math.max(0, bk));
+    ddSum += maxDD;
+    if(ruined) ruinCount++;
+  }
+  finals.sort((a,b)=>a-b);
+  const pct = q => finals[Math.max(0, Math.min(finals.length-1, Math.floor(q*(finals.length-1))))];
+  return {conservative: pct(0.10), central: pct(0.50), optimistic: pct(0.90), avgMaxDrawdown: ddSum/nSims, riskOfRuin: ruinCount/nSims};
+}
+function renderBankrollSim(){
+  const bankroll0 = Math.max(1, parseFloat(document.getElementById('simBankroll').value)||500);
+  const nBets = Math.max(1, Math.min(2000, parseInt(document.getElementById('simNbBets').value)||100));
+  const stakePct = Math.max(0.1, Math.min(10, parseFloat(document.getElementById('simStakePct').value)||2));
+  const odds = Math.max(1.01, parseFloat(document.getElementById('simOdds').value)||1.9);
+  const winRate = Math.max(1, Math.min(99, parseFloat(document.getElementById('simWinRate').value)||55));
+  const impliedBE = (1/odds*100).toFixed(1);
+  const r = runBankrollSims(bankroll0, nBets, stakePct, odds, winRate);
+  const fmt = v => Math.round(v).toLocaleString('fr-FR');
+  document.getElementById('simResultBody').innerHTML = `
+    <div style="font-size:10px; color:var(--text-faint); margin-bottom:8px;">Break-even du modèle à cette cote : ${impliedBE}% — votre win rate saisi (${winRate}%) doit dépasser ce seuil pour avoir un edge réel. Ceci n'est pas une prévision, seulement des scénarios possibles.</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:10px;">
+      <div class="summary-card"><div class="num" style="font-size:15px; color:#e05d5d;">${fmt(r.conservative)}</div><div class="lbl">Conservateur (P10)</div></div>
+      <div class="summary-card"><div class="num" style="font-size:15px; color:var(--gold);">${fmt(r.central)}</div><div class="lbl">Central (médiane)</div></div>
+      <div class="summary-card"><div class="num" style="font-size:15px; color:#5dd88a;">${fmt(r.optimistic)}</div><div class="lbl">Optimiste (P90)</div></div>
+    </div>
+    <div style="font-size:11px; color:var(--text-dim); line-height:1.7;">
+      Drawdown maximal moyen observé : <b>${(r.avgMaxDrawdown*100).toFixed(1)}%</b><br>
+      Risque de ruine (bankroll ≈ épuisée) : <b>${(r.riskOfRuin*100).toFixed(1)}%</b> des trajectoires simulées<br>
+      Bankroll de départ : ${fmt(bankroll0)} · ${nBets} paris · mise ${stakePct}% de la bankroll courante
+    </div>`;
+}
+document.getElementById('simRunBtn').addEventListener('click', renderBankrollSim);
 document.getElementById('bdeeaToggle').addEventListener('click', ()=>{
   const body = document.getElementById('bdeeaBody');
   const caret = document.getElementById('bdeeaCaret');
@@ -3027,6 +3140,90 @@ function trendIndex(arr){
   return d2-d1;
 }
 function avg(arr,idx){ if(!arr||arr.length===0) return null; return arr.reduce((s,p)=>s+p[idx],0)/arr.length; }
+// -- Pondération par récence (sections 34/36 et 35/42 du cahier des charges) : un match plus
+// récent doit peser plus qu'un match ancien, au lieu d'une simple moyenne plate. Les tableaux
+// aSerie/bSerie/ab/ba sont saisis dans l'ordre chronologique (le plus ancien en premier, comme
+// le confirme déjà trendIndex plus bas qui traite la seconde moitié comme "plus récente") — il
+// n'existe pas de champ date par match dans le formulaire, donc la décroissance se fait sur le
+// RANG dans la liste, pas sur une vraie date calendaire. C'est une approximation assumée : sans
+// date saisie, c'est le seul repère temporel disponible.
+// Poids "forme" : décroissance assez marquée (30/22/17/12/9/6/4), configurable.
+const RECENT_FORM_WEIGHTS = [0.30, 0.22, 0.17, 0.12, 0.09, 0.06, 0.04];
+// Poids "H2H" : décroissance plus douce — une confrontation directe reste informative plus
+// longtemps qu'une simple série de forme, mais une très ancienne confrontation ne doit
+// clairement plus peser comme la dernière (section 42 : "H2H récent = poids élevé, très
+// ancien = poids minimal").
+const H2H_DECAY_WEIGHTS = [0.34, 0.26, 0.19, 0.13, 0.08];
+function weightedRecentAvg(arr, idx, weights=RECENT_FORM_WEIGHTS){
+  if(!arr||arr.length===0) return null;
+  // arr est chronologique (plus ancien en premier) : on repart de la fin (le plus récent).
+  const recentFirst = arr.slice().reverse();
+  const n = Math.min(recentFirst.length, weights.length);
+  const usedW = weights.slice(0,n);
+  const totalW = usedW.reduce((s,w)=>s+w,0);
+  return recentFirst.slice(0,n).reduce((s,p,i)=>s+p[idx]*(usedW[i]/totalW),0);
+}
+// -- Module fatigue calculé (section 40) : score 0-100 à partir de données concrètes (repos,
+// enchaînement de matchs, prolongation), en plus du curseur manuel existant (fatigueA/
+// fatigueSeverityA) qui reste utile quand ces chiffres exacts ne sont pas connus. Si aucune
+// des données n'est renseignée, retourne null : aucune valeur n'est inventée.
+function computeFatigueScore({restDays, matches7d, matches14d, extraTime}){
+  if(restDays==null && matches7d==null && matches14d==null && !extraTime) return null;
+  let score = 0;
+  if(restDays!=null){
+    if(restDays<=1) score += 45;
+    else if(restDays===2) score += 30;
+    else if(restDays===3) score += 18;
+    else if(restDays===4) score += 8;
+    else if(restDays<=6) score += 3;
+  }
+  if(matches7d!=null) score += clamp(matches7d-1,0,4)*11;
+  if(matches14d!=null) score += clamp(matches14d-2,0,6)*5;
+  if(extraTime) score += 10;
+  return clamp(Math.round(score), 0, 100);
+}
+// Corrections délibérément faibles (section 40 : "et non attaque -15%, sauf si une règle
+// statistiquement validée le justifie" — aucune règle de ce type n'existe ici) : au score
+// maximal (100/100), l'attaque perd au plus 2.5% et l'adversaire encaisse au plus 1.8% de but
+// en plus. Jamais une grosse correction, quel que soit le score.
+function fatigueLambdaImpact(score){
+  if(score==null) return {attackMult:1, concedeMult:1};
+  const t = score/100;
+  return {attackMult: 1 - t*0.025, concedeMult: 1 + t*0.018};
+}
+// -- Module météo (section 41) : NONE/LOW/MEDIUM/HIGH, purement informatif. Le cahier des
+// charges est explicite : "la météo ne doit pas être utilisée pour fabriquer une correction
+// arbitraire" et l'impact chiffré ne doit être appliqué "que si le modèle possède suffisamment
+// de données historiques pour justifier cette relation" — ce qui n'est pas le cas ici (pas de
+// collecte météo historique dans cette appli). Donc : aucun impact sur lambda, juste un niveau
+// affiché + une phrase de contexte quand il est notable, pour que l'utilisateur en tienne
+// compte lui-même s'il le juge pertinent.
+function computeWeatherImpact({wind, rain, pitch}){
+  if(!wind && !rain && !pitch) return null;
+  let score = 0;
+  if(wind==='modere') score += 1; else if(wind==='fort') score += 2;
+  if(rain==='legere') score += 1; else if(rain==='forte') score += 2;
+  if(pitch==='moyen') score += 1; else if(pitch==='mauvais') score += 2;
+  if(score===0) return 'NONE';
+  if(score<=2) return 'LOW';
+  if(score<=4) return 'MEDIUM';
+  return 'HIGH';
+}
+// -- Opponent Strength Adjustment (sections 37/43) : une série de buts marqués contre des
+// adversaires faibles ne doit pas peser comme la même série contre des adversaires forts. Le
+// formulaire ne permet pas encore de taguer l'adversaire affronté à CHAQUE match de la série
+// (ça demanderait un champ par ligne, pas juste par équipe) — l'utilisateur saisit donc un
+// niveau moyen (0-100) des adversaires affrontés durant la série entière. Si le champ est
+// vide, IMPACT UNKNOWN : aucune correction n'est inventée (facteur neutre, formRaw inchangé).
+// La correction est volontairement bornée à ±15% (jamais de correction extrême, comme demandé).
+function applyOpponentStrengthAdjustment(formRaw, oppStrengthPct){
+  if(formRaw==null) return {raw:formRaw, adjusted:formRaw, applied:false, factor:1};
+  if(oppStrengthPct==null || isNaN(oppStrengthPct)) return {raw:formRaw, adjusted:formRaw, applied:false, factor:1};
+  const gap = clamp((oppStrengthPct-50)/50, -1, 1); // -1 = adversaires très faibles, +1 = très forts
+  const MAX_ADJ = 0.15;
+  const factor = 1 + gap*MAX_ADJ;
+  return {raw:formRaw, adjusted:formRaw*factor, applied:true, factor};
+}
 function weightedLambda(components){
   const avail=components.filter(c=>c.v!==null && !isNaN(c.v));
   if(avail.length===0) return null;
@@ -3046,7 +3243,7 @@ function parseEntries(raw){
    (c) auto-calibration du rho Dixon-Coles sur l'historique vérifié
    (d) pondération adaptative des sources de données (domicile/forme/H2H/adverse)
 ================================================================= */
-const MARKET_LABELS = {score_exact:'Score exact', btts:'BTTS', double_chance:'Double chance', '1x2':'1X2 / Vainqueur', over_under:'Over / Under', stat_corners:'Corners (ligne)', stat_shots:'Tirs cadrés (ligne)', non_classe:'Non classé'};
+const MARKET_LABELS = {score_exact:'Score exact', btts:'BTTS', double_chance:'Double chance', '1x2':'1X2 / Vainqueur', over_under:'Over / Under', stat_corners:'Corners (ligne)', stat_shots:'Tirs cadrés (ligne)', stat_cards:'Cartons (ligne)', non_classe:'Non classé'};
 function marketTypeFromEval(evalSpec){
   if(!evalSpec) return 'non_classe';
   switch(evalSpec.type){
@@ -3055,7 +3252,7 @@ function marketTypeFromEval(evalSpec){
     case 'resultDC': return 'double_chance';
     case 'result1x2': case 'result2way': case 'marginBracket': return '1x2';
     case 'goalsLine': return 'over_under';
-    case 'statLine': return evalSpec.stat==='corners' ? 'stat_corners' : evalSpec.stat==='shots' ? 'stat_shots' : 'non_classe';
+    case 'statLine': return evalSpec.stat==='corners' ? 'stat_corners' : evalSpec.stat==='shots' ? 'stat_shots' : evalSpec.stat==='cards' ? 'stat_cards' : 'non_classe';
     default: return 'non_classe';
   }
 }
@@ -3362,6 +3559,93 @@ function computeCalibration(sport){
   const brier = verifiable.reduce((s,x)=>s+Math.pow(x.p-(x.hit?1:0),2),0)/verifiable.length;
   return {n:verifiable.length, hits, hitRate, brier};
 }
+
+/* ================================================================
+   VALUE AUDIT / CALIBRATION PRO — phase B
+   Mesure séparément la performance des paris dont la cote bookmaker était
+   réellement connue. Aucun chiffre n'est fabriqué à partir des paris sans cote.
+================================================================= */
+function logLossBinary(p, hit){
+  if(!Number.isFinite(p)) return null;
+  const q=clamp(p,0.0001,0.9999);
+  return -(hit ? Math.log(q) : Math.log(1-q));
+}
+function computeReliabilityBins(sport, league){
+  const scoped=league ? TRACK[sport].filter(e=>leagueSlug(e.league)===leagueSlug(league)) : TRACK[sport];
+  const vals=scoped.flatMap(e=>e.evaluations||[]).filter(x=>x.hit!==null && Number.isFinite(x.p));
+  const bins=Array.from({length:10},(_,i)=>({lo:i/10,hi:(i+1)/10,n:0,hits:0,sumP:0}));
+  vals.forEach(x=>{ const i=Math.min(9,Math.max(0,Math.floor(x.p*10))); const b=bins[i]; b.n++; b.hits+=x.hit?1:0; b.sumP+=x.p; });
+  return bins.map(b=>({...b,avgP:b.n?b.sumP/b.n:null,hitRate:b.n?b.hits/b.n:null,gap:b.n?Math.abs(b.sumP/b.n-b.hits/b.n):null}));
+}
+function computeAdvancedCalibration(sport, league){
+  const scoped=league ? TRACK[sport].filter(e=>leagueSlug(e.league)===leagueSlug(league)) : TRACK[sport];
+  const vals=scoped.flatMap(e=>e.evaluations||[]).filter(x=>x.hit!==null && Number.isFinite(x.p));
+  if(!vals.length) return null;
+  const brier=vals.reduce((a,x)=>a+Math.pow(x.p-(x.hit?1:0),2),0)/vals.length;
+  const logloss=vals.reduce((a,x)=>a+logLossBinary(x.p,x.hit),0)/vals.length;
+  const bins=computeReliabilityBins(sport,league);
+  const populated=bins.filter(b=>b.n>0);
+  const ece=populated.length ? populated.reduce((a,b)=>a+(b.n/vals.length)*Math.abs(b.avgP-b.hitRate),0) : null;
+  return {n:vals.length,brier,logloss,ece,bins};
+}
+/* ================================================================
+   WALK-FORWARD BACKTEST (section 10/55) — jusqu'ici computeVerifiedValuePerformance
+   itérait TRACK[sport] dans son ordre de stockage, qui est le PLUS RÉCENT EN PREMIER
+   (voir chargement : sort b.timestamp-a.timestamp + unshift à chaque nouvel ajout).
+   Le calcul du drawdown cumulait donc les profits dans le mauvais sens chronologique —
+   un vrai bug de calcul, pas juste une présentation manquante. Corrigé ici : tri
+   chronologique croissant explicite AVANT tout calcul cumulatif, timestamp et ligue
+   reportés sur chaque ligne pour permettre la segmentation par période/championnat.
+   Interdiction de fuite de données (section 10) : chaque P_MODEL (x.p) a été figé au
+   moment de l'analyse via addRecord — jamais recalculé ici avec des données plus
+   récentes — donc le test est walk-forward par construction, pas seulement par tri.
+================================================================= */
+function computeVerifiedValuePerformance(sport, league){
+  const scoped=league ? TRACK[sport].filter(e=>leagueSlug(e.league)===leagueSlug(league)) : TRACK[sport];
+  const rows=[];
+  scoped.forEach(e=>(e.evaluations||[]).forEach(x=>{
+    if(x.hit===null || !Number.isFinite(x.p) || !(x.odds>1)) return;
+    const profit=x.hit ? (x.odds-1) : -1;
+    const ev=x.p*x.odds-1;
+    rows.push({...x, profit, ev, timestamp:e.timestamp, league:e.league||''});
+  }));
+  if(!rows.length) return null;
+  // Tri chronologique croissant obligatoire avant tout cumul : sans ça, le drawdown
+  // et la courbe de capital ne représentent rien de réel (section 30 : anti-look-ahead).
+  rows.sort((a,b)=>a.timestamp-b.timestamp);
+  const profit=rows.reduce((a,x)=>a+x.profit,0);
+  const staked=rows.length;
+  const roi=profit/staked;
+  const avgEV=rows.reduce((a,x)=>a+x.ev,0)/rows.length;
+  const hitRate=rows.filter(x=>x.hit).length/rows.length;
+  let peak=0,cum=0,maxDD=0;
+  rows.forEach(x=>{cum+=x.profit; peak=Math.max(peak,cum); maxDD=Math.max(maxDD,peak-cum);});
+  const byMarket={};
+  rows.forEach(x=>{const mt=x.marketType||'non_classe'; if(!byMarket[mt]) byMarket[mt]={n:0,profit:0,ev:0,hits:0}; const g=byMarket[mt]; g.n++;g.profit+=x.profit;g.ev+=x.ev;g.hits+=x.hit?1:0;});
+  Object.values(byMarket).forEach(g=>{g.roi=g.profit/g.n;g.avgEV=g.ev/g.n;g.hitRate=g.hits/g.n;});
+  // Section 57 : ventilation par championnat, même principe que par marché.
+  const byLeague={};
+  rows.forEach(x=>{const lg=x.league||'Non renseigné'; if(!byLeague[lg]) byLeague[lg]={n:0,profit:0,ev:0,hits:0}; const g=byLeague[lg]; g.n++;g.profit+=x.profit;g.ev+=x.ev;g.hits+=x.hit?1:0;});
+  Object.values(byLeague).forEach(g=>{g.roi=g.profit/g.n;g.avgEV=g.ev/g.n;g.hitRate=g.hits/g.n;});
+  // Section 29/71 : ROI réel par tranche d'edge, pour vérifier si les grosses value
+  // détectées par le moteur sont réellement rentables ou juste bruitées.
+  const EDGE_BUCKETS=[{lo:0,hi:0.03,label:'0–3%'},{lo:0.03,hi:0.05,label:'3–5%'},{lo:0.05,hi:0.08,label:'5–8%'},{lo:0.08,hi:0.12,label:'8–12%'},{lo:0.12,hi:Infinity,label:'>12%'}];
+  const byEdge=EDGE_BUCKETS.map(b=>({...b,n:0,profit:0,hits:0}));
+  rows.forEach(x=>{ const b=byEdge.find(b=>x.ev>=b.lo && x.ev<b.hi); if(b){ b.n++; b.profit+=x.profit; b.hits+=x.hit?1:0; } });
+  byEdge.forEach(b=>{ b.roi = b.n ? b.profit/b.n : null; b.hitRate = b.n ? b.hits/b.n : null; });
+  const clvRows = rows.filter(x=>Number.isFinite(x.clv));
+  const avgCLV = clvRows.length ? clvRows.reduce((a,x)=>a+x.clv,0)/clvRows.length : null;
+  return {n:rows.length,profit,roi,avgEV,hitRate,maxDrawdown:maxDD,byMarket,byLeague,byEdge,avgCLV,
+    firstDate:rows[0].timestamp, lastDate:rows[rows.length-1].timestamp,
+    chronologicalOk: rows.every((x,i)=>i===0||x.timestamp>=rows[i-1].timestamp)};
+}
+function valueSampleStatus(n){
+  if(n<30) return {label:'Échantillon insuffisant',color:'var(--red,#F2545B)'};
+  if(n<100) return {label:'Recul limité',color:'var(--gold)'};
+  if(n<300) return {label:'Recul correct',color:'var(--teal)'};
+  return {label:'Recul solide',color:'var(--teal)'};
+}
+
 function computeCalibrationByMarket(sport, league){
   const scopedEntries = league ? TRACK[sport].filter(e=>leagueSlug(e.league)===leagueSlug(league)) : TRACK[sport];
   const all = scopedEntries.flatMap(e=>e.evaluations);
@@ -3589,7 +3873,7 @@ function markResult(sport, recordId, finalA, finalB, finalStats){
   if(!rec) return;
   finalStats = finalStats || {};
   const evaluations = [];
-  rec.bets.forEach(b=>{ evaluations.push({label:b.label, p:b.p, hit:evaluateBetOutcome(b.eval, finalA, finalB, finalStats), marketType:marketTypeFromEval(b.eval)}); });
+  rec.bets.forEach(b=>{ evaluations.push({label:b.label, p:b.p, odds:Number.isFinite(b.odds)?b.odds:null, closingOdds:Number.isFinite(b.closingOdds)?b.closingOdds:null, edge:Number.isFinite(b.edge)?b.edge:null, ev:Number.isFinite(b.value?.ev)?b.value.ev:null, decision:b.value?.decision||null, marketVsModel:b.marketVsModel||null, clv:b.clv||null, hit:evaluateBetOutcome(b.eval, finalA, finalB, finalStats), marketType:marketTypeFromEval(b.eval)}); });
   rec.topScores.forEach(s=>{ evaluations.push({label:(sport==='basketball'?'Fourchette : ':'Score exact : ')+s.label, p:s.p, hit:evaluateBetOutcome(s.eval, finalA, finalB, finalStats), marketType:marketTypeFromEval(s.eval)}); });
   rec.resultMarked = true;
   rec.finalScore = {a:finalA, b:finalB};
@@ -3702,8 +3986,8 @@ const CATS = [
   {key:'ba', label:'B VS A', tag:'H2H', ph:'1-3'},
 ];
 const store = {aSerie:[], aDom:[], bSerie:[], bExt:[], ab:[], ba:[]};
-const standings = {rankA:null, ptsA:null, rankB:null, ptsB:null, totalTeams:null, matchday:null, eloA:null, eloB:null};
-const advStats = {xgA:null,xgaA:null,shotsA:null,cornersA:null,possA:null,chancesA:null, xgB:null,xgaB:null,shotsB:null,cornersB:null,possB:null,chancesB:null, coteHome:null,coteDraw:null,coteAway:null};
+const standings = {rankA:null, ptsA:null, rankB:null, ptsB:null, totalTeams:null, matchday:null, eloA:null, eloB:null, oppStrengthA:null, oppStrengthB:null};
+const advStats = {xgA:null,xgaA:null,shotsA:null,cornersA:null,cardsA:null,possA:null,chancesA:null, xgB:null,xgaB:null,shotsB:null,cornersB:null,cardsB:null,possB:null,chancesB:null, coteHome:null,coteDraw:null,coteAway:null};
 const ADV_FIELDS = Object.keys(advStats);
 
 const fieldsEl = document.getElementById('fields');
@@ -3738,7 +4022,7 @@ function updateRankPreview(prefix){
   if(rank==null||total==null||total<2){ el.textContent=''; return; }
   const z=zoneInfo(rank,total); el.textContent=`${ordinal(rank)} / ${total} — ${z?z.short:''}`;
 }
-['rankA','ptsA','rankB','ptsB','totalTeams','eloA','eloB'].forEach(id=>{
+['rankA','ptsA','rankB','ptsB','totalTeams','eloA','eloB','oppStrengthA','oppStrengthB'].forEach(id=>{
   document.getElementById(id).addEventListener('input', e=>{
     standings[id]= e.target.value===''?null:parseFloat(e.target.value);
     if(id==='eloA'||id==='eloB') e.target.dataset.autofilled=''; // saisie manuelle : plus jamais écrasé automatiquement
@@ -3852,7 +4136,9 @@ document.getElementById('autoFillBtnA').addEventListener('click', ()=>autoFillFo
 document.getElementById('autoFillBtnB').addEventListener('click', ()=>autoFillFootballTeam('B'));
 
 const matchFlags = {matchType:'championnat', league:'', stage:'poules', leg:'sec', aggAllerA:null, aggAllerB:null, injuryA:false, fatigueA:false, uncertainA:false, injuryB:false, fatigueB:false, uncertainB:false, posA:{gk:0,def:0,mid:0,att:0}, posB:{gk:0,def:0,mid:0,att:0},
-  injurySeverityA:'modere', fatigueSeverityA:'modere', uncertainSeverityA:'modere', injurySeverityB:'modere', fatigueSeverityB:'modere', uncertainSeverityB:'modere'};
+  injurySeverityA:'modere', fatigueSeverityA:'modere', uncertainSeverityA:'modere', injurySeverityB:'modere', fatigueSeverityB:'modere', uncertainSeverityB:'modere',
+  restDaysA:null, matches7dA:null, matches14dA:null, extraTimeA:false, restDaysB:null, matches7dB:null, matches14dB:null, extraTimeB:false,
+  weatherWind:'', weatherRain:'', weatherPitch:''};
 function syncSeveritySegGe(flag, team, checked){
   document.getElementById(flag+'Severity'+team).classList.toggle('show', checked);
 }
@@ -3908,6 +4194,19 @@ document.getElementById('leagueGe').addEventListener('input', e=>{
 [['posGkA','A','gk'],['posDefA','A','def'],['posMidA','A','mid'],['posAttA','A','att'],['posGkB','B','gk'],['posDefB','B','def'],['posMidB','B','mid'],['posAttB','B','att']].forEach(([id,team,pos])=>{
   document.getElementById(id).addEventListener('input', e=>{ matchFlags['pos'+team][pos] = e.target.value===''?0:parseInt(e.target.value,10)||0; });
 });
+// -- Module fatigue calculé (section 40) : purement additif au curseur manuel existant
+// (fatigueA/fatigueSeverityA) — celui-ci reste la saisie "à dire d'expert" quand on n'a pas le
+// détail, celui-là calcule un score 0-100 objectif à partir de données concrètes quand elles
+// sont disponibles. Les deux peuvent s'appliquer en même temps sans se substituer l'un à
+// l'autre : ce ne sont pas la même source d'information.
+[['restDaysA','restDaysA'],['matches7dA','matches7dA'],['matches14dA','matches14dA'],['restDaysB','restDaysB'],['matches7dB','matches7dB'],['matches14dB','matches14dB']].forEach(([id,key])=>{
+  document.getElementById(id).addEventListener('input', e=>{ matchFlags[key] = e.target.value===''?null:parseFloat(e.target.value); });
+});
+document.getElementById('extraTimeA').addEventListener('change', e=>{ matchFlags.extraTimeA = e.target.checked; });
+document.getElementById('extraTimeB').addEventListener('change', e=>{ matchFlags.extraTimeB = e.target.checked; });
+[['weatherWind','weatherWind'],['weatherRain','weatherRain'],['weatherPitch','weatherPitch']].forEach(([id,key])=>{
+  document.getElementById(id).addEventListener('change', e=>{ matchFlags[key] = e.target.value; });
+});
 function syncTeamLabelsGe(){
   const a=document.getElementById('nameA').value.trim()||'A', b=document.getElementById('nameB').value.trim()||'B';
   document.getElementById('stNameA').textContent=a; document.getElementById('stNameB').textContent=b;
@@ -3923,7 +4222,7 @@ document.getElementById('advToggleGe').addEventListener('click', ()=>{
 });
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   CATS.forEach(c=>{ store[c.key]=[]; renderChips(c.key); });
-  ['rankA','ptsA','rankB','ptsB','totalTeams','eloA','eloB'].forEach(id=>{ const el=document.getElementById(id); el.value=''; el.dataset.autofilled=''; standings[id]=null; });
+  ['rankA','ptsA','rankB','ptsB','totalTeams','eloA','eloB','oppStrengthA','oppStrengthB'].forEach(id=>{ const el=document.getElementById(id); el.value=''; el.dataset.autofilled=''; standings[id]=null; });
   document.getElementById('matchday').value=''; standings.matchday=null;
   document.getElementById('rankPreviewA').textContent=''; document.getElementById('rankPreviewB').textContent='';
   ADV_FIELDS.forEach(id=>{ document.getElementById(id).value=''; advStats[id]=null; });
@@ -3944,6 +4243,10 @@ document.getElementById('resetBtn').addEventListener('click', ()=>{
   });
   ['posGkA','posDefA','posMidA','posAttA','posGkB','posDefB','posMidB','posAttB'].forEach(id=>{ document.getElementById(id).value=''; });
   matchFlags.posA={gk:0,def:0,mid:0,att:0}; matchFlags.posB={gk:0,def:0,mid:0,att:0};
+  ['restDaysA','matches7dA','matches14dA','restDaysB','matches7dB','matches14dB'].forEach(id=>{ document.getElementById(id).value=''; matchFlags[id]=null; });
+  ['weatherWind','weatherRain','weatherPitch'].forEach(id=>{ document.getElementById(id).value=''; matchFlags[id]=''; });
+  document.getElementById('extraTimeA').checked=false; matchFlags.extraTimeA=false;
+  document.getElementById('extraTimeB').checked=false; matchFlags.extraTimeB=false;
   document.getElementById('resultsGe').style.display='none'; document.getElementById('emptyStateGe').style.display='flex';
 });
 
@@ -4072,9 +4375,13 @@ function aggregateAdjustment(leg, aggAllerA, aggAllerB, sport, league){
 
 function computeGeneseLambdas(){
   const aDomFor=avg(store.aDom,0), aDomAg=avg(store.aDom,1);
-  const aSerieFor=avg(store.aSerie,0), abFor=avg(store.ab,0);
+  const aSerieRaw=weightedRecentAvg(store.aSerie,0);
+  const aSerieAdj=applyOpponentStrengthAdjustment(aSerieRaw, standings.oppStrengthA);
+  const aSerieFor=aSerieAdj.adjusted, abFor=weightedRecentAvg(store.ab,0,H2H_DECAY_WEIGHTS);
   const bExtFor=avg(store.bExt,0), bExtAg=avg(store.bExt,1);
-  const bSerieFor=avg(store.bSerie,0), baFor=avg(store.ba,0);
+  const bSerieRaw=weightedRecentAvg(store.bSerie,0);
+  const bSerieAdj=applyOpponentStrengthAdjustment(bSerieRaw, standings.oppStrengthB);
+  const bSerieFor=bSerieAdj.adjusted, baFor=weightedRecentAvg(store.ba,0,H2H_DECAY_WEIGHTS);
   const W = loadAdaptiveWeights('football', matchFlags.league);
   let lambdaA=weightedLambda([{v:aDomFor,w:W.domicile},{v:aSerieFor,w:W.serie},{v:abFor,w:W.h2h},{v:bExtAg,w:W.defense_adverse}]);
   let lambdaB=weightedLambda([{v:bExtFor,w:W.domicile},{v:bSerieFor,w:W.serie},{v:baFor,w:W.h2h},{v:aDomAg,w:W.defense_adverse}]);
@@ -4215,15 +4522,20 @@ function computeGeneseLambdas(){
     lambdaA=Math.max(.15, lambdaA*(1+totalAdj)); lambdaB=Math.max(.15, lambdaB*(1-totalAdj));
   }
   // Marqueurs contextuels déclaratifs : nudges modestes et transparents, jamais dominants.
+  const fatigueScoreA = computeFatigueScore({restDays:matchFlags.restDaysA, matches7d:matchFlags.matches7dA, matches14d:matchFlags.matches14dA, extraTime:matchFlags.extraTimeA});
+  const fatigueScoreB = computeFatigueScore({restDays:matchFlags.restDaysB, matches7d:matchFlags.matches7dB, matches14d:matchFlags.matches14dB, extraTime:matchFlags.extraTimeB});
+  const fatigueImpactA = fatigueLambdaImpact(fatigueScoreA), fatigueImpactB = fatigueLambdaImpact(fatigueScoreB);
   if(lambdaA!==null){
     if(matchFlags.injuryA) lambdaA *= BK_SEVERITY_MULT.injury[matchFlags.injurySeverityA];
     if(matchFlags.fatigueA) lambdaA *= BK_SEVERITY_MULT.fatigue[matchFlags.fatigueSeverityA];
     if(matchFlags.uncertainA) lambdaA *= BK_SEVERITY_MULT.uncertain[matchFlags.uncertainSeverityA];
+    lambdaA *= fatigueImpactA.attackMult; lambdaA *= fatigueImpactB.concedeMult;
   }
   if(lambdaB!==null){
     if(matchFlags.injuryB) lambdaB *= BK_SEVERITY_MULT.injury[matchFlags.injurySeverityB];
     if(matchFlags.fatigueB) lambdaB *= BK_SEVERITY_MULT.fatigue[matchFlags.fatigueSeverityB];
     if(matchFlags.uncertainB) lambdaB *= BK_SEVERITY_MULT.uncertain[matchFlags.uncertainSeverityB];
+    lambdaB *= fatigueImpactB.attackMult; lambdaB *= fatigueImpactA.concedeMult;
   }
   const posAdjA = positionAdjustment(matchFlags.posA);
   const posAdjB = positionAdjustment(matchFlags.posB);
@@ -4298,6 +4610,22 @@ function pickCornersMarket(){
   // au moment de valider le résultat (champ optionnel dans Histoire).
   return {...m, cat:'corners', eval:{type:'statLine', stat:'corners', op:m.eval.op, line:m.eval.line}};
 }
+/* ================================================================
+   17bis. CARTONS (section 78) — modèle dédié séparé, pas une réutilisation
+   directe de la matrice de buts. On applique néanmoins une loi de Poisson
+   sur la MOYENNE DE CARTONS déclarée par équipe (donnée propre, pas de buts)
+   — c'est statistiquement légitime pour une variable de comptage comme les
+   buts, corners ou cartons ; ce que le cahier des charges interdisait, c'est
+   de réutiliser directement lambda_buts, pas d'utiliser Poisson en général.
+   Comme demandé : DATA INSUFFICIENT (retour null) si la donnée manque, et
+   aucun impact d'arbitre inventé (l'arbitre n'est pas un champ de saisie ici).
+================================================================= */
+function pickCardsMarket(){
+  if(advStats.cardsA==null||advStats.cardsB==null) return null;
+  const m = pickTotalLineMarket(advStats.cardsA+advStats.cardsB,3.5,'cartons');
+  return {...m, cat:'cartons', eval:{type:'statLine', stat:'cards', op:m.eval.op, line:m.eval.line}};
+}
+
 function pickShotsMarket(){
   if(advStats.shotsA==null||advStats.shotsB==null) return null;
   const m = pickTotalLineMarket(advStats.shotsA+advStats.shotsB,5.5,'tirs cadrés (cumulés)');
@@ -4358,20 +4686,198 @@ function computeMarketProbabilities(coteHome, coteDraw, coteAway){
   const overround = rawHome+rawDraw+rawAway;
   return {pHome:rawHome/overround, pDraw:rawDraw/overround, pAway:rawAway/overround, overround};
 }
-function blendEnsembleProbabilities(pStat, pElo, pMarket){
-  // Le modèle statistique reste toujours majoritaire (c'est lui qui a vu TOUTES vos données
-  // manuelles) ; Elo et marché confirment ou nuancent, jamais ne remplacent. Les poids se
-  // redistribuent proportionnellement quand un modèle manque (pas d'Elo saisi ni reconnu,
-  // ou pas de cotes saisies), pour garder le même ratio stat/elo/marché à chaque fois.
-  const w = {stat:0.5, elo: pElo?0.2:0, market: pMarket?0.3:0};
-  if(!pElo && !pMarket) w.stat = 1;
-  else if(!pElo) { w.stat=0.65; w.market=0.35; }
-  else if(!pMarket) { w.stat=0.70; w.elo=0.30; }
-  const pHome = pStat.pHome*w.stat + (pElo?pElo.pHome:0)*w.elo + (pMarket?pMarket.pHome:0)*w.market;
-  const pDraw = pStat.pDraw*w.stat + (pElo?pElo.pDraw:0)*w.elo + (pMarket?pMarket.pDraw:0)*w.market;
-  const pAway = pStat.pAway*w.stat + (pElo?pElo.pAway:0)*w.elo + (pMarket?pMarket.pAway:0)*w.market;
+/* ================================================================
+   5quinquies. EA VALUE PRO — P_MODEL vs P_MARKET (chantier prioritaire demandé le
+   21/09/2026). Avant, le marché (cotes bookmaker) était mélangé DANS la probabilité finale
+   (50/20/30%) — exactement l'anti-pattern à corriger : le bookmaker doit être un
+   BENCHMARK pour mesurer l'edge, jamais une source qui corrige le modèle lui-même.
+   Désormais :
+   - P_MODEL = fusion de modèles sportifs UNIQUEMENT (statistique + Elo). Le marché n'y
+     entre plus JAMAIS, à aucun degré.
+   - P_MARKET = probabilité implicite des cotes (computeMarketProbabilities ci-dessus),
+     calculée à côté, jamais injectée dans P_MODEL.
+   - L'EV (edge) compare les deux : EV = P_MODEL × cote - 1. C'est la SEULE façon dont le
+     marché influence quoi que ce soit désormais : en verdict de value, jamais en entrée
+     du modèle.
+================================================================= */
+function computeModelProbability(pStat, pElo){
+  const w = pElo ? {stat:0.75, elo:0.25} : {stat:1, elo:0};
+  const pHome = pStat.pHome*w.stat + (pElo?pElo.pHome:0)*w.elo;
+  const pDraw = pStat.pDraw*w.stat + (pElo?pElo.pDraw:0)*w.elo;
+  const pAway = pStat.pAway*w.stat + (pElo?pElo.pAway:0)*w.elo;
   const t=pHome+pDraw+pAway;
-  return {pHome:pHome/t, pDraw:pDraw/t, pAway:pAway/t, weights:w, usedElo:!!pElo, usedMarket:!!pMarket};
+  return {pHome:pHome/t, pDraw:pDraw/t, pAway:pAway/t, weights:w, usedElo:!!pElo};
+}
+// Accord entre modèles (distance de variation totale statistique↔Elo, 0-100%) : sert de
+// garde-fou pour le moteur NO BET — deux modèles qui se contredisent fortement doivent
+// baisser la confiance, jamais être masqués derrière une moyenne lisse.
+function computeModelAgreement(pStat, pElo){
+  if(!pElo) return null;
+  const tv = (Math.abs(pStat.pHome-pElo.pHome)+Math.abs(pStat.pDraw-pElo.pDraw)+Math.abs(pStat.pAway-pElo.pAway))/2;
+  return clamp((1-tv)*100, 0, 100);
+}
+// EV = P_MODEL × cote - 1. Ne JAMAIS appeler avec une cote "interne" (1/p) — ça donnerait
+// toujours 0% par construction (voir legOddsFromRecord : c'est le rôle de l'appelant de ne
+// passer que des cotes issues du bookmaker, source==='bookmaker').
+function computeEV(pModel, odds){
+  if(!(odds>1) || pModel==null) return null;
+  return pModel*odds - 1;
+}
+
+/* ================================================================
+   EA-64 — MARKET VS MODEL
+   Compare la probabilité sportive du modèle au prix réellement saisi.
+   Aucun prix de marché n'est injecté dans P_MODEL.
+================================================================= */
+function computeMarketVsModel(pModel, marketOdds){
+  if(!(pModel>=0 && pModel<=1) || !(marketOdds>1)) return null;
+  const fairOdds = pModel>0 ? 1/pModel : null;
+  const impliedProb = 1/marketOdds;
+  const edgePts = (pModel-impliedProb)*100;
+  const ev = pModel*marketOdds-1;
+  return {
+    modelProb:pModel, marketOdds, fairOdds, impliedProb,
+    edgePts, ev,
+    priceGap: fairOdds!=null ? marketOdds-fairOdds : null,
+    version:'EA-64'
+  };
+}
+
+/* ================================================================
+   EA-65 — CLV / CLOSING LINE VALUE
+   Le calcul n'est activé que lorsque les deux cotes existent réellement.
+   CLV probabilité = probabilité implicite de clôture - probabilité implicite
+   d'entrée. Positif = la cote obtenue à l'entrée était meilleure que la clôture.
+================================================================= */
+function computeCLV(entryOdds, closingOdds){
+  if(!(entryOdds>1) || !(closingOdds>1)) return null;
+  const entryImplied=1/entryOdds, closingImplied=1/closingOdds;
+  return {
+    entryOdds, closingOdds,
+    entryImplied, closingImplied,
+    clvProbPts:(closingImplied-entryImplied)*100,
+    oddsMovePct:(closingOdds/entryOdds-1)*100,
+    version:'EA-65'
+  };
+}
+function refreshBetMarketMetrics(rec, idx){
+  const b=rec?.bets?.[idx]; if(!b) return;
+  const entry=Number(b.odds);
+  b.marketVsModel = Number.isFinite(entry) && entry>1 ? computeMarketVsModel(b.p,entry) : null;
+  const close=Number(b.closingOdds);
+  b.clv = b.marketVsModel && Number.isFinite(close) && close>1 ? computeCLV(entry,close) : null;
+}
+
+/* ================================================================
+   EA VALUE ENGINE v2 — évaluation par marché + bankroll.
+   Principe : une cote bookmaker n'entre JAMAIS dans P_MODEL. Elle sert
+   uniquement à calculer le prix, l'edge et l'EV. Les seuils sont volontairement
+   prudents et les mises sont plafonnées.
+================================================================= */
+const VALUE_ENGINE_VERSION = 'EA-VALUE-2.5.0';
+const VALUE_DEFAULT_BANKROLL = 500;
+const VALUE_MAX_STAKE_PCT = 0.02;
+const VALUE_KELLY_FRACTION = 0.25;
+function getValueBankroll(){
+  const n=parseFloat(localStorage.getItem('ea_bankroll')||VALUE_DEFAULT_BANKROLL);
+  return Number.isFinite(n)&&n>0?n:VALUE_DEFAULT_BANKROLL;
+}
+function setValueBankroll(v){
+  const n=parseFloat(v);
+  if(Number.isFinite(n)&&n>0) localStorage.setItem('ea_bankroll',String(n));
+}
+function computeKellyFraction(p, odds){
+  if(!(p>0&&p<1&&odds>1)) return 0;
+  const k=(p*odds-1)/(odds-1);
+  return Math.max(0,k);
+}
+function computeSuggestedStake(p, odds, dataQualityPct=100, modelAgreement=100){
+  const bankroll=getValueBankroll();
+  const k=computeKellyFraction(p,odds);
+  const qualityFactor=clamp((dataQualityPct??70)/100,0.35,1);
+  const agreementFactor=clamp((modelAgreement??70)/100,0.45,1);
+  const raw=bankroll*k*VALUE_KELLY_FRACTION*qualityFactor*agreementFactor;
+  const cap=bankroll*VALUE_MAX_STAKE_PCT;
+  const stake=Math.min(raw,cap);
+  return {bankroll,kelly:k,stake,stakePct:bankroll?stake/bankroll:0,cap};
+}
+function evaluateValueBet({p, odds, dataQualityPct, modelAgreement, uncertaintyHalf, marketType}){
+  if(!(odds>1) || !(p>=0&&p<=1)) return {decision:'NO_DATA', reason:'Cote bookmaker manquante ou invalide', ev:null, breakEven:null, edgePts:null, stake:null};
+  const ev=computeEV(p,odds), breakEven=computeBreakEven(odds), edgePts=p*100-breakEven;
+  const reasons=[];
+  if(dataQualityPct!=null && dataQualityPct<60) reasons.push(`qualité des données ${Math.round(dataQualityPct)}% < 60%`);
+  if(modelAgreement!=null && modelAgreement<65) reasons.push(`accord modèles ${Math.round(modelAgreement)}% < 65%`);
+  if(uncertaintyHalf!=null && uncertaintyHalf>9) reasons.push(`incertitude ±${uncertaintyHalf.toFixed(1)} pts trop large`);
+  if(ev<0) reasons.push(`EV ${fmtPctSigned(ev)} négative`);
+  if(ev<0.05) reasons.push(`EV ${fmtPctSigned(ev)} < seuil VALUE 5%`);
+  if(ev>0.12) reasons.push(`EV ${fmtPctSigned(ev)} > 12% : anomalie à vérifier`);
+  let decision='BET';
+  if(ev<0 || ev<0.05 || ev>0.12 || reasons.some(r=>/qualité|accord modèles|incertitude/.test(r))) decision='NO_BET';
+  else if(ev<0.08) decision='VALUE';
+  else decision='STRONG_VALUE';
+  const stake=decision==='NO_BET'?null:computeSuggestedStake(p,odds,dataQualityPct,modelAgreement);
+  return {decision,ev,breakEven,edgePts,reasons,stake,marketType,version:VALUE_ENGINE_VERSION};
+}
+// Break-even : la probabilité minimale pour que le pari soit à somme nulle sur cette cote
+// (section 59). "Probability edge" (en points) ≠ EV (en %) — les deux sont affichés côte à
+// côte pour ne jamais laisser croire que ce sont la même chose.
+function computeBreakEven(odds){
+  if(!(odds>1)) return null;
+  return (1/odds)*100;
+}
+// Paliers d'edge (section 60, version complète) : EV<0% et 0-3% sont TOUS LES DEUX du
+// NO BET, mais pour des raisons différentes (perte attendue vs edge trop fin pour couvrir
+// l'incertitude du modèle) — jamais fusionnés dans le même libellé. Une edge >12% n'est
+// jamais présentée comme un pari exceptionnel : c'est un signal à vérifier avant tout.
+function classifyEdge(ev){
+  if(ev==null) return {tier:'no_data', label:'Cote bookmaker non saisie', color:'var(--text-faint)'};
+  const pct = ev*100;
+  if(pct < 0) return {tier:'negative', label:'NO BET — EV négative', pct, color:'var(--red,#F2545B)'};
+  if(pct < 3) return {tier:'no_bet', label:'NO BET — edge trop fin', pct, color:'var(--text-faint)'};
+  if(pct < 5) return {tier:'watch', label:'WATCH', pct, color:'var(--text-dim)'};
+  if(pct < 8) return {tier:'value', label:'VALUE', pct, color:'var(--teal)'};
+  if(pct < 12) return {tier:'strong_value', label:'STRONG VALUE', pct, color:'var(--gold)'};
+  return {tier:'check_anomaly', label:'CHECK ANOMALY', pct, color:'var(--red,#F2545B)'};
+}
+// Incertitude autour de P_MODEL (section 50) : PAS un intervalle statistique rigoureux
+// (ça, c'est le rôle du futur backtest/Brier — chantier D) mais une largeur honnête basée
+// sur ce qu'on sait déjà mesurer maintenant : plus les données du match sont incomplètes et
+// plus le modèle statistique et l'Elo se contredisent, plus la fourchette s'élargit. Jamais
+// une fausse précision à 3 décimales, jamais une fourchette qui prétend être plus rigoureuse
+// qu'elle ne l'est — d'où le plancher à ±3 pts (aucun match n'est jamais parfaitement certain).
+function computeUncertainty({pModel, dataQualityPct, modelAgreement}){
+  const dataFactor = (100 - (dataQualityPct??50))/100 * 8;
+  const agreementFactor = modelAgreement!=null ? (100-modelAgreement)/100 * 6 : 3;
+  const half = clamp(4 + dataFactor + agreementFactor, 3, 15);
+  const central = pModel*100;
+  return {half, low: clamp(central-half,0.5,99.5), central, high: clamp(central+half,0.5,99.5)};
+}
+// Checklist anomalie (section 61) : jamais une vérification automatique (on ne peut pas
+// confirmer une composition d'équipe tout seul) — juste la liste de ce qu'il faut re-vérifier
+// soi-même avant de suivre un edge qui sort de l'ordinaire, affichée dès que CHECK ANOMALY
+// se déclenche.
+const ANOMALY_CHECKLIST = ['Cote correcte et toujours active ?','Bonne équipe / bon sens du match ?','Bonne compétition (phase, tour) ?','Date et heure du match correctes ?','Composition connue au moment de la cote ?','Absence importante non saisie ?','Données récentes (forme, blessures) à jour ?','Marché bien compris (ligne, side) ?'];
+// Qualité des données par match (version immédiate des 6 branches Ishikawa — voir aussi
+// la jauge agrégée dans BDEEA/Profil, qui elle regarde tout l'historique vérifié).
+function computeDataQualityLite(ishikawa){
+  if(!ishikawa) return null;
+  const total = ISHIKAWA_BRANCHES.length;
+  const complete = ISHIKAWA_BRANCHES.filter(b=>ishikawa[b.key]).length;
+  return (complete/total)*100;
+}
+// Le moteur NO BET (section 19/73) : jamais "edge>0 donc BET". Un OUI n'arrive que si edge,
+// qualité des données ET accord des modèles sont tous corrects — sinon NO BET, avec la
+// liste précise et lisible des raisons (jamais un refus muet ni une fausse confiance).
+function computeNoBetVerdict({ev, dataQualityPct, modelAgreement, uncertaintyHalf}={}){
+  const reasons=[];
+  if(ev==null) reasons.push('Cote bookmaker non saisie — EV non calculable');
+  else if(ev<0) reasons.push(`EV négative (${fmtPctSigned(ev)})`);
+  else if(ev<0.05) reasons.push(`EV trop faible (${fmtPctSigned(ev)}) — seuil VALUE 5%`);
+  else if(ev>0.12) reasons.push(`EV anormalement élevée (${fmtPctSigned(ev)}) — vérifier la donnée avant toute mise`);
+  if(dataQualityPct!=null && dataQualityPct<60) reasons.push(`qualité des données insuffisante (${Math.round(dataQualityPct)}%)`);
+  if(modelAgreement!=null && modelAgreement<65) reasons.push(`désaccord des modèles (${Math.round(modelAgreement)}%)`);
+  if(uncertaintyHalf!=null && uncertaintyHalf>9) reasons.push(`incertitude trop large (±${uncertaintyHalf.toFixed(1)} pts)`);
+  return {verdict: reasons.length?'NO_BET':'BET', reasons};
 }
 
 function applyStrengthToResult(pHome, pDraw, pAway, strengthGap){
@@ -4531,6 +5037,65 @@ function renderCompletenessBadge(elId, completeness){
   el.innerHTML = `<span class="completeness-badge ${cls}">${filled===total?'✓':'ⓘ'} Analyse basée sur ${filled}/${total} sources${missing.length && filled<total ? ` — manque : ${missing.join(', ')}` : ''}</span>`;
 }
 
+function fmtPctSigned(v){ return (v>=0?'+':'')+(v*100).toFixed(1)+'%'; }
+function renderValueProPanel(ctx){
+  const host = document.getElementById('valueProGe');
+  if(!host) return;
+  const {resultBet, resultOdds, resultEV, edgeInfo, noBetVerdict, dataQualityPct, modelAgreementPct, breakEvenPct, probabilityEdgePts, uncertainty, pHomeStat, pDrawStat, pAwayStat, pEloModel, pMarketModel, pHome, pDraw, pAway} = ctx;
+  const modelRows = `
+    <div style="font-size:10.5px; color:var(--text-faint); margin-bottom:5px;">Poisson+Dixon-Coles+Monte-Carlo : ${fmtPct(pHomeStat)} / ${fmtPct(pDrawStat)} / ${fmtPct(pAwayStat)}</div>
+    <div style="font-size:10.5px; color:var(--text-faint); margin-bottom:5px;">Elo pur : ${pEloModel?`${fmtPct(pEloModel.pHome)} / ${fmtPct(pEloModel.pDraw)} / ${fmtPct(pEloModel.pAway)}`:'non disponible'}</div>`;
+  const marketBlock = pMarketModel
+    ? `<div style="display:flex; justify-content:space-between; font-size:12px; margin-top:6px;"><span>P_MARKET (cotes, benchmark seul)</span><span style="color:var(--text-dim);">${fmtPct(pMarketModel.pHome)} / ${fmtPct(pMarketModel.pDraw)} / ${fmtPct(pMarketModel.pAway)}</span></div>`
+    : `<div style="font-size:10.5px; color:var(--text-faint); margin-top:6px;">P_MARKET : cotes non saisies — jamais requis, sert uniquement de comparaison si fourni</div>`;
+  const uncertaintyBlock = `<div style="display:flex; justify-content:space-between; font-size:10.5px; color:var(--text-faint); margin-top:8px;"><span>Incertitude — ${resultBet.label}</span><span>${fmtPct(resultBet.p)} [${uncertainty.low.toFixed(0)}–${uncertainty.high.toFixed(0)}%]</span></div>`;
+  const bankroll=getValueBankroll();
+  const resultStake=resultOdds.source==='bookmaker' ? computeSuggestedStake(resultBet.p,resultOdds.cote,dataQualityPct,modelAgreementPct) : null;
+  const stakeBlock=resultStake ? `<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:10.5px;color:var(--text-dim);"><b>Bankroll</b> <input id="eaBankrollInput" type="number" min=1 step=1 value="${bankroll}" style="width:90px;margin-left:6px;background:var(--ink);border:1px solid var(--line);color:var(--text);border-radius:5px;padding:4px 6px;"> · Mise suggérée: <b>${Math.round(resultStake.stake)} (${(resultStake.stakePct*100).toFixed(2)}%)</b> · plafond 2%</div>` : '';
+  const anomalyChecklist = edgeInfo.tier==='check_anomaly'
+    ? `<div style="margin-top:10px; padding:10px 12px; background:rgba(242,84,91,0.06); border:1px dashed var(--red,#F2545B); border-radius:8px;">
+        <div style="font-weight:700; color:var(--red,#F2545B); font-size:11.5px; margin-bottom:6px;">⚠️ Edge anormalement élevé — à vérifier avant tout :</div>
+        ${ANOMALY_CHECKLIST.map(c=>`<div style="font-size:10px; color:var(--text-dim); margin-bottom:2px;">☐ ${c}</div>`).join('')}
+      </div>` : '';
+  // WHY THIS BET / WHY NO BET (sections 74-75) : mêmes chiffres dans les deux cas — seule
+  // la conclusion change — pour que BET et NO BET soient expliqués avec la même rigueur,
+  // jamais un NO BET muet ni un BET qui ne dit pas pourquoi.
+  const whyLines = [
+    `P_MODEL : ${fmtPct(resultBet.p)}`,
+    resultOdds.source==='bookmaker' ? `Cote : ${resultOdds.cote.toFixed(2)}` : `Cote : non saisie`,
+    breakEvenPct!=null ? `Break-even : ${breakEvenPct.toFixed(1)}%` : null,
+    probabilityEdgePts!=null ? `Probability edge : ${probabilityEdgePts>=0?'+':''}${probabilityEdgePts.toFixed(1)} pts` : null,
+    resultEV!=null ? `EV : ${fmtPctSigned(resultEV)}` : null,
+    `Qualité des données : ${dataQualityPct!=null?Math.round(dataQualityPct)+'%':'n/d'}`,
+    `Accord des modèles : ${modelAgreementPct!=null?Math.round(modelAgreementPct)+'%':"n/d"}`,
+  ].filter(Boolean);
+  const verdictBanner = noBetVerdict.verdict==='NO_BET'
+    ? `<div style="margin-top:10px; padding:10px 12px; background:rgba(242,84,91,0.08); border:1px solid var(--red,#F2545B); border-radius:8px;">
+        <div style="font-weight:700; color:var(--red,#F2545B); font-size:12.5px; margin-bottom:6px;">🚫 NO BET — ${resultBet.label}</div>
+        ${whyLines.map(l=>`<div style="font-size:10px; color:var(--text-faint);">${l}</div>`).join('')}
+        <div style="margin-top:6px; padding-top:6px; border-top:1px dashed var(--line);"></div>
+        ${noBetVerdict.reasons.map(r=>`<div style="font-size:10.5px; color:var(--text-dim);">⚠️ ${r}</div>`).join('')}
+      </div>`
+    : `<div style="margin-top:10px; padding:10px 12px; background:rgba(110,231,183,0.08); border:1px solid var(--teal); border-radius:8px;">
+        <div style="font-weight:700; color:var(--teal); font-size:12.5px; margin-bottom:6px;">✓ ${edgeInfo.label} — ${resultBet.label}</div>
+        ${whyLines.map(l=>`<div style="font-size:10px; color:var(--text-faint);">${l}</div>`).join('')}
+      </div>`;
+  host.innerHTML = `
+    <div class="section-title">🧭 P_MODEL vs P_MARKET</div>
+    <div style="border:1px solid var(--line); border-radius:10px; padding:14px;">
+      ${modelRows}
+      <div style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:700; margin-top:6px; padding-top:6px; border-top:1px solid var(--line);"><span>P_MODEL (fusion stat+Elo, sans marché)</span><span>${fmtPct(pHome)} / ${fmtPct(pDraw)} / ${fmtPct(pAway)}</span></div>
+      ${marketBlock}
+      ${uncertaintyBlock}
+      ${stakeBlock}
+      <div style="display:flex; justify-content:space-between; font-size:10.5px; color:var(--text-faint);"><span>Accord des modèles</span><span>${modelAgreementPct!=null?Math.round(modelAgreementPct)+'%':"n/d (pas d'Elo)"}</span></div>
+      <div style="display:flex; justify-content:space-between; font-size:10.5px; color:var(--text-faint);"><span>Qualité des données (ce match)</span><span>${dataQualityPct!=null?Math.round(dataQualityPct)+'%':'n/d'}</span></div>
+      ${anomalyChecklist}
+      ${verdictBanner}
+    </div>`;
+  const bankInput=document.getElementById('eaBankrollInput');
+  if(bankInput) bankInput.addEventListener('change',()=>{ setValueBankroll(bankInput.value); renderValueProPanel(ctx); });
+}
 function runAnalysisGe(){
   const nameA=document.getElementById('nameA').value.trim()||'A', nameB=document.getElementById('nameB').value.trim()||'B';
   const totalEntries=Object.values(store).reduce((s,a)=>s+a.length,0);
@@ -4590,29 +5155,58 @@ function runAnalysisGe(){
   // seconde fois les marchés buts (over/under, BTTS, score exact restent pilotés uniquement
   // par lambdaA/lambdaB déjà ajustés en amont).
   const {pHome:pHomeStat, pDraw:pDrawStat, pAway:pAwayStat} = applyStrengthToResult(pHomeRaw, pDrawRaw, pAwayRaw, strengthGap);
-  // Ensemble final : le modèle statistique ci-dessus (Poisson+Dixon-Coles+Monte-Carlo, déjà
-  // recalé sur classement/Elo interne/forme/H2H) reste majoritaire, mais est désormais
-  // confirmé/nuancé par un modèle Elo indépendant et, si vous les avez saisies, par les
-  // cotes du bookmaker (marge retirée) — voir blendEnsembleProbabilities ci-dessus.
+  // Profil Ishikawa (6 branches) : capturé au moment de l'analyse, pas reconstruit après
+  // coup — sert à la fois de matière première à la jauge "Qualité des données" (BDEEA /
+  // Profil, sur tout l'historique) ET à la qualité de données immédiate de CE match
+  // (computeDataQualityLite), utilisée juste en dessous par le moteur NO BET.
+  // "force" compte comme complet même si l'Elo n'a pas été tapé mais que l'app reconnaît déjà
+  // l'équipe (force interne) — cohérent avec le repli déjà en place dans computeGeneseLambdas.
+  const ishikawa = {
+    histo: store.aSerie.length>0 && store.bSerie.length>0 && store.aDom.length>0 && store.bExt.length>0,
+    h2h: store.ab.length>0 || store.ba.length>0,
+    classement: standings.rankA!=null && standings.ptsA!=null && standings.rankB!=null && standings.ptsB!=null,
+    force: eloA!=null && eloB!=null,
+    avancees: (advStats.xgA!=null && advStats.xgB!=null) || (advStats.shotsA!=null && advStats.shotsB!=null) || (advStats.chancesA!=null && advStats.chancesB!=null),
+    marche: advStats.coteHome!=null && advStats.coteDraw!=null && advStats.coteAway!=null,
+  };
+
   const pEloModel = eloWinProbabilities(eloA, eloB);
+  // P_MARKET : calculé et affiché à part — ne descend plus JAMAIS dans P_MODEL ci-dessous.
   const pMarketModel = computeMarketProbabilities(advStats.coteHome, advStats.coteDraw, advStats.coteAway);
-  const {pHome, pDraw, pAway, usedElo:ensembleUsedElo, usedMarket:ensembleUsedMarket} = blendEnsembleProbabilities({pHome:pHomeStat, pDraw:pDrawStat, pAway:pAwayStat}, pEloModel, pMarketModel);
+  // P_MODEL : uniquement des modèles sportifs (statistique + Elo). Voir bloc EA VALUE PRO plus haut.
+  const {pHome, pDraw, pAway, usedElo:modelUsedElo} = computeModelProbability({pHome:pHomeStat, pDraw:pDrawStat, pAway:pAwayStat}, pEloModel);
+  const modelAgreementPct = computeModelAgreement({pHome:pHomeStat, pDraw:pDrawStat, pAway:pAwayStat}, pEloModel);
 
   const resultBet=pickResultMarket(pHome,pDraw,pAway,nameA,nameB);
+  // EV = P_MODEL (resultBet.p, jamais du marché) × VRAIE cote bookmaker - 1. legOddsFromRecord
+  // renvoie source==='interne' (repli 1/p) quand aucune cote n'a été saisie pour cette issue —
+  // dans ce cas on n'appelle pas computeEV, ça donnerait toujours 0% par construction et
+  // masquerait le vrai statut "cote non saisie".
+  const matchOddsForEV = (advStats.coteHome>1 && advStats.coteDraw>1 && advStats.coteAway>1) ? {home:advStats.coteHome, draw:advStats.coteDraw, away:advStats.coteAway} : null;
+  const resultOdds = legOddsFromRecord({odds:matchOddsForEV}, resultBet.eval, resultBet.p);
+  const resultEV = resultOdds.source==='bookmaker' ? computeEV(resultBet.p, resultOdds.cote) : null;
+  const edgeInfo = classifyEdge(resultEV);
+  const dataQualityPct = computeDataQualityLite(ishikawa);
+  const breakEvenPct = resultOdds.source==='bookmaker' ? computeBreakEven(resultOdds.cote) : null;
+  const probabilityEdgePts = breakEvenPct!=null ? (resultBet.p*100 - breakEvenPct) : null;
+  const uncertainty = computeUncertainty({pModel:resultBet.p, dataQualityPct, modelAgreement:modelAgreementPct});
+  const noBetVerdict = computeNoBetVerdict({ev:resultEV, dataQualityPct, modelAgreement:modelAgreementPct, uncertaintyHalf:uncertainty.half});
+
   const goalsBet={...pickGoalsLineMarket(lambdaA+lambdaB, matrix), cat:'buts'};
   const bttsBet= pBTTSyes>=pBTTSno ? {label:'Les deux équipes marquent', p:pBTTSyes, cat:'btts', eval:{type:'btts',side:'yes'}} : {label:'Au moins une équipe muette', p:pBTTSno, cat:'btts', eval:{type:'btts',side:'no'}};
 
   const chosen=[resultBet, goalsBet, bttsBet];
-  const cornersBet=pickCornersMarket(), shotsBet=pickShotsMarket();
+  const cornersBet=pickCornersMarket(), shotsBet=pickShotsMarket(), cardsBet=pickCardsMarket();
   if(cornersBet) chosen.push(cornersBet);
   if(shotsBet) chosen.push(shotsBet);
+  if(cardsBet) chosen.push(cardsBet);
   const fillers=[
     {label:'Plus de 1.5 buts', p:sumWhereMatrix(matrix,(a,b)=>a+b>=2), cat:'buts', eval:{type:'goalsLine',op:'over',line:1.5}},
     {label:`${nameA} ou nul (double chance)`, p:pHome+pDraw, cat:'résultat', eval:{type:'resultDC',outcomes:['A','draw']}},
     {label:`${nameB} ou nul (double chance)`, p:pAway+pDraw, cat:'résultat', eval:{type:'resultDC',outcomes:['B','draw']}},
   ].sort((a,b)=>b.p-a.p);
   for(const f of fillers){ if(chosen.length>=5) break; if(!chosen.some(c=>c.label===f.label)) chosen.push(f); }
-  const finalBets=applyMarketRecalibration('football', chosen.slice(0,5), matchFlags.league);
+  const finalBets=applyMarketRecalibration('football', chosen.slice(0,5), matchFlags.league).map(b=>({...b, valueMeta:{dataQualityPct, modelAgreementPct, uncertaintyHalf:computeUncertainty({pModel:b.p,dataQualityPct,modelAgreement:modelAgreementPct}).half, valueEngine:VALUE_ENGINE_VERSION}}));
 
   const engines=[
     {name:'Forme récente', on: store.aSerie.length>0||store.bSerie.length>0},
@@ -4636,7 +5230,7 @@ function runAnalysisGe(){
   document.getElementById('betsListGe').innerHTML = finalBets.map((b,i)=>`
     <div class="bet"><div class="bet-top"><div><span class="bet-name">${b.label}</span><br><span class="bet-cat">${b.cat}</span></div><div class="bet-pct">${fmtPct(b.p)}</div></div>
     <div class="gauge"><div class="ticks">${'<i></i>'.repeat(10)}</div><div class="fill" style="width:${(b.p*100).toFixed(1)}%; ${gaugeStyle(b.p)}"></div></div>
-    <div class="odds-row"><input type="number" step="0.01" min="1" class="odds-input-bet" placeholder="Cote bookmaker (optionnel)" data-rec="${recordId}" data-sport="football" data-idx="${i}"><span class="edge-out" id="edge-${recordId}-${i}"></span></div>
+    <div class="odds-row"><input type="number" step="0.01" min="1" class="odds-input-bet" placeholder="Cote entrée" data-rec="${recordId}" data-sport="football" data-idx="${i}" data-kind="entry"><input type="number" step="0.01" min="1" class="odds-input-bet closing-odds-input" placeholder="Cote clôture (après match)" data-rec="${recordId}" data-sport="football" data-idx="${i}" data-kind="closing"><span class="edge-out" id="edge-${recordId}-${i}"></span></div>
     </div>`).join('');
   requestAnimationFrame(()=>{ document.querySelectorAll('#betsListGe .gauge .fill').forEach(f=>{ const w=f.style.width; f.style.width='0%'; requestAnimationFrame(()=>f.style.width=w); }); });
 
@@ -4647,6 +5241,22 @@ function runAnalysisGe(){
   if(standings.rankA!=null && standings.totalTeams!=null) contextSentence += stakesSentence(nameA, standings.rankA, standings.totalTeams, phaseLabel, narrSeed) + ' ';
   if(standings.rankB!=null && standings.totalTeams!=null) contextSentence += stakesSentence(nameB, standings.rankB, standings.totalTeams, phaseLabel, narrSeed) + ' ';
   contextSentence += formeSentence(nameA, trendA, narrSeed) + ' ' + formeSentence(nameB, trendB, narrSeed) + ' ';
+  // Opponent Strength Adjustment (sections 37/43) : rendu transparent en une phrase plutôt
+  // qu'un chiffre caché — FORM RAW vs FORM ADJUSTED, uniquement quand la donnée existe.
+  if(aSerieAdj.applied){
+    const sens = aSerieAdj.factor<1 ? 'revue à la baisse (adversaires plutôt faibles)' : aSerieAdj.factor>1 ? 'revue à la hausse (adversaires plutôt forts)' : 'inchangée (niveau neutre)';
+    contextSentence += `Forme de ${nameA} ajustée à la force des adversaires affrontés : ${sens}. `;
+  }
+  if(bSerieAdj.applied){
+    const sens = bSerieAdj.factor<1 ? 'revue à la baisse (adversaires plutôt faibles)' : bSerieAdj.factor>1 ? 'revue à la hausse (adversaires plutôt forts)' : 'inchangée (niveau neutre)';
+    contextSentence += `Forme de ${nameB} ajustée à la force des adversaires affrontés : ${sens}. `;
+  }
+  // Fatigue calculée (section 40) : phrase transparente, correction toujours faible.
+  if(fatigueScoreA!=null && fatigueScoreA>=40) contextSentence += `Signal de fatigue notable pour ${nameA} (score ${fatigueScoreA}/100) : léger frein offensif attendu. `;
+  if(fatigueScoreB!=null && fatigueScoreB>=40) contextSentence += `Signal de fatigue notable pour ${nameB} (score ${fatigueScoreB}/100) : léger frein offensif attendu. `;
+  // Météo (section 41) : purement informatif, aucun impact sur lambda (voir computeWeatherImpact).
+  const weatherImpact = computeWeatherImpact({wind:matchFlags.weatherWind, rain:matchFlags.weatherRain, pitch:matchFlags.weatherPitch});
+  if(weatherImpact==='MEDIUM'||weatherImpact==='HIGH') contextSentence += `Conditions météo notées comme impact potentiel ${weatherImpact==='HIGH'?'ÉLEVÉ':'MOYEN'} (vent/pluie/terrain) : peut affecter le rythme, les tirs et les corners — aucune correction chiffrée appliquée faute de données historiques validées sur ce lien. `;
   contextSentence += scoringSentence(nameA, lambdaA, narrSeed) + ' ' + scoringSentence(nameB, lambdaB, narrSeed);
   const STAGE_LABELS = {poules:'phase de groupes', '32e':'32e de finale', '16e':'16e de finale', '8e':'8e de finale', quart:'quart de finale', demi:'demi-finale', finale:'finale'};
   if((matchFlags.matchType==='coupe'||matchFlags.matchType==='europe') && STAGE_LABELS[matchFlags.stage]){
@@ -4673,8 +5283,8 @@ function runAnalysisGe(){
     pBTTSyes,
     bestA: bestWorstResult(store.aSerie)?.best, worstA: bestWorstResult(store.aSerie)?.worst,
     bestB: bestWorstResult(store.bSerie)?.best, worstB: bestWorstResult(store.bSerie)?.worst,
-    aDomFor: avg(store.aDom,0), aSerieFor: avg(store.aSerie,0),
-    bExtFor: avg(store.bExt,0), bSerieFor: avg(store.bSerie,0),
+    aDomFor: avg(store.aDom,0), aSerieFor: aSerieFor, aSerieRaw: aSerieRaw, oppStrengthA: standings.oppStrengthA,
+    bExtFor: avg(store.bExt,0), bSerieFor: bSerieFor, bSerieRaw: bSerieRaw, oppStrengthB: standings.oppStrengthB,
     storeASerie: store.aSerie, storeBSerie: store.bSerie,
     trendA, trendB,
     contextSentence,
@@ -4704,7 +5314,7 @@ function runAnalysisGe(){
     rankA: standings.rankA, rankB: standings.rankB, ptsA: standings.ptsA, ptsB: standings.ptsB,
     zoneA, zoneB, phaseLabel, league: matchFlags.league,
     pHome, pDraw, pAway,
-    h2hCount: store.ab.length+store.ba.length, abFor: avg(store.ab,0)||0, baFor: avg(store.ba,0)||0,
+    h2hCount: store.ab.length+store.ba.length, abFor: weightedRecentAvg(store.ab,0,H2H_DECAY_WEIGHTS)||0, baFor: weightedRecentAvg(store.ba,0,H2H_DECAY_WEIGHTS)||0,
     aDomAg: avg(store.aDom,1), bExtAg: avg(store.bExt,1),
     xgA: advStats.xgA, xgB: advStats.xgB, shotsA: advStats.shotsA, shotsB: advStats.shotsB,
     possA: advStats.possA, possB: advStats.possB,
@@ -4713,6 +5323,7 @@ function runAnalysisGe(){
   const insightsHtml = `<div class="insights-block">${buildFootballInsights(insightsCtx)}</div>`;
 
   document.getElementById('interpTextGe').innerHTML = `${avertissementTxt}${fragilityTxt}${insightsHtml}`;
+  renderValueProPanel({resultBet, resultOdds, resultEV, edgeInfo, noBetVerdict, dataQualityPct, modelAgreementPct, breakEvenPct, probabilityEdgePts, uncertainty, pHomeStat, pDrawStat, pAwayStat, pEloModel, pMarketModel, pHome, pDraw, pAway});
 
 
   document.getElementById('emptyStateGe').style.display='none';
@@ -4721,19 +5332,6 @@ function runAnalysisGe(){
   resultsGeEl.classList.remove('reveal'); void resultsGeEl.offsetWidth; resultsGeEl.classList.add('reveal');
   try{ AudioFX.reveal(); }catch(e){}
 
-  // Profil Ishikawa (6 branches) : capturé au moment de l'analyse, pas reconstruit après
-  // coup — sert de matière première à la jauge "Qualité des données" (voir BDEEA / Profil).
-  // "force" compte comme complet même si l'Elo n'a pas été tapé mais que l'app reconnaît déjà
-  // l'équipe (force interne) — cohérent avec le repli déjà en place dans computeGeneseLambdas.
-  const ishikawa = {
-    histo: store.aSerie.length>0 && store.bSerie.length>0 && store.aDom.length>0 && store.bExt.length>0,
-    h2h: store.ab.length>0 || store.ba.length>0,
-    classement: standings.rankA!=null && standings.ptsA!=null && standings.rankB!=null && standings.ptsB!=null,
-    force: eloA!=null && eloB!=null,
-    avancees: (advStats.xgA!=null && advStats.xgB!=null) || (advStats.shotsA!=null && advStats.shotsB!=null) || (advStats.chancesA!=null && advStats.chancesB!=null),
-    marche: advStats.coteHome!=null && advStats.coteDraw!=null && advStats.coteAway!=null,
-  };
-
   addRecord('football', {
     id: recordId, timestamp: Date.now(), nameA, nameB,
     league: matchFlags.league||'',
@@ -4741,8 +5339,15 @@ function runAnalysisGe(){
     lambdaA: +lambdaA.toFixed(2), lambdaB: +lambdaB.toFixed(2),
     components, contextSentence, convictionIdx, ishikawa,
     odds: (advStats.coteHome>1 && advStats.coteDraw>1 && advStats.coteAway>1) ? {home:advStats.coteHome, draw:advStats.coteDraw, away:advStats.coteAway} : null,
+    valuePro: {
+      engineVersion: VALUE_ENGINE_VERSION,
+      pModel: {pHome, pDraw, pAway}, pMarket: pMarketModel,
+      resultPick: resultBet.label, resultEV, edgeTier: edgeInfo.tier,
+      breakEvenPct, probabilityEdgePts, uncertainty,
+      dataQualityPct, modelAgreementPct, noBetVerdict,
+    },
     topScores: top2.map(s=>({label:`${s.a}-${s.b}`, p:s.p, eval:{type:'exactScore', a:s.a, b:s.b}})),
-    bets: finalBets.map(b=>({label:b.label, p:b.p, cat:b.cat, eval:b.eval})),
+    bets: finalBets.map(b=>({label:b.label, p:b.p, cat:b.cat, eval:b.eval, valueMeta:b.valueMeta})),
   });
   lastRecordGe = DB.football[0];
   const cpBtnGe = document.getElementById('communityPublishBtnGe');
@@ -4762,7 +5367,7 @@ const BK_CATS = [
   {key:'ba', label:'B VS A', tag:'H2H', ph:'98-108'},
 ];
 const bkStore={aSerie:[],aDom:[],bSerie:[],bExt:[],ab:[],ba:[]};
-const bkStandings={rankA:null,ptsA:null,rankB:null,ptsB:null,totalTeams:null,matchday:null,eloA:null,eloB:null};
+const bkStandings={rankA:null,ptsA:null,rankB:null,ptsB:null,totalTeams:null,matchday:null,eloA:null,eloB:null,oppStrengthA:null,oppStrengthB:null};
 const bkAdv={fgA:null,threeA:null,rebA:null,astA:null,tovA:null, fgB:null,threeB:null,rebB:null,astB:null,tovB:null};
 
 const bkFieldsEl=document.getElementById('bkFields');
@@ -4797,7 +5402,7 @@ function bkUpdateRankPreview(prefix){
   if(rank==null||total==null||total<2){ el.textContent=''; return; }
   const z=zoneInfo(rank,total); el.textContent=`${ordinal(rank)} / ${total} — ${z?z.short:''}`;
 }
-['rankA','ptsA','rankB','ptsB','totalTeams','eloA','eloB'].forEach(id=>{
+['rankA','ptsA','rankB','ptsB','totalTeams','eloA','eloB','oppStrengthA','oppStrengthB'].forEach(id=>{
   document.getElementById('bk'+id.charAt(0).toUpperCase()+id.slice(1)).addEventListener('input', e=>{
     bkStandings[id]= e.target.value===''?null:parseFloat(e.target.value); bkUpdateRankPreview('A'); bkUpdateRankPreview('B');
   });
@@ -4854,7 +5459,8 @@ document.getElementById('bkAutoFillBtnA').addEventListener('click', ()=>autoFill
 document.getElementById('bkAutoFillBtnB').addEventListener('click', ()=>autoFillBasketballTeam('B'));
 
 const bkMatchFlags = {matchType:'championnat', league:'', stage:'poules', leg:'sec', aggAllerA:null, aggAllerB:null, injuryA:false, fatigueA:false, uncertainA:false, injuryB:false, fatigueB:false, uncertainB:false, absA:0, absB:0,
-  injurySeverityA:'modere', fatigueSeverityA:'modere', uncertainSeverityA:'modere', injurySeverityB:'modere', fatigueSeverityB:'modere', uncertainSeverityB:'modere'};
+  injurySeverityA:'modere', fatigueSeverityA:'modere', uncertainSeverityA:'modere', injurySeverityB:'modere', fatigueSeverityB:'modere', uncertainSeverityB:'modere',
+  restDaysA:null, matches7dA:null, restDaysB:null, matches7dB:null};
 // Degré de gravité (faible/modéré/élevé) pour chaque marqueur contextuel — permet de préciser
 // à quel point la blessure/fatigue/doute pèse sur l'équipe (ex: absence d'un titulaire clé
 // vs simple rotation) plutôt qu'un impact fixe pour toute case cochée.
@@ -4900,6 +5506,9 @@ document.getElementById('leagueBk').addEventListener('input', e=>{
 ['absA','absB'].forEach(id=>{
   document.getElementById('bk'+id.charAt(0).toUpperCase()+id.slice(1)).addEventListener('input', e=>{ bkMatchFlags[id] = e.target.value===''?0:parseInt(e.target.value,10)||0; });
 });
+[['restDaysBkA','restDaysA'],['matches7dBkA','matches7dA'],['restDaysBkB','restDaysB'],['matches7dBkB','matches7dB']].forEach(([id,key])=>{
+  document.getElementById(id).addEventListener('input', e=>{ bkMatchFlags[key] = e.target.value===''?null:parseFloat(e.target.value); });
+});
 function syncTeamLabelsBk(){
   const a=document.getElementById('bkNameA').value.trim()||'A', b=document.getElementById('bkNameB').value.trim()||'B';
   document.getElementById('bkStNameA').textContent=a; document.getElementById('bkStNameB').textContent=b;
@@ -4917,7 +5526,7 @@ document.getElementById('advToggleBk').addEventListener('click', ()=>{
 });
 document.getElementById('bkResetBtn').addEventListener('click', ()=>{
   BK_CATS.forEach(c=>{ bkStore[c.key]=[]; bkRenderChips(c.key); });
-  ['rankA','ptsA','rankB','ptsB','totalTeams','eloA','eloB'].forEach(id=>{ document.getElementById('bk'+id.charAt(0).toUpperCase()+id.slice(1)).value=''; bkStandings[id]=null; });
+  ['rankA','ptsA','rankB','ptsB','totalTeams','eloA','eloB','oppStrengthA','oppStrengthB'].forEach(id=>{ document.getElementById('bk'+id.charAt(0).toUpperCase()+id.slice(1)).value=''; bkStandings[id]=null; });
   document.getElementById('bkMatchday').value=''; bkStandings.matchday=null;
   document.getElementById('bkRankPreviewA').textContent=''; document.getElementById('bkRankPreviewB').textContent='';
   BK_ADV_FIELDS.forEach(key=>{ document.getElementById(BK_ADV_ID_MAP[key]).value=''; bkAdv[key]=null; });
@@ -4963,9 +5572,13 @@ function bkAggregateAdjustment(leg, aggAllerA, aggAllerB, league){
 
 function computeBasketPoints(){
   const aDomFor=avg(bkStore.aDom,0), aDomAg=avg(bkStore.aDom,1);
-  const aSerieFor=avg(bkStore.aSerie,0), abFor=avg(bkStore.ab,0);
+  const aSerieRaw=weightedRecentAvg(bkStore.aSerie,0);
+  const aSerieAdj=applyOpponentStrengthAdjustment(aSerieRaw, bkStandings.oppStrengthA);
+  const aSerieFor=aSerieAdj.adjusted, abFor=weightedRecentAvg(bkStore.ab,0,H2H_DECAY_WEIGHTS);
   const bExtFor=avg(bkStore.bExt,0), bExtAg=avg(bkStore.bExt,1);
-  const bSerieFor=avg(bkStore.bSerie,0), baFor=avg(bkStore.ba,0);
+  const bSerieRaw=weightedRecentAvg(bkStore.bSerie,0);
+  const bSerieAdj=applyOpponentStrengthAdjustment(bSerieRaw, bkStandings.oppStrengthB);
+  const bSerieFor=bSerieAdj.adjusted, baFor=weightedRecentAvg(bkStore.ba,0,H2H_DECAY_WEIGHTS);
   const Wbk = loadAdaptiveWeights('basketball', bkMatchFlags.league);
   let ptsA=weightedLambda([{v:aDomFor,w:Wbk.domicile},{v:aSerieFor,w:Wbk.serie},{v:abFor,w:Wbk.h2h},{v:bExtAg,w:Wbk.defense_adverse}]);
   let ptsB=weightedLambda([{v:bExtFor,w:Wbk.domicile},{v:bSerieFor,w:Wbk.serie},{v:baFor,w:Wbk.h2h},{v:aDomAg,w:Wbk.defense_adverse}]);
@@ -4979,9 +5592,14 @@ function computeBasketPoints(){
   // nombre de matchs déjà vérifiés par la communauté (plafonné à 35%). Le champ s'appelle
   // "avgHomeGoals/avgAwayGoals" côté serveur (généré par la même fonction que le football)
   // mais représente ici des POINTS, pas des buts — la mécanique de calcul est identique.
+  // Parité avec le football : l'ancrage ligue doit lui aussi être réduit en coupe/Europe
+  // (deux championnats différents n'ont pas la même moyenne de points de référence — avant,
+  // ce plafond restait à 0.35 quoi qu'il arrive, contrairement au football).
+  const bkHeterogeneousComp = (bkMatchFlags.matchType==='europe' || bkMatchFlags.matchType==='coupe');
   const leagueStats = getCachedLeagueStats('basketball', bkMatchFlags.league);
   if(leagueStats && ptsA!==null && ptsB!==null){
-    const leagueWeight = Math.min(0.35, leagueStats.n/30);
+    const leagueWeightCapBk = bkHeterogeneousComp ? 0.12 : 0.35;
+    const leagueWeight = Math.min(leagueWeightCapBk, leagueStats.n/30);
     ptsA = ptsA*(1-leagueWeight) + leagueStats.avgHomeGoals*leagueWeight;
     ptsB = ptsB*(1-leagueWeight) + leagueStats.avgAwayGoals*leagueWeight;
   }
@@ -4997,25 +5615,36 @@ function computeBasketPoints(){
   const strengthGap = computeStrengthGap({qualityIdx, eloIdx:eIdx, trendDiffIdx, abFor, baFor, h2hCount: bkStore.ab.length+bkStore.ba.length, aDomAg, bExtAg});
   let totalAdj=0;
   if(ptsA!==null && ptsB!==null){
-    const dynCap = clamp(0.18 + Math.abs(strengthGap)*0.22, 0.18, 0.40);
-    // Poids réalignés sur ceux de computeStrengthGap (classement .28, Elo .22, H2H .20,
-    // défense .18, forme .12) : classement et Elo redeviennent les signaux dominants au lieu
-    // de peser .05 chacun contre .10 pour l'enjeu — voir le même correctif côté football.
-    totalAdj = clamp(qualityIdx*.16 + eIdx*.14 + enjeuIdx*.08 + trendDiffIdx*.04 + h2hGapBk*.10 + defGapBk*.08, -dynCap, dynCap);
-    if(bkMatchFlags.matchType==='coupe') totalAdj *= 0.7; // playoffs/coupe : classement saison régulière moins transposable
+    // Parité avec le football : palier "blowout" au-delà de |strengthGap| > 0.65, mis à
+    // l'échelle des points (base/plafond plus bas qu'au football car l'écart de points d'un
+    // blowout basket se voit déjà bien avec des multiplicateurs plus modestes).
+    const dynCapBase = clamp(0.18 + Math.abs(strengthGap)*0.22, 0.18, 0.40);
+    const blowoutExtraBk = Math.max(0, Math.abs(strengthGap)-0.65) * 0.68;
+    const dynCap = clamp(dynCapBase + blowoutExtraBk, 0.18, 0.60);
+    // Parité avec le football : le classement/enjeu (peu fiable entre deux championnats
+    // différents) est amorti spécifiquement en coupe ET en Europe — avant, seul 'coupe'
+    // déclenchait un amortissement, et il écrasait TOUT le totalAdj (y compris Elo/H2H/
+    // défense, pourtant comparables d'une compétition à l'autre).
+    const classementFactorBk = bkHeterogeneousComp ? 0.5 : 1;
+    totalAdj = clamp(qualityIdx*.16*classementFactorBk + eIdx*.14 + enjeuIdx*.08*classementFactorBk + trendDiffIdx*.04 + h2hGapBk*.10 + defGapBk*.08, -dynCap, dynCap);
     ptsA = Math.max(60, ptsA*(1+totalAdj)); ptsB = Math.max(60, ptsB*(1-totalAdj));
   }
+  const fatigueScoreA = computeFatigueScore({restDays:bkMatchFlags.restDaysA, matches7d:bkMatchFlags.matches7dA, matches14d:null, extraTime:false});
+  const fatigueScoreB = computeFatigueScore({restDays:bkMatchFlags.restDaysB, matches7d:bkMatchFlags.matches7dB, matches14d:null, extraTime:false});
+  const fatigueImpactA = fatigueLambdaImpact(fatigueScoreA), fatigueImpactB = fatigueLambdaImpact(fatigueScoreB);
   if(ptsA!==null){
     if(bkMatchFlags.injuryA) ptsA *= BK_SEVERITY_MULT.injury[bkMatchFlags.injurySeverityA];
     if(bkMatchFlags.fatigueA) ptsA *= BK_SEVERITY_MULT.fatigue[bkMatchFlags.fatigueSeverityA];
     if(bkMatchFlags.uncertainA) ptsA *= BK_SEVERITY_MULT.uncertain[bkMatchFlags.uncertainSeverityA];
     ptsA *= absenceAdjustment(bkMatchFlags.absA);
+    ptsA *= fatigueImpactA.attackMult; ptsA *= fatigueImpactB.concedeMult;
   }
   if(ptsB!==null){
     if(bkMatchFlags.injuryB) ptsB *= BK_SEVERITY_MULT.injury[bkMatchFlags.injurySeverityB];
     if(bkMatchFlags.fatigueB) ptsB *= BK_SEVERITY_MULT.fatigue[bkMatchFlags.fatigueSeverityB];
     if(bkMatchFlags.uncertainB) ptsB *= BK_SEVERITY_MULT.uncertain[bkMatchFlags.uncertainSeverityB];
     ptsB *= absenceAdjustment(bkMatchFlags.absB);
+    ptsB *= fatigueImpactB.attackMult; ptsB *= fatigueImpactA.concedeMult;
   }
   const bkStageIsKO = bkMatchFlags.matchType==='coupe' || bkMatchFlags.matchType==='europe';
   const bkStageAdj = bkStageIsKO ? bkStageAdjustment(bkMatchFlags.stage, bkMatchFlags.league) : {goalDamp:1, sigmaDamp:1, tensionUsed:1};
@@ -5158,7 +5787,7 @@ function runAnalysisBk(){
   document.getElementById('betsListBk').innerHTML = finalBets.map((b,i)=>`
     <div class="bet"><div class="bet-top"><div><span class="bet-name">${b.label}</span><br><span class="bet-cat">${b.cat}</span></div><div class="bet-pct">${fmtPct(b.p)}</div></div>
     <div class="gauge"><div class="ticks">${'<i></i>'.repeat(10)}</div><div class="fill" style="width:${(b.p*100).toFixed(1)}%; ${gaugeStyle(b.p)}"></div></div>
-    <div class="odds-row"><input type="number" step="0.01" min="1" class="odds-input-bet" placeholder="Cote bookmaker (optionnel)" data-rec="${recordIdBk}" data-sport="basketball" data-idx="${i}"><span class="edge-out" id="edge-${recordIdBk}-${i}"></span></div>
+    <div class="odds-row"><input type="number" step="0.01" min="1" class="odds-input-bet" placeholder="Cote entrée" data-rec="${recordIdBk}" data-sport="basketball" data-idx="${i}" data-kind="entry"><input type="number" step="0.01" min="1" class="odds-input-bet closing-odds-input" placeholder="Cote clôture (après match)" data-rec="${recordIdBk}" data-sport="basketball" data-idx="${i}" data-kind="closing"><span class="edge-out" id="edge-${recordIdBk}-${i}"></span></div>
     </div>`).join('');
   requestAnimationFrame(()=>{ document.querySelectorAll('#betsListBk .gauge .fill').forEach(f=>{ const w=f.style.width; f.style.width='0%'; requestAnimationFrame(()=>f.style.width=w); }); });
 
@@ -5172,6 +5801,16 @@ function runAnalysisBk(){
   }
   if(aggregateNote) contextSentence += ` ${aggregateNote}`;
   if(eloIdx!==0){ const eloFav=eloIdx>0?nameA:nameB; contextSentence += ` L'écart Elo confirme ${eloFav} comme favori.`; }
+  if(aSerieAdj.applied){
+    const sensBk = aSerieAdj.factor<1 ? 'revue à la baisse (adversaires plutôt faibles)' : aSerieAdj.factor>1 ? 'revue à la hausse (adversaires plutôt forts)' : 'inchangée (niveau neutre)';
+    contextSentence += ` Forme de ${nameA} ajustée à la force des adversaires affrontés : ${sensBk}.`;
+  }
+  if(bSerieAdj.applied){
+    const sensBk = bSerieAdj.factor<1 ? 'revue à la baisse (adversaires plutôt faibles)' : bSerieAdj.factor>1 ? 'revue à la hausse (adversaires plutôt forts)' : 'inchangée (niveau neutre)';
+    contextSentence += ` Forme de ${nameB} ajustée à la force des adversaires affrontés : ${sensBk}.`;
+  }
+  if(fatigueScoreA!=null && fatigueScoreA>=40) contextSentence += ` Signal de fatigue notable pour ${nameA} (score ${fatigueScoreA}/100) : léger frein offensif attendu.`;
+  if(fatigueScoreB!=null && fatigueScoreB>=40) contextSentence += ` Signal de fatigue notable pour ${nameB} (score ${fatigueScoreB}/100) : léger frein offensif attendu.`;
 
   const meilleur=[...finalBets].sort((a,b)=>b.p-a.p)[0];
   const dogTeam = favTeam===nameA ? nameB : nameA;
@@ -5180,8 +5819,8 @@ function runAnalysisBk(){
     nameA, nameB, ptsA, ptsB, favTeam, dogTeam, favP,
     bestA: bestWorstResult(bkStore.aSerie)?.best, worstA: bestWorstResult(bkStore.aSerie)?.worst,
     bestB: bestWorstResult(bkStore.bSerie)?.best, worstB: bestWorstResult(bkStore.bSerie)?.worst,
-    aDomFor: avg(bkStore.aDom,0), aSerieFor: avg(bkStore.aSerie,0),
-    bExtFor: avg(bkStore.bExt,0), bSerieFor: avg(bkStore.bSerie,0),
+    aDomFor: avg(bkStore.aDom,0), aSerieFor: aSerieFor, aSerieRaw: aSerieRaw, oppStrengthA: bkStandings.oppStrengthA,
+    bExtFor: avg(bkStore.bExt,0), bSerieFor: bSerieFor, bSerieRaw: bSerieRaw, oppStrengthB: bkStandings.oppStrengthB,
     contextSentence,
     s0: `${scoreBrackets[0].a}-${scoreBrackets[0].b}`,
     bestBetLabel: meilleur.label.toLowerCase(), bestBetP: meilleur.p,
@@ -5210,7 +5849,7 @@ function runAnalysisBk(){
     rankA: bkStandings.rankA, rankB: bkStandings.rankB, ptsAst: bkStandings.ptsA, ptsBst: bkStandings.ptsB,
     zoneA, zoneB, phaseLabel,
     pWinA, pWinB, favP, favTeam,
-    h2hCount: bkStore.ab.length+bkStore.ba.length, abFor: avg(bkStore.ab,0)||0, baFor: avg(bkStore.ba,0)||0,
+    h2hCount: bkStore.ab.length+bkStore.ba.length, abFor: weightedRecentAvg(bkStore.ab,0,H2H_DECAY_WEIGHTS)||0, baFor: weightedRecentAvg(bkStore.ba,0,H2H_DECAY_WEIGHTS)||0,
     bkSerieA: bkStore.aSerie, bkSerieB: bkStore.bSerie,
     absencesTxt: absencesTxtBk.trim(),
   };
@@ -5333,6 +5972,57 @@ function renderHistory(){
     </div>`;
   }).join('') : `<div class="summary-card" style="flex:2; min-width:220px;"><div class="lbl" style="font-size:11px; line-height:1.5;">Aucun résultat vérifié pour l'instant — entrez le score final d'un match ci-dessous pour commencer à construire votre bilan réel, segmenté par type de pari.</div></div>`;
 
+
+  const advCal = computeAdvancedCalibration(sport, selectedLeague||null);
+  const valPerf = computeVerifiedValuePerformance(sport, selectedLeague||null);
+  const valStatus = valueSampleStatus(valPerf?.n||0);
+  // Section 10/55/56/57 : bloc Walk-Forward Backtest — ROI/yield/hit rate/drawdown déjà
+  // walk-forward par construction (chaque P_MODEL a été figé au moment de l'analyse, jamais
+  // recalculé avec des données futures), mais désormais aussi trié et vérifié chronologiquement
+  // (voir computeVerifiedValuePerformance), avec ventilation edge/marché/championnat.
+  const edgeBucketsHtml = valPerf && valPerf.byEdge.some(b=>b.n>0) ? `
+    <div style="margin-top:10px; font-family:'IBM Plex Mono',monospace; font-size:10px;">
+      <div style="color:var(--text-faint); text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px;">ROI réel par tranche d'edge (section 29)</div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px;">
+        ${valPerf.byEdge.filter(b=>b.n>0).map(b=>`<span class="engine-badge on" style="color:${b.roi>=0?'var(--teal)':'var(--red,#F2545B)'};">${b.label} · N=${b.n} · ROI ${fmtPctSigned(b.roi)}</span>`).join('')}
+      </div>
+    </div>` : '';
+  const byLeagueEntries = valPerf ? Object.entries(valPerf.byLeague).filter(([,g])=>g.n>=5) : [];
+  const byLeagueHtml = byLeagueEntries.length ? `
+    <div style="margin-top:10px; font-family:'IBM Plex Mono',monospace; font-size:10px;">
+      <div style="color:var(--text-faint); text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px;">ROI par championnat, N≥5 (section 57)</div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px;">
+        ${byLeagueEntries.map(([lg,g])=>`<span class="engine-badge on" style="color:${g.roi>=0?'var(--teal)':'var(--red,#F2545B)'};">${lg} · N=${g.n} · ROI ${fmtPctSigned(g.roi)}</span>`).join('')}
+      </div>
+    </div>` : '';
+  const walkForwardBadge = valPerf ? `
+    <div style="margin-top:8px; font-size:9.5px; color:${valPerf.chronologicalOk?'var(--teal)':'var(--red,#F2545B)'};">
+      ${valPerf.chronologicalOk?'✓':'⚠'} Walk-forward vérifié : ${valPerf.n} paris triés chronologiquement du ${new Date(valPerf.firstDate).toLocaleDateString('fr-FR')} au ${new Date(valPerf.lastDate).toLocaleDateString('fr-FR')} — chaque probabilité a été figée au moment de l'analyse, jamais recalculée avec des données ultérieures.${valPerf.avgCLV!=null?` CLV moyen : ${valPerf.avgCLV>=0?'+':''}${valPerf.avgCLV.toFixed(1)}%.`:''}
+    </div>` : '';
+  const valueAuditHtml = valPerf ? `
+    <div class="summary-card" style="flex:2; min-width:260px; border-color:${valPerf.roi>=0?'var(--teal)':'var(--red,#F2545B)'};">
+      <div class="lbl" style="font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:8px;">💰 Walk-Forward Backtest — cotes réellement vérifiées</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:11px;">
+        <span>ROI <b style="color:${valPerf.roi>=0?'var(--teal)':'var(--red,#F2545B)'}">${fmtPctSigned(valPerf.roi)}</b></span>
+        <span>Hit <b>${fmtPct(valPerf.hitRate)}</b></span>
+        <span>EV moy. <b>${fmtPctSigned(valPerf.avgEV)}</b></span>
+        <span>DD max <b>-${(valPerf.maxDrawdown*100).toFixed(1)}%</b></span>
+      </div>
+      <div style="font-size:9.5px;color:${valStatus.color};margin-top:7px;">${valStatus.label} · N=${valPerf.n}. Les paris sans cote bookmaker vérifiée sont exclus.</div>
+      ${walkForwardBadge}
+      ${edgeBucketsHtml}
+      ${byLeagueHtml}
+    </div>` : `
+    <div class="summary-card" style="flex:2; min-width:260px; border-color:var(--text-faint);">
+      <div class="lbl" style="font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;">💰 Walk-Forward Backtest</div>
+      <div style="font-size:10.5px;color:var(--text-faint);margin-top:7px;line-height:1.5;">Aucun pari avec cote bookmaker vérifiée. Le système ne transforme pas les probabilités internes en faux ROI.</div>
+    </div>`;
+  const advancedCalHtml = advCal ? `<div class="summary-card" style="flex:2;min-width:260px;">
+    <div class="lbl" style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">🧪 Calibration avancée</div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:11px;"><span>Brier <b>${advCal.brier.toFixed(4)}</b></span><span>Log Loss <b>${advCal.logloss.toFixed(4)}</b></span><span>ECE <b>${(advCal.ece*100).toFixed(1)} pts</b></span></div>
+    <div style="font-size:9.5px;color:var(--text-faint);margin-top:7px;">N=${advCal.n}. Plus bas est préférable pour Brier, Log Loss et ECE.</div>
+  </div>` : '';
+
   const rhoInfo = sport==='football' ? calibrateRho('football', selectedLeague||null) : null;
   const rhoHtml = rhoInfo ? `<div class="summary-card" style="border-color:var(--violet-dim,var(--violet));"><div class="num" style="color:var(--violet); font-size:20px;">${rhoInfo.rho}</div><div class="lbl">ρ Dixon-Coles ${rhoInfo.calibrated?(rhoInfo.scopedToLeague?`auto-calibré (${selectedLeague})`:'auto-calibré (global)'):`(défaut — ${rhoInfo.n}/${rhoInfo.needed} vérifiés)`}</div></div>` : '';
 
@@ -5362,6 +6052,8 @@ function renderHistory(){
     <div class="summary-card"><div class="num" style="color:var(--gold)">${safeCount}</div><div class="lbl">Safe Bets identifiés</div></div>
     <div class="summary-card"><div class="num" style="color:var(--sky)">${valueCount}</div><div class="lbl">Value Bets identifiés</div></div>
     <div class="summary-card"><div class="num" style="color:var(--violet)">${scoreCount}</div><div class="lbl">Scores forts identifiés</div></div>
+    ${valueAuditHtml}
+    ${advancedCalHtml}
     ${leagueSelectHtml}
     ${rhoHtml}
     ${stageHtml}
@@ -5387,12 +6079,14 @@ function renderHistory(){
     ` : (()=>{
       const hasCorners = r.bets.some(b=>b.eval && b.eval.type==='statLine' && b.eval.stat==='corners');
       const hasShots = r.bets.some(b=>b.eval && b.eval.type==='statLine' && b.eval.stat==='shots');
-      const statInputs = (hasCorners||hasShots) ? `
+      const hasCards = r.bets.some(b=>b.eval && b.eval.type==='statLine' && b.eval.stat==='cards');
+      const statInputs = (hasCorners||hasShots||hasCards) ? `
         <div class="rc-result-form" style="border-top:none; margin-top:8px; padding-top:0;">
           ${hasCorners ? `<input type="number" placeholder="Corners réels" class="rc-score-input" style="width:110px;" id="rcCorners-${r.id}">` : ''}
           ${hasShots ? `<input type="number" placeholder="Tirs cadrés réels" class="rc-score-input" style="width:130px;" id="rcShots-${r.id}">` : ''}
+          ${hasCards ? `<input type="number" placeholder="Cartons réels" class="rc-score-input" style="width:110px;" id="rcCards-${r.id}">` : ''}
         </div>
-        <p style="font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--text-faint); margin:2px 0 0;">Optionnel : renseigner ces totaux rend les paris corners/tirs cadrés réellement vérifiables (sinon ils restent non évalués).</p>
+        <p style="font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--text-faint); margin:2px 0 0;">Optionnel : renseigner ces totaux rend les paris corners/tirs cadrés/cartons réellement vérifiables (sinon ils restent non évalués).</p>
       ` : '';
       return `
       <div class="rc-result-form">
@@ -5422,9 +6116,11 @@ function renderHistory(){
       if(aVal===''||bVal===''){ try{AudioFX.error();}catch(e){} return; }
       const cornersEl = document.getElementById(`rcCorners-${id}`);
       const shotsEl = document.getElementById(`rcShots-${id}`);
+      const cardsEl = document.getElementById(`rcCards-${id}`);
       const finalStats = {};
       if(cornersEl && cornersEl.value!=='') finalStats.corners = parseInt(cornersEl.value,10);
       if(shotsEl && shotsEl.value!=='') finalStats.shots = parseInt(shotsEl.value,10);
+      if(cardsEl && cardsEl.value!=='') finalStats.cards = parseInt(cardsEl.value,10);
       markResult(sp, id, parseInt(aVal,10), parseInt(bVal,10), finalStats);
     });
   });
@@ -5568,27 +6264,46 @@ document.getElementById('searchTeamBtn').addEventListener('click', performTeamSe
 ================================================================= */
 document.addEventListener('change', (e)=>{
   if(!e.target.classList.contains('odds-input-bet')) return;
-  const input = e.target;
-  const recId = input.dataset.rec, sport = input.dataset.sport, idx = parseInt(input.dataset.idx,10);
-  const odds = parseFloat(input.value);
-  const outEl = document.getElementById(`edge-${recId}-${idx}`);
-  const rec = DB[sport] && DB[sport].find(r=>r.id===recId);
-  if(!rec || !rec.bets[idx]) return;
-  if(isNaN(odds) || odds<1){
-    delete rec.bets[idx].odds; delete rec.bets[idx].edge;
-    if(outEl) outEl.textContent='';
-  } else {
-    const edge = rec.bets[idx].p*odds - 1;
-    rec.bets[idx].odds = odds; rec.bets[idx].edge = edge;
-    if(outEl){ outEl.textContent = `Edge : ${edge>=0?'+':''}${(edge*100).toFixed(1)}%`; outEl.style.color = edge>0 ? 'var(--green)' : 'var(--red)'; }
+  const input=e.target, recId=input.dataset.rec, sport=input.dataset.sport, idx=parseInt(input.dataset.idx,10);
+  const rec=DB[sport]&&DB[sport].find(r=>r.id===recId);
+  if(!rec||!rec.bets[idx]) return;
+  const b=rec.bets[idx];
+  const kind=input.dataset.kind||'entry';
+  const value=parseFloat(input.value);
+
+  if(kind==='closing'){
+    if(!Number.isFinite(value)||value<=1) delete b.closingOdds;
+    else b.closingOdds=value;
+    refreshBetMarketMetrics(rec,idx);
+  }else{
+    if(!Number.isFinite(value)||value<=1){
+      delete b.odds; delete b.edge; delete b.value; b.marketVsModel=null; b.clv=null;
+    }else{
+      const meta=b.valueMeta||{};
+      const valueResult=evaluateValueBet({p:b.p,odds:value,dataQualityPct:rec.valuePro?.dataQualityPct??meta.dataQualityPct,modelAgreement:rec.valuePro?.modelAgreementPct??meta.modelAgreementPct,uncertaintyHalf:meta.uncertaintyHalf,marketType:marketTypeFromEval(b.eval)});
+      b.odds=value; b.edge=valueResult.ev; b.value=valueResult;
+      refreshBetMarketMetrics(rec,idx);
+    }
   }
-  persistDB();
-  renderBets(sport);
+  const outEl=document.getElementById(`edge-${recId}-${idx}`);
+  if(outEl){
+    const m=b.marketVsModel, c=b.clv;
+    const parts=[];
+    if(b.value?.decision) parts.push(b.value.decision==='NO_BET'?`NO BET · EV ${fmtPctSigned(b.value.ev)}`:`${b.value.decision} · EV ${fmtPctSigned(b.value.ev)}`);
+    if(m) parts.push(`FAIR ${m.fairOdds.toFixed(2)} · Edge ${m.edgePts>=0?'+':''}${m.edgePts.toFixed(1)} pts`);
+    if(c) parts.push(`CLV ${c.clvProbPts>=0?'+':''}${c.clvProbPts.toFixed(1)} pts`);
+    outEl.textContent=parts.join(' · ');
+    outEl.style.color=b.value?.decision==='NO_BET'?'var(--red)':c&&c.clvProbPts>0?'var(--green)':b.value?.decision==='STRONG_VALUE'?'var(--gold)':'var(--green)';
+  }
+  persistDB(); renderBets(sport);
 });
 
 function tierBadge(p){
   const color = confidenceColor(p);
-  if(p>=0.82) return {label:'SAFE', color};
+  // Section 24 du cahier des charges : ne jamais utiliser "SAFE"/"GARANTI"/"CERTAIN" — un
+  // pourcentage élevé reste une probabilité du modèle, pas une certitude. On préfère un
+  // vocabulaire qui reflète littéralement ce qui est affiché (probabilité).
+  if(p>=0.82) return {label:'PROBA ÉLEVÉE', color};
   if(p>=0.60) return {label:'CONFIANT', color};
   return {label:'SPÉCULATIF', color};
 }
@@ -5637,7 +6352,7 @@ function renderBets(sport){
       // Cohérence : on exige un plancher de probabilité ET on écarte les paris sur des marchés
       // encore jugés "à corriger" (écart>10 pts) avec trop peu de recul pour leur faire confiance.
       const trustworthy = !(c && c.n>=15 && c.gap>10);
-      const rentable = b.edge!=null && b.edge>0;
+      const rentable = b.value ? ['VALUE','STRONG_VALUE'].includes(b.value.decision) : (b.edge!=null && b.edge>=0.05);
       // Un pari RENTABLE (cote bookmaker connue + edge positif) passe TOUJOURS devant un pari
       // juste PROBABLE (haute probabilité mais cote trop faible ou inconnue pour être payante) :
       // une probabilité de 96% avec une cote à 1.05 ne rapporte presque rien même en gagnant.
@@ -5654,10 +6369,19 @@ function renderBets(sport){
     list.forEach(r=> r.bets.forEach(b=>{ if(b.p>=0.82) picks.push({...b, nameA:r.nameA, nameB:r.nameB, timestamp:r.timestamp}); }));
     picks.sort((a,b)=>b.p-a.p);
   } else if(sub==='value'){
+    const calib = computeCalibrationByMarket(sport) || {};
     list.forEach(r=> r.bets.forEach(b=>{
-      if(b.edge!=null && b.edge>0) picks.push({...b, nameA:r.nameA, nameB:r.nameB, timestamp:r.timestamp, realEdge:true});
+      if((b.value && ['VALUE','STRONG_VALUE'].includes(b.value.decision)) || (!b.value && b.edge!=null && b.edge>=0.05 && b.edge<=0.12)){
+        const dataQualityPct = r.valuePro?.dataQualityPct ?? b.valueMeta?.dataQualityPct ?? null;
+        const modelAgreementPct = r.valuePro?.modelAgreementPct ?? b.valueMeta?.modelAgreementPct ?? null;
+        const uncertaintyHalf = r.valuePro?.uncertainty?.half ?? b.valueMeta?.uncertaintyHalf ?? null;
+        const mt = marketTypeFromEval(b.eval);
+        const calibN = calib[mt]?.n ?? 0;
+        const grade = valueScannerGrade({ev:b.edge, dataQualityPct, modelAgreementPct, uncertaintyHalf, calibN});
+        picks.push({...b, nameA:r.nameA, nameB:r.nameB, timestamp:r.timestamp, realEdge:true, dataQualityPct, modelAgreementPct, uncertaintyHalf, calibN, grade});
+      }
     }));
-    picks.sort((a,b)=>b.edge-a.edge);
+    picks.sort((a,b)=> VALUE_SCANNER_GRADE_RANK[a.grade]-VALUE_SCANNER_GRADE_RANK[b.grade] || b.edge-a.edge);
   } else if(sub==='score'){
     list.forEach(r=> r.topScores.forEach(s=>{ if(s.p>=0.15) picks.push({label: (isBasket?'Fourchette ':'Score exact ')+s.label, p:s.p, cat: isBasket?'fourchette':'score exact', nameA:r.nameA, nameB:r.nameB, timestamp:r.timestamp}); }));
     picks.sort((a,b)=>b.p-a.p);
@@ -5667,7 +6391,7 @@ function renderBets(sport){
     const emptyLabels = {
       best: `Aucun pari rentable ou suffisamment probable pour l'instant. Ce classement met d'abord en avant les paris RENTABLES (cote bookmaker renseignée + edge positif), puis les paris PROBABLES (fiabilité réelle du marché, sans cote connue) — il devient plus précis à mesure que vous entrez des cotes et vérifiez des résultats.`,
       safe: `Aucun pari n'atteint 82% aujourd'hui. Chaque analyse ${isBasket?'Basket Analyse':'Genèse'} qui franchit ce seuil apparaîtra ici automatiquement.`,
-      value: `Aucun value bet aujourd'hui. Un value bet n'apparaît ici que si vous entrez une cote de bookmaker sur un pari dans ${isBasket?'Basket Analyse':'Genèse'} ET que l'edge calculé (probabilité modèle × cote − 1) est positif.`,
+      value: `NO VALUE BET DETECTED — aucun value bet aujourd'hui. Un value bet n'apparaît ici que si vous entrez une cote de bookmaker sur un pari dans ${isBasket?'Basket Analyse':'Genèse'} ET que l'edge calculé (probabilité modèle × cote − 1) est positif et suffisamment soutenu par la qualité des données.`,
       score: `Aucun ${isBasket?'fourchette de score':'score exact'} à 15%+ aujourd'hui.`
     };
     panel.innerHTML = `<div class="glass empty-state"><div class="glyph">Ø</div><p>${emptyLabels[sub]}</p></div>`;
@@ -5675,7 +6399,9 @@ function renderBets(sport){
   }
 
   panel.innerHTML = picks.map(p=>{
-    const valueTag = `<span class="tier-badge" style="color:var(--green); background:var(--green)18;">EDGE +${(p.edge*100).toFixed(1)}% · cote ${p.odds}</span>`;
+    const valueTag = `<span class="tier-badge" style="color:var(--green); background:var(--green)18;">${p.value?.decision||'VALUE'} · EV +${((p.edge||0)*100).toFixed(1)}% · cote ${p.odds}</span>`;
+    const gradeColors = {A:'var(--gold)', B:'var(--teal)', C:'var(--text-dim)'};
+    const scannerMetaTag = (sub==='value' && p.grade) ? `<span class="tier-badge" style="color:${gradeColors[p.grade]}; background:${gradeColors[p.grade]}18; margin-left:6px;">Confiance ${p.grade}${p.dataQualityPct!=null?` · Data ${Math.round(p.dataQualityPct)}%`:''}${p.modelAgreementPct!=null?` · Accord ${Math.round(p.modelAgreementPct)}%`:''}${p.calibN?` · N=${p.calibN}`:''}</span>` : '';
     const bestTag = p.rentable
       ? `<span class="tier-badge" style="color:var(--green); background:var(--green)18;">💰 RENTABLE · EDGE +${(p.edge*100).toFixed(1)}% · cote ${p.odds}</span>`
       : `<span class="tier-badge" style="color:var(--sky); background:var(--sky)18;">📊 PROBABLE · FIABILITÉ ${(p.reliability*100).toFixed(0)}%</span>`;
@@ -5685,13 +6411,32 @@ function renderBets(sport){
       <div class="pc-meta">${p.cat} · ${new Date(p.timestamp).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</div>
       <div class="pc-market"><span class="pc-label">${p.label}</span><span class="pc-pct">${fmtPct(p.p)}</span></div>
       <div class="gauge"><div class="ticks">${'<i></i>'.repeat(10)}</div><div class="fill" style="width:${(p.p*100).toFixed(1)}%; ${gaugeStyle(p.p)}"></div></div>
-      ${badgesHtml}
+      ${badgesHtml}${scannerMetaTag}
     </div>`;
   }).join('');
 }
 
 /* ================================================================
-   9bis. JOURNAL — historique permanent jour par jour (paris vérifiés,
+   9bis. VALUE SCANNER (section 26/12) — le classement "Value Bets" existant
+   n'affichait que l'edge brut. Ici on ajoute les critères du cahier des
+   charges (qualité des données, accord des modèles, échantillon de
+   calibration du marché) et un grade de confiance global A/B/C, calculés
+   uniquement à partir de ce qui est déjà mesuré ailleurs dans l'appli
+   (rien d'inventé). Le tri se fait d'abord par grade, puis par edge —
+   pas seulement par edge brut comme avant, pour éviter qu'une grosse
+   edge mal soutenue par les données passe devant une edge plus modeste
+   mais mieux calibrée.
+================================================================= */
+function valueScannerGrade({ev, dataQualityPct, modelAgreementPct, uncertaintyHalf, calibN}){
+  const dq = dataQualityPct??0, ma = modelAgreementPct??0, unc = uncertaintyHalf??15, n = calibN??0;
+  if(ev>=0.08 && dq>=80 && ma>=80 && unc<=6) return 'A';
+  if(ev>=0.05 && dq>=65 && ma>=65 && unc<=10) return 'B';
+  return 'C';
+}
+const VALUE_SCANNER_GRADE_RANK = {A:0, B:1, C:2};
+
+/* ================================================================
+   9ter. JOURNAL — historique permanent jour par jour (paris vérifiés,
    scores exacts trouvés), avec sélecteur de jour type BetOnAir.
 ================================================================= */
 /* -- Réglages (notifications, push communauté, sauvegarde) — toujours visibles en haut de
