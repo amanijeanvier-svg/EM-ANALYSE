@@ -66,6 +66,20 @@ Version moteur : EA-VALUE-2.2.0
 (néant côté cahier des charges initial — voir "Limites connues" plus bas pour les
 compromis assumés et les points qui resteraient à renforcer avec plus de recul)
 
+## Session — CORRECTIF CRITIQUE : le verdict ne se générait plus du tout
+- Cause : `computeGeneseLambdas()` (foot) et `computeBasketPoints()` (basket) calculaient
+  `aSerieAdj`, `bSerieAdj`, `aSerieFor`, `aSerieRaw`, `bSerieFor`, `bSerieRaw`, `fatigueScoreA`,
+  `fatigueScoreB` en interne mais ne les renvoyaient jamais (`return {...}` incomplet). Les
+  fonctions `runAnalysisGe`/équivalent basket les utilisaient pourtant directement (ex.
+  `if(aSerieAdj.applied)`), provoquant un crash JS ("aSerieAdj is not defined") systématique,
+  à chaque analyse, foot et basket, sans exception — juste après le calcul des paris et juste
+  avant l'affichage du verdict final. Symptôme observé : les champs se remplissent normalement,
+  mais "Générer le verdict" ne produit jamais de résultat visible.
+- Correctif : les 8 variables ajoutées au `return` des deux fonctions de calcul, et
+  récupérées à la destructuration dans les fonctions appelantes. Aucune redéclaration en
+  conflit, syntaxe validée (`node --check`) sur les deux blocs `<script>` du fichier.
+- Moteur : EA-VALUE-2.5.1. Service worker : v16.
+
 ## Session — Walk-Forward Backtest (section 10/55/56/57)
 - Bug corrigé : `computeVerifiedValuePerformance` itérait TRACK[sport] dans son ordre de
   stockage (le plus récent en premier, à cause du chargement trié + unshift à l'ajout), donc

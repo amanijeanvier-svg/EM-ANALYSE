@@ -4551,6 +4551,7 @@ function computeGeneseLambdas(){
   if(lambdaA!==null) lambdaA *= aggAdj.factorA;
   if(lambdaB!==null) lambdaB *= aggAdj.factorB;
   return {lambdaA, lambdaB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, eloA:effStandings.eloA, eloB:effStandings.eloB, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:stageAdj.sigmaDamp, aggregateNote:aggAdj.note, components:geneseComponents,
+    aSerieAdj, bSerieAdj, aSerieFor, aSerieRaw, bSerieFor, bSerieRaw, fatigueScoreA, fatigueScoreB,
     stage: stageIsKO ? matchFlags.stage : null, leg: matchFlags.leg, tensionUsed: stageIsKO ? stageAdj.tensionUsed : null,
     aggFactorUsed: matchFlags.leg==='retour' ? {factorA:aggAdj.factorA, factorB:aggAdj.factorB} : null, aggDiff: aggAdj.diff||0};
 }
@@ -4774,7 +4775,7 @@ function refreshBetMarketMetrics(rec, idx){
    uniquement à calculer le prix, l'edge et l'EV. Les seuils sont volontairement
    prudents et les mises sont plafonnées.
 ================================================================= */
-const VALUE_ENGINE_VERSION = 'EA-VALUE-2.5.0';
+const VALUE_ENGINE_VERSION = 'EA-VALUE-2.5.1';
 const VALUE_DEFAULT_BANKROLL = 500;
 const VALUE_MAX_STAKE_PCT = 0.02;
 const VALUE_KELLY_FRACTION = 0.25;
@@ -5104,7 +5105,7 @@ function runAnalysisGe(){
   // seulement, via la pastille de complétude affichée sur le résultat, jamais un mur.
   const completenessGe = computeCompletenessFootball();
 
-  const {lambdaA, lambdaB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, eloA, eloB, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff}=computeGeneseLambdas();
+  const {lambdaA, lambdaB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, eloA, eloB, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff, aSerieAdj, bSerieAdj, aSerieFor, aSerieRaw, bSerieFor, bSerieRaw, fatigueScoreA, fatigueScoreB}=computeGeneseLambdas();
   const convictionIdx = computeConvictionIdx(enjeuIdx, trendDiffIdx, tensionUsed, aggDiff);
   if(lambdaA===null||lambdaB===null) return;
 
@@ -5654,6 +5655,7 @@ function computeBasketPoints(){
   if(ptsA!==null) ptsA *= bkAggAdj.factorA;
   if(ptsB!==null) ptsB *= bkAggAdj.factorB;
   return {ptsA, ptsB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:bkStageAdj.sigmaDamp, aggregateNote:bkAggAdj.note, components:basketComponents,
+    aSerieAdj, bSerieAdj, aSerieFor, aSerieRaw, bSerieFor, bSerieRaw, fatigueScoreA, fatigueScoreB,
     stage: bkStageIsKO ? bkMatchFlags.stage : null, leg: bkMatchFlags.leg, tensionUsed: bkStageIsKO ? bkStageAdj.tensionUsed : null,
     aggFactorUsed: bkMatchFlags.leg==='retour' ? {factorA:bkAggAdj.factorA, factorB:bkAggAdj.factorB} : null, aggDiff: bkAggAdj.diff||0};
 }
@@ -5731,7 +5733,7 @@ function runAnalysisBk(){
   // Plus aucun blocage strict (1.3) — voir la même logique côté football pour le détail.
   const completenessBk = computeCompletenessBasket();
 
-  const {ptsA, ptsB, totalAdj, strengthGap:strengthGapBk, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff}=computeBasketPoints();
+  const {ptsA, ptsB, totalAdj, strengthGap:strengthGapBk, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff, aSerieAdj, bSerieAdj, aSerieFor, aSerieRaw, bSerieFor, bSerieRaw, fatigueScoreA, fatigueScoreB}=computeBasketPoints();
   const convictionIdxBk = computeConvictionIdx(enjeuIdx, trendDiffIdx, tensionUsed, aggDiff);
   if(ptsA===null||ptsB===null) return;
 
