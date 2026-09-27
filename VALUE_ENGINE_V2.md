@@ -66,6 +66,26 @@ Version moteur : EA-VALUE-2.2.0
 (néant côté cahier des charges initial — voir "Limites connues" plus bas pour les
 compromis assumés et les points qui resteraient à renforcer avec plus de recul)
 
+## Session — CORRECTIF CRITIQUE : jour calendaire calculé en UTC au lieu du fuseau local
+- Cause : `todayISO()` et `dayKey(ts)` utilisaient `toISOString().slice(0,10)`, qui renvoie
+  toujours la date en UTC. Pour un fuseau UTC-3 (Brésil), la bascule de "jour" se produisait
+  donc à 21h00 heure locale au lieu de minuit local — pile l'heure de pointe des analyses du
+  soir. Des matchs analysés la même soirée, certains avant 21h locale et d'autres après,
+  se retrouvaient éclatés sur deux jours calendaires différents sans qu'aucun changement de
+  jour réel n'ait eu lieu pour l'utilisateur. Conséquence concrète : les combinés du jour
+  perdaient des jambes ou ne se complétaient jamais, et les coupons validés après l'heure de
+  bascule (souvent confondue avec "après minuit") semblaient invisibles.
+- Correctif : nouvelle fonction `localDateKey(d)` qui neutralise le décalage de fuseau avant
+  lecture de la date, utilisée par `todayISO()`, `dayKey()`, la fenêtre de rétention de
+  l'archive (20 jours) et le nom de fichier de sauvegarde. Vérifié par simulation : un
+  horodatage à 21h01 heure locale reste bien classé dans le jour en cours après correctif
+  (il basculait à tort au jour suivant avant).
+- Limite connue (non bloquante) : les jours déjà archivés AVANT ce correctif gardent la clé
+  de jour telle qu'elle a été écrite à l'époque (parfois décalée d'un jour pour les matchs
+  analysés en soirée) — aucune tentative de réécrire rétroactivement l'archive existante,
+  trop risqué. Seuls les nouveaux jours, à partir de cette mise à jour, sont fiables.
+- Moteur : EA-VALUE-2.5.2. Service worker : v17.
+
 ## Session — CORRECTIF CRITIQUE : le verdict ne se générait plus du tout
 - Cause : `computeGeneseLambdas()` (foot) et `computeBasketPoints()` (basket) calculaient
   `aSerieAdj`, `bSerieAdj`, `aSerieFor`, `aSerieRaw`, `bSerieFor`, `bSerieRaw`, `fatigueScoreA`,

@@ -1239,7 +1239,19 @@ input{font-family:inherit;}
 const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
 const clamp01 = (v)=>clamp(v,0,1);
 function fmtPct(p){ return (p*100).toFixed(1)+'%'; }
-function todayISO(){ return new Date().toISOString().slice(0,10); }
+// Clé de jour calendaire LOCALE (pas UTC) — corrige un bug réel : toISOString() donne
+// toujours la date en UTC, donc pour un fuseau UTC-3 (Brésil par ex.), la bascule de
+// "jour" se produisait à 21h locale au lieu de minuit local. Des matchs analysés le
+// même soir, avant et après 21h locale, se retrouvaient éclatés sur deux jours
+// calendaires différents pour les combinés et l'archive, sans qu'aucun changement de
+// jour réel n'ait eu lieu pour l'utilisateur. Le décalage ci-dessous neutralise
+// l'écart de fuseau AVANT de lire la date, pour que toISOString() reflète le jour
+// local réel.
+function localDateKey(d){
+  const shifted = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+  return shifted.toISOString().slice(0,10);
+}
+function todayISO(){ return localDateKey(new Date()); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
 /* ================================================================
@@ -3717,7 +3729,7 @@ const ARCHIVE_KEY = 'ea_daily_archive';
 let ARCHIVE = {};
 function loadArchive(){ try{ ARCHIVE = JSON.parse(localStorage.getItem(ARCHIVE_KEY)||'null') || {}; }catch(e){ ARCHIVE = {}; } }
 function persistArchive(){ localStorage.setItem(ARCHIVE_KEY, JSON.stringify(ARCHIVE)); }
-function dayKey(ts){ return new Date(ts).toISOString().slice(0,10); }
+function dayKey(ts){ return localDateKey(new Date(ts)); }
 function archiveResult(sport, rec, finalA, finalB){
   const key = dayKey(rec.timestamp);
   if(!ARCHIVE[key]) ARCHIVE[key] = {bets:[], exactScores:[]};
@@ -3736,7 +3748,7 @@ function getArchiveDayKeys(){ return Object.keys(ARCHIVE).sort((a,b)=>b.localeCo
 const ARCHIVE_WINDOW_DAYS = 20;
 function pruneArchiveOlderThan20Days(){
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - ARCHIVE_WINDOW_DAYS);
-  const cutoffKey = cutoff.toISOString().slice(0,10);
+  const cutoffKey = localDateKey(cutoff);
   let changed = false;
   Object.keys(ARCHIVE).forEach(key=>{
     if(key < cutoffKey){ delete ARCHIVE[key]; changed = true; }
@@ -4775,7 +4787,7 @@ function refreshBetMarketMetrics(rec, idx){
    uniquement à calculer le prix, l'edge et l'EV. Les seuils sont volontairement
    prudents et les mises sont plafonnées.
 ================================================================= */
-const VALUE_ENGINE_VERSION = 'EA-VALUE-2.5.1';
+const VALUE_ENGINE_VERSION = 'EA-VALUE-2.5.2';
 const VALUE_DEFAULT_BANKROLL = 500;
 const VALUE_MAX_STAKE_PCT = 0.02;
 const VALUE_KELLY_FRACTION = 0.25;
@@ -6856,7 +6868,7 @@ async function exportAllData(){
   const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const stamp = new Date().toISOString().slice(0,10);
+  const stamp = localDateKey(new Date());
   a.href = url; a.download = `ea-sauvegarde-${stamp}.json`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
