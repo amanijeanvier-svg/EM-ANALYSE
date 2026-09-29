@@ -7,8 +7,9 @@
    d'autre à ce fichier. C'est ce qui garantit que les utilisateurs
    reçoivent la nouvelle version sans avoir à désinstaller/réinstaller.
 ================================================================= */
-const CACHE_NAME = 'ea-cabinet-cache-v17';
-const STATIC_ASSETS = ['manifest.json', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
+const CACHE_NAME = 'ea-cabinet-cache-v19';
+const STATIC_ASSETS = ['manifest.json', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png', 'css/ea-pro.css',
+  'js/ea-core.js', 'js/ea-context.js', 'js/ea-models.js', 'js/ea-value.js', 'js/ea-bankroll.js', 'js/ea-memory.js', 'js/ea-storage.js', 'js/ea-engine.js', 'js/ea-ui.js'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -43,6 +44,15 @@ self.addEventListener('fetch', (event) => {
           return res;
         })
         .catch(() => caches.match(req).then((r) => r || caches.match('index.html')))
+    );
+    return;
+  }
+
+  // Code applicatif (js/ et css/) : réseau d'abord (mises à jour immédiates), cache en repli hors-ligne.
+  if (req.method === 'GET' && /\/(js|css)\/[^/]+$/.test(new URL(req.url).pathname)) {
+    event.respondWith(
+      fetch(req).then((res) => { const c = res.clone(); caches.open(CACHE_NAME).then((cache) => cache.put(req, c)); return res; })
+        .catch(() => caches.match(req))
     );
     return;
   }
