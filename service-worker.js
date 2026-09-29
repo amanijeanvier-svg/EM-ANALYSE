@@ -7,13 +7,17 @@
    d'autre à ce fichier. C'est ce qui garantit que les utilisateurs
    reçoivent la nouvelle version sans avoir à désinstaller/réinstaller.
 ================================================================= */
-const CACHE_NAME = 'ea-cabinet-cache-v19';
-const STATIC_ASSETS = ['manifest.json', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png', 'css/ea-pro.css',
-  'js/ea-core.js', 'js/ea-context.js', 'js/ea-models.js', 'js/ea-value.js', 'js/ea-bankroll.js', 'js/ea-memory.js', 'js/ea-storage.js', 'js/ea-engine.js', 'js/ea-ui.js'];
+const CACHE_NAME = 'ea-cabinet-cache-v21';
+// index.html embarque désormais tout le code Pro 3.0 (CSS + modules JS) : seuls les fichiers
+// statiques ci-dessous sont pré-cachés. Chaque fichier est ajouté séparément — avant, un seul
+// 404 dans cache.addAll() faisait échouer toute l'installation et l'app restait sur l'ancienne version.
+const STATIC_ASSETS = ['manifest.json', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(STATIC_ASSETS.map((a) => cache.add(a).catch(() => null)))
+    )
   );
   self.skipWaiting();
 });

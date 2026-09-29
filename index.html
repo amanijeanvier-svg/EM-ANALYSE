@@ -19,7 +19,72 @@
     });
   }
 </script>
-<link rel="stylesheet" href="css/ea-pro.css">
+<style id="ea-pro-css">
+/* EA Pro 3.0 — contenu de css/ea-pro.css intégré : fonctionne même si le dossier css/ n'est pas publié */
+/* EA VALUE PRO 3.0 — interface aérée, une colonne sur mobile, 2 colonnes à partir de 720px. */
+#view-pro{padding:14px 14px 96px}
+.pro-wrap{display:flex;flex-direction:column;gap:20px;max-width:920px;margin:0 auto;min-width:0}
+.pro-wrap *{box-sizing:border-box;min-width:0}
+.pro-card{background:var(--panel,#12151C);border:1px solid var(--line,#262C3A);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.pro-card h3{margin:0;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold,#D4AF37);font-weight:700}
+.pro-card p,.pro-card li{margin:0;font-size:14px;line-height:1.5;color:var(--text,#EDEAE0)}
+.pro-dim{color:var(--text-dim,#9CA1AD)!important;font-size:12.5px!important}
+.pro-head{display:flex;flex-direction:column;gap:10px}
+.pro-title{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.pro-title b{font-size:18px;letter-spacing:.08em;color:var(--text,#EDEAE0)}
+.pro-ver{font-size:11px;color:var(--text-dim,#9CA1AD);border:1px solid var(--line,#262C3A);border-radius:999px;padding:2px 8px}
+.pro-row{display:flex;gap:8px;flex-wrap:wrap}
+.pro-seg{display:flex;gap:6px;flex:1 1 140px}
+.pro-btn,.pro-seg button,.pro-subnav button,.pro-emo{font:inherit;color:var(--text,#EDEAE0);background:var(--panel2,#171B24);border:1px solid var(--line,#262C3A);border-radius:10px;min-height:44px;padding:8px 10px;cursor:pointer;font-size:13px;text-align:center}
+.pro-seg button{flex:1}
+.pro-btn.on,.pro-seg button.on,.pro-subnav button.on,.pro-emo.on{border-color:var(--gold,#D4AF37);background:rgba(212,175,55,.14);color:var(--gold,#D4AF37)}
+.pro-btn.primary{background:var(--gold,#D4AF37);color:#0a0a0a;border-color:var(--gold,#D4AF37);font-weight:700;letter-spacing:.06em;min-height:52px;font-size:15px}
+.pro-btn.small{min-height:36px;font-size:12px;padding:4px 10px}
+.pro-subnav{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pro-subnav button{font-size:12px;letter-spacing:.05em;padding:8px 4px}
+.pro-pane{display:none;flex-direction:column;gap:20px}
+.pro-pane.on{display:flex}
+.pro-grid{display:grid;grid-template-columns:1fr;gap:16px}
+.pro-field{display:flex;flex-direction:column;gap:4px}
+.pro-field label{font-size:12px;color:var(--text-dim,#9CA1AD)}
+.pro-in{width:100%;font:inherit;font-size:16px;color:var(--text,#EDEAE0);background:var(--ink,#05060A);border:1px solid var(--line,#262C3A);border-radius:8px;padding:10px;min-height:44px}
+textarea.pro-in{min-height:64px;resize:vertical}
+.pro-fields{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.pro-side{display:flex;flex-direction:column;gap:12px;padding:12px;border:1px solid var(--line,#262C3A);border-radius:12px}
+.pro-side h4{margin:0;font-size:14px;color:var(--text,#EDEAE0)}
+.pro-emos{display:flex;gap:6px}
+.pro-emo{flex:1;font-size:20px;padding:6px 0}
+.pro-lab{font-size:12px;color:var(--text-dim,#9CA1AD);margin-bottom:4px}
+.pro-state{font-size:12px;color:var(--text,#EDEAE0);margin-top:4px}
+details.pro-det{border:1px dashed var(--line,#262C3A);border-radius:10px;padding:8px 10px}
+details.pro-det summary{cursor:pointer;font-size:13px;color:var(--text-dim,#9CA1AD);min-height:32px;display:flex;align-items:center}
+details.pro-det[open] summary{margin-bottom:8px}
+.pro-chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:12px;border:1px solid var(--line,#262C3A);background:var(--panel2,#171B24);color:var(--text,#EDEAE0)}
+.pro-chip.green{border-color:#3E9B6F;color:#7ee2b0}.pro-chip.yellow{border-color:#C9A227;color:#f0d36b}.pro-chip.red{border-color:#C4453B;color:#ff8f86}.pro-chip.grey{color:var(--text-dim,#9CA1AD)}
+.pro-dec{font-size:26px;font-weight:800;letter-spacing:.08em;text-align:center;padding:14px;border-radius:12px;border:2px solid var(--line,#262C3A)}
+.pro-dec.BET{color:#7ee2b0;border-color:#3E9B6F;background:rgba(62,155,111,.10)}
+.pro-dec.CHECK{color:#f0d36b;border-color:#C9A227;background:rgba(201,162,39,.10)}
+.pro-dec.NOBET{color:#ff8f86;border-color:#C4453B;background:rgba(196,69,59,.10)}
+.pro-sum{cursor:pointer}
+.pro-sum .pro-dec{font-size:20px;padding:10px}
+.pro-kv{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:14px}
+.pro-kv span:nth-child(odd){color:var(--text-dim,#9CA1AD)}
+.pro-kv span:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
+.pro-list{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.pro-bar{display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:8px;align-items:center;font-size:12.5px}
+.pro-bar i{display:block;height:8px;border-radius:4px;background:var(--gold,#D4AF37)}
+.pro-bar i.neg{background:var(--red,#C4453B)}
+.pro-bk{display:grid;grid-template-columns:52px 1fr 60px;gap:8px;align-items:center;font-size:12px}
+.pro-bk i{display:block;height:8px;border-radius:4px;background:var(--teal,#4FD9C9)}
+.pro-warn{border-left:3px solid #C9A227;padding-left:10px;font-size:13px;color:var(--text,#EDEAE0)}
+.pro-shock{border:2px solid #C4453B;border-radius:12px;padding:12px;background:rgba(196,69,59,.10)}
+.pro-mono{font-variant-numeric:tabular-nums}
+body.ea-fast *{animation:none!important;transition:none!important}
+body.ea-fast #starfield,body.ea-fast #seasonCanvas,body.ea-fast #burstCanvas{display:none!important}
+@media (min-width:720px){.pro-grid.two{grid-template-columns:1fr 1fr}.pro-subnav{grid-template-columns:repeat(6,1fr)}.pro-fields.four{grid-template-columns:repeat(4,1fr)}}
+@media (max-width:380px){.pro-fields{grid-template-columns:1fr 1fr;gap:8px}.pro-card{padding:12px}.pro-dec{font-size:22px}}
+
+</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -1238,15 +1303,1267 @@ input{font-family:inherit;}
   </div>
 </div>
 
-<script src="js/ea-core.js"></script>
-<script src="js/ea-context.js"></script>
-<script src="js/ea-models.js"></script>
-<script src="js/ea-value.js"></script>
-<script src="js/ea-bankroll.js"></script>
-<script src="js/ea-memory.js"></script>
-<script src="js/ea-storage.js"></script>
-<script src="js/ea-engine.js"></script>
-<script src="js/ea-ui.js"></script>
+<script id="ea-pro-bundle">
+/* EA Pro 3.0 — modules js/ea-*.js intégrés (index.html autonome) */
+try {
+/* ===== js/ea-core.js ===== */
+/* EA-VALUE 3.0 — CORE : version, configuration, utilitaires, fraîcheur, registre des modèles.
+   Aucune donnée fabriquée : une valeur absente reste null/UNKNOWN et n'est jamais remplacée par « normal ». */
+(function (g) {
+  'use strict';
+  var EA = g.EA = g.EA || {};
+  var VERSION = 'EA-VALUE-3.0.0';
+
+  // Tous les coefficients sont configurables. provisional:true = non validés sur données historiques.
+  var DEFAULT_CONFIG = {
+    provisional: true,
+    earlySeason: { football: { threshold: 8, k: 10 }, basketball: { threshold: 15, k: 20 } },
+    freshness: { greenHours: 24, yellowHours: 72 },
+    mc: { default: 10000, fast: 2000, options: [1000, 5000, 10000, 50000] },
+    basketSd: { margin: 12, total: 18, provisional: true },
+    value: { minEV: 0.05, anomalyEV: 0.12, highProb: 0.70, minDataQuality: 60, minContextQuality: 60 },
+    stability: { stableSpreadPts: 5, mediumSpreadPts: 10 },
+    minSample: { competitionStats: 10, calibration: 30, backtest: 30, weights: 30 },
+    health: {
+      brier: { caution: 0.25, degraded: 0.27, disabled: 0.30 },
+      ece: { caution: 0.08, degraded: 0.12, disabled: 0.18 },
+      clvPts: { caution: 0, degraded: -2, disabled: -5 },
+      minN: 30
+    },
+    bankroll: { kellyFraction: 0.25, maxStakePct: 0.02, tiers: { micro: 0.0025, small: 0.005, standard: 0.01 }, ruinThreshold: 0.2 },
+    shockPts: 3
+  };
+
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function merge(base, over) {
+    var out = clone(base);
+    (function rec(a, b) { for (var k in b) { if (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k]) && a[k] && typeof a[k] === 'object') rec(a[k], b[k]); else a[k] = b[k]; } })(out, over || {});
+    return out;
+  }
+  function isNum(x) { return typeof x === 'number' && isFinite(x); }
+  function num(x) { if (x === null || x === undefined || x === '') return null; var n = Number(x); return isFinite(n) ? n : null; }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function safeDiv(a, b) { return (isNum(a) && isNum(b) && b !== 0) ? a / b : null; }
+  function round(v, d) { if (!isNum(v)) return null; var m = Math.pow(10, d == null ? 2 : d); return Math.round(v * m) / m; }
+  function mean(a) { return a.length ? a.reduce(function (s, x) { return s + x; }, 0) / a.length : null; }
+  function variance(a) { if (a.length < 2) return null; var m = mean(a); return a.reduce(function (s, x) { return s + (x - m) * (x - m); }, 0) / (a.length - 1); }
+  function quantile(sorted, q) { if (!sorted.length) return null; var pos = (sorted.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos); return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo); }
+
+  // RNG déterministe (reproductibilité et tests)
+  function hashSeed(str) { var h = 2166136261; str = String(str); for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function mulberry32(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function gaussian(rng) { var u = 0, v = 0; while (u === 0) u = rng(); while (v === 0) v = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  function poissonSample(rng, lambda) { if (!(lambda > 0)) return 0; var L = Math.exp(-lambda), k = 0, p = 1; do { k++; p *= rng(); } while (p > L); return k - 1; }
+
+  // Fraîcheur des données : GREEN RECENT / YELLOW AGING / RED STALE / UNKNOWN si pas de timestamp
+  function freshness(ts, now, cfg) {
+    var c = (cfg && cfg.freshness) || DEFAULT_CONFIG.freshness;
+    var t = ts instanceof Date ? ts.getTime() : (isNum(ts) ? ts : Date.parse(ts));
+    if (!isFinite(t)) return { status: 'UNKNOWN', color: 'grey', label: 'INCONNUE', ageHours: null };
+    var n = now instanceof Date ? now.getTime() : (isNum(now) ? now : Date.now());
+    var age = Math.max(0, (n - t) / 3600000);
+    if (age <= c.greenHours) return { status: 'GREEN', color: 'green', label: 'RÉCENTE', ageHours: age };
+    if (age <= c.yellowHours) return { status: 'YELLOW', color: 'yellow', label: 'VIEILLISSANTE', ageHours: age };
+    return { status: 'RED', color: 'red', label: 'PÉRIMÉE', ageHours: age };
+  }
+
+  // Donnée tracée : valeur + source + timestamp + qualité + confiance
+  function datum(value, meta) {
+    meta = meta || {};
+    var v = (value === undefined || value === '') ? null : value;
+    return { value: v, source: meta.source || 'saisie utilisateur', timestamp: meta.timestamp || null,
+      quality: meta.quality == null ? (v == null ? 0 : null) : meta.quality, confidence: meta.confidence == null ? null : meta.confidence,
+      available: v != null, label: v == null ? 'DATA UNAVAILABLE' : null };
+  }
+
+  // Registre des modèles : ne jamais afficher actif un modèle inexistant
+  var MODEL_STATUS = [
+    { id: 'poisson', name: 'Poisson', sport: 'football', status: 'IMPLEMENTED', note: 'Matrice de scores 0–8 normalisée' },
+    { id: 'dixon-coles', name: 'Dixon-Coles', sport: 'football', status: 'IMPLEMENTED', note: 'Correction τ sur 0-0/1-0/0-1/1-1, ρ configurable (pas estimé par maximum de vraisemblance)' },
+    { id: 'elo', name: 'Elo', sport: 'football', status: 'PARTIAL', note: 'Probabilité de victoire Elo ; la probabilité de nul est une heuristique non calibrée' },
+    { id: 'xg', name: 'xG', sport: 'football', status: 'PARTIAL', note: 'Actif seulement si xG/xGA par match sont fournis, sinon UNAVAILABLE' },
+    { id: 'monte-carlo-fb', name: 'Monte Carlo football', sport: 'football', status: 'IMPLEMENTED', note: 'Simulation réellement exécutée (rejet τ/τmax), nombre de tirages configurable' },
+    { id: 'bk-ratings', name: 'Basket ratings/pace', sport: 'basketball', status: 'IMPLEMENTED', note: 'Pace, ORtg, DRtg → points et marge attendus' },
+    { id: 'monte-carlo-bk', name: 'Monte Carlo basket', sport: 'basketball', status: 'PARTIAL', note: 'Écarts-types provisoires tant que non estimés sur des matchs fournis' },
+    { id: 'market', name: 'Benchmark marché', sport: 'both', status: 'IMPLEMENTED', note: 'Dévigage proportionnel ; n\'entre jamais dans P_MODEL' },
+    { id: 'auto-discovery', name: 'Auto Discovery', sport: 'both', status: 'EXPERIMENTAL', note: 'Analyse exploratoire, aucun effet sur la production' },
+    { id: 'player-impact', name: 'Impact joueur', sport: 'both', status: 'PARTIAL', note: 'Calculé seulement si les statistiques du joueur sont fournies, sinon INCONNU' }
+  ];
+
+  EA.core = { VERSION: VERSION, DEFAULT_CONFIG: DEFAULT_CONFIG, MODEL_STATUS: MODEL_STATUS, clone: clone, merge: merge, isNum: isNum, num: num, clamp: clamp,
+    safeDiv: safeDiv, round: round, mean: mean, variance: variance, quantile: quantile, hashSeed: hashSeed, mulberry32: mulberry32, gaussian: gaussian,
+    poissonSample: poissonSample, freshness: freshness, datum: datum };
+  if (typeof module === 'object' && module.exports) module.exports = EA.core;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-context.js ===== */
+/* EA-VALUE 3.0 — CONTEXT ENGINE + EARLY SEASON ENGINE.
+   UNKNOWN est une vraie valeur : information manquante, jamais convertie en NORMAL / AUCUNE ABSENCE / FATIGUE FAIBLE. */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') require('./ea-core.js');
+  var EA = g.EA, C = EA.core;
+
+  var LEVELS = ['green', 'yellow', 'orange', 'red', 'unknown'];
+  var EMOJI = { green: '🟢', yellow: '🟡', orange: '🟠', red: '🔴', unknown: '⚪' };
+  var LABELS = {
+    effectif: { green: 'Aucun absent connu', yellow: '1 joueur important absent', orange: '2 joueurs importants absents', red: 'Plusieurs joueurs importants absents', unknown: 'Effectif : information manquante' },
+    fatigue: { green: 'Repos normal', yellow: 'Match récent', orange: 'Enchaînement important', red: 'Très rapproché / back-to-back', unknown: 'FATIGUE : INCONNUE' },
+    rotation: { green: 'Stable', yellow: 'Quelques changements', orange: 'Beaucoup de changements', red: 'Très incertaine', unknown: 'Rotation : information manquante' }
+  };
+  function level(v) { return LEVELS.indexOf(v) >= 0 ? v : 'unknown'; }
+
+  // ---------- IMPACT JOUEUR (interne : statistiques ; interface : FAIBLE/MOYEN/FORT/TRÈS FORT/INCONNU) ----------
+  // Part de la production de l'équipe. Seuils configurables et PROVISOIRES (non validés).
+  var IMPACT_THRESHOLDS = { faible: 0.05, moyen: 0.10, fort: 0.18 };
+  function playerImpact(p, team, thresholds) {
+    var th = thresholds || IMPACT_THRESHOLDS;
+    if (!p || !team) return { level: 'INCONNU', share: null, reason: 'IMPACT JOUEUR INCONNU (statistiques indisponibles)' };
+    // Basket : points + passes + rebonds ; football : buts + passes décisives
+    var parts = [], total = [];
+    function add(a, b, w) { a = C.num(a); b = C.num(b); if (a != null && b != null && b > 0) { parts.push(a / b * w); total.push(w); } }
+    add(p.ppg, team.ppg, 1); add(p.apg, team.apg, 1); add(p.rpg, team.rpg, 1);
+    add(p.goals, team.goals, 1); add(p.assists, team.assists, 1);
+    if (!parts.length) return { level: 'INCONNU', share: null, reason: 'IMPACT JOUEUR INCONNU (statistiques indisponibles)' };
+    var share = C.mean(parts), lvl = share < th.faible ? 'FAIBLE' : share < th.moyen ? 'MOYEN' : share < th.fort ? 'FORT' : 'TRÈS FORT';
+    return { level: lvl, share: share, reason: 'Absence importante — impact estimé ' + lvl + ' (≈' + Math.round(share * 100) + ' % de la production de l\'équipe)' };
+  }
+  var ORDER = ['FAIBLE', 'MOYEN', 'FORT', 'TRÈS FORT'];
+
+  // effectif : {level, players:[{name, ppg, apg, rpg, goals, assists}], team:{...}}
+  function assessEffectif(input, cfg) {
+    input = input || {}; var lv = level(input.level);
+    var players = Array.isArray(input.players) ? input.players : [];
+    if (lv === 'unknown' && !players.length) return { level: 'unknown', emoji: EMOJI.unknown, label: LABELS.effectif.unknown, impact: 'INCONNU', known: false, absorbedShare: null, uncertaintyPts: 2, explanation: 'Information manquante : l\'incertitude est augmentée, aucune valeur « aucune absence » n\'est supposée.' };
+    if (lv === 'unknown' && players.length) lv = players.length === 1 ? 'yellow' : players.length === 2 ? 'orange' : 'red';
+    if (lv === 'green') return { level: 'green', emoji: EMOJI.green, label: LABELS.effectif.green, impact: 'AUCUN', known: true, absorbedShare: 0, uncertaintyPts: 0, explanation: 'Aucun absent connu déclaré.' };
+    var impacts = players.map(function (p) { return Object.assign({ name: p.name || 'Joueur' }, playerImpact(p, input.team)); });
+    var known = impacts.length > 0 && impacts.every(function (i) { return i.share != null; });
+    var impact = 'INCONNU', share = null;
+    if (known) { share = impacts.reduce(function (s, i) { return s + i.share; }, 0); impact = share < IMPACT_THRESHOLDS.faible ? 'FAIBLE' : share < IMPACT_THRESHOLDS.moyen ? 'MOYEN' : share < IMPACT_THRESHOLDS.fort ? 'FORT' : 'TRÈS FORT'; }
+    return { level: lv, emoji: EMOJI[lv], label: LABELS.effectif[lv], impact: impact, known: true, impactKnown: known, impacts: impacts, productionShareLost: share,
+      uncertaintyPts: known ? 1 : 3,
+      explanation: known ? 'Absence(s) importante(s) — impact estimé ' + impact + ' d\'après les statistiques fournies.' : 'IMPACT JOUEUR INCONNU : aucune correction chiffrée n\'est appliquée, l\'incertitude est augmentée.' };
+  }
+
+  // Part de production perdue appliquée au modèle : uniquement si l'impact est calculé. absorption = part NON compensée (PROVISOIRE, configurable).
+  function absencePenalty(eff, absorption) {
+    if (!eff || eff.productionShareLost == null) return { multiplier: 1, applied: false, reason: 'IMPACT JOUEUR INCONNU : aucune correction' };
+    var a = C.isNum(absorption) ? absorption : 0.15;
+    return { multiplier: 1 - eff.productionShareLost * a, applied: true, absorption: a, provisional: true, reason: 'Part de production perdue × ' + a + ' (coefficient PROVISOIRE)' };
+  }
+
+  // ---------- FATIGUE ----------
+  function daysBetween(a, b) { return (Date.parse(b) - Date.parse(a)) / 86400000; }
+  // schedule : {matchDate:'YYYY-MM-DD', previousDates:['YYYY-MM-DD',...], extraTime:bool, travelKm:number|null}
+  function fatigueFromSchedule(s) {
+    if (!s || !s.matchDate || !Array.isArray(s.previousDates) || !s.previousDates.length) return null;
+    var md = s.matchDate, prev = s.previousDates.filter(function (d) { return isFinite(Date.parse(d)) && Date.parse(d) < Date.parse(md); }).sort();
+    if (!prev.length) return null;
+    var last = prev[prev.length - 1], rest = Math.floor(daysBetween(last, md));
+    var m7 = prev.filter(function (d) { return daysBetween(d, md) <= 7; }).length, m14 = prev.filter(function (d) { return daysBetween(d, md) <= 14; }).length;
+    var score = 0;
+    if (rest <= 1) score += 45; else if (rest === 2) score += 30; else if (rest === 3) score += 18; else if (rest === 4) score += 8; else if (rest <= 6) score += 3;
+    score += C.clamp(m7 - 1, 0, 4) * 11; score += C.clamp(m14 - 2, 0, 6) * 5; if (s.extraTime) score += 10;
+    return { restDays: rest, matches7d: m7, matches14d: m14, backToBack: rest <= 1, travelKm: C.num(s.travelKm), score: C.clamp(Math.round(score), 0, 100) };
+  }
+  function assessFatigue(input) {
+    input = input || {}; var calc = fatigueFromSchedule(input.schedule);
+    var lv = level(input.level);
+    if (calc) { lv = calc.backToBack ? 'red' : calc.score >= 55 ? 'orange' : calc.score >= 25 ? 'yellow' : 'green'; }
+    if (lv === 'unknown') return { level: 'unknown', emoji: EMOJI.unknown, label: LABELS.fatigue.unknown, known: false, score: null, calc: null, uncertaintyPts: 1.5 };
+    return { level: lv, emoji: EMOJI[lv], label: LABELS.fatigue[lv], known: true, score: calc ? calc.score : null, calc: calc, calendarBased: !!calc, uncertaintyPts: calc ? 0 : 0.5 };
+  }
+  // Correction plafonnée et faible ; seulement quand un score calculé existe
+  function fatigueMultiplier(score, maxPenalty) {
+    if (!C.isNum(score)) return 1; var m = C.isNum(maxPenalty) ? maxPenalty : 0.025; return 1 - m * C.clamp(score, 0, 100) / 100;
+  }
+
+  // ---------- ROTATION / COMPOSITION ----------
+  function assessRotation(input) {
+    input = input || {}; var lv = level(input.level);
+    var lineup = input.lineupConfirmed === true ? true : input.lineupConfirmed === false ? false : null;
+    var known = lv !== 'unknown';
+    return { level: lv, emoji: EMOJI[lv], label: LABELS.rotation[lv], known: known, lineupConfirmed: lineup,
+      lineupLabel: lineup === true ? 'Composition confirmée' : 'LINEUP NOT CONFIRMED', uncertaintyPts: (known ? 0 : 1.5) + (lineup === true ? 0 : 1) };
+  }
+
+  // ---------- CONTEXT QUALITY (0-100) — ce n'est PAS une probabilité de victoire ----------
+  var CQ_WEIGHTS = { data: 1, effectif: 1, fatigue: 1, rotation: 1, lineup: 1, freshness: 1 };
+  var FRESH_SCORE = { GREEN: 100, YELLOW: 60, RED: 20, UNKNOWN: 0 };
+  function contextQuality(p, weights) {
+    var w = weights || CQ_WEIGHTS, parts = {};
+    parts.data = C.isNum(p.dataQuality) ? C.clamp(p.dataQuality, 0, 100) : 0;
+    parts.effectif = p.effectif && p.effectif.known ? (p.effectif.impact === 'INCONNU' ? 50 : 100) : 0;
+    parts.fatigue = p.fatigue && p.fatigue.known ? 100 : 0;
+    parts.rotation = p.rotation && p.rotation.known ? 100 : 0;
+    parts.lineup = p.rotation && p.rotation.lineupConfirmed === true ? 100 : 0;
+    parts.freshness = FRESH_SCORE[p.freshnessStatus || 'UNKNOWN'] || 0;
+    var sw = 0, s = 0; for (var k in parts) { sw += w[k]; s += parts[k] * w[k]; }
+    var score = Math.round(s / sw);
+    var extra = ['effectif', 'fatigue', 'rotation'].reduce(function (a, k) { return a + ((p[k] && p[k].uncertaintyPts) || 0); }, 0);
+    return { score: score, parts: parts, extraUncertaintyPts: C.round(extra, 1), notProbability: true, note: 'Qualité des informations disponibles, PAS une probabilité de victoire.' };
+  }
+
+  // ---------- EARLY SEASON ENGINE ----------
+  // input : {sport, gamesPlayed, priorAvailable, squadStability:'stable'|'changed'|'unknown', dataQuality}
+  function earlySeason(input, cfg) {
+    var conf = (cfg && cfg.earlySeason) || C.DEFAULT_CONFIG.earlySeason, sp = input.sport === 'basketball' ? 'basketball' : 'football', c = conf[sp];
+    var n = C.num(input.gamesPlayed);
+    if (n == null || n < 0) return { mode: null, wCurrent: null, wPrior: null, reliability: null, label: 'INSUFFICIENT DATA', weightsStatus: 'PROVISIONAL WEIGHTS', unknown: true };
+    var prior = input.priorAvailable === true, squad = input.squadStability;
+    var wCur = prior ? n / (n + c.k) : 1, wPrior = 1 - wCur;
+    var sampleScore = n / (n + c.k), historyScore = prior ? 1 : 0, squadScore = squad === 'stable' ? 1 : squad === 'changed' ? 0.4 : 0;
+    var dq = C.isNum(input.dataQuality) ? C.clamp(input.dataQuality, 0, 100) / 100 : 0;
+    var reliability = Math.round(100 * (0.4 * sampleScore + 0.3 * historyScore + 0.2 * squadScore + 0.1 * dq));
+    var lvl = function (x, lo, hi) { return x < lo ? 'faible' : x < hi ? 'moyen' : 'bon'; };
+    return { mode: n < c.threshold, gamesPlayed: n, wCurrent: C.round(wCur, 3), wPrior: C.round(wPrior, 3), reliability: reliability,
+      details: { echantillon: lvl(sampleScore, 0.4, 0.65), historique: prior ? 'bon' : 'indisponible', effectif: squad === 'stable' ? 'stable' : squad === 'changed' ? 'modifié' : 'inconnu',
+        incertitude: reliability < 45 ? 'élevée' : reliability < 70 ? 'moyenne' : 'faible' },
+      weightsStatus: 'PROVISIONAL WEIGHTS', notProbability: true,
+      label: n < c.threshold ? 'EARLY SEASON MODE' : 'SAISON ÉTABLIE',
+      extraUncertaintyPts: C.round((1 - reliability / 100) * 4, 1) };
+  }
+  function blend(current, prior, wCurrent) {
+    var a = C.num(current), b = C.num(prior);
+    if (a == null && b == null) return null; if (a == null) return b; if (b == null) return a;
+    var w = C.isNum(wCurrent) ? C.clamp(wCurrent, 0, 1) : 1; return a * w + b * (1 - w);
+  }
+
+  EA.context = { LEVELS: LEVELS, EMOJI: EMOJI, LABELS: LABELS, IMPACT_THRESHOLDS: IMPACT_THRESHOLDS, playerImpact: playerImpact, assessEffectif: assessEffectif,
+    absencePenalty: absencePenalty, fatigueFromSchedule: fatigueFromSchedule, assessFatigue: assessFatigue, fatigueMultiplier: fatigueMultiplier,
+    assessRotation: assessRotation, contextQuality: contextQuality, earlySeason: earlySeason, blend: blend };
+  if (typeof module === 'object' && module.exports) module.exports = EA.context;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-models.js ===== */
+/* EA-VALUE 3.0 — MODEL ENGINE : football (Poisson, Dixon-Coles, Elo, xG, Monte Carlo), basket (pace/ratings, Monte Carlo),
+   consensus, calibration. Toute simulation annoncée est réellement exécutée (iterationsRun). */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') require('./ea-core.js');
+  var EA = g.EA, C = EA.core;
+
+  // ---------- FOOTBALL ----------
+  function fact(n) { var f = 1; for (var i = 2; i <= n; i++) f *= i; return f; }
+  function poissonP(k, l) { return Math.exp(-l) * Math.pow(l, k) / fact(k); }
+  function tau(x, y, l, m, rho) { if (x === 0 && y === 0) return 1 - l * m * rho; if (x === 0 && y === 1) return 1 + l * rho; if (x === 1 && y === 0) return 1 + m * rho; if (x === 1 && y === 1) return 1 - rho; return 1; }
+  var MAXG = 8;
+  function poissonMatrix(lA, lB, rho) {
+    var rows = [], tot = 0;
+    for (var a = 0; a <= MAXG; a++) for (var b = 0; b <= MAXG; b++) { var p = poissonP(a, lA) * poissonP(b, lB) * ((a <= 1 && b <= 1) ? Math.max(0, tau(a, b, lA, lB, rho)) : 1); rows.push({ a: a, b: b, p: p }); tot += p; }
+    rows.forEach(function (r) { r.p /= tot; }); return rows;
+  }
+  function sumWhere(rows, fn) { return rows.reduce(function (s, r) { return fn(r.a, r.b) ? s + r.p : s; }, 0); }
+
+  // Monte Carlo réel : bruit log-normal sur λ (incertitude paramétrique), Poisson, rejet τ/τmax, support 0..8
+  function simulateFootball(lA, lB, opts) {
+    opts = opts || {}; var it = opts.iterations || 10000, rho = opts.rho == null ? -0.1 : opts.rho, sigma = opts.sigma == null ? 0.08 : opts.sigma;
+    var rng = opts.rng || (opts.seed != null ? C.mulberry32(C.hashSeed(opts.seed)) : Math.random), counts = {}, kept = 0, totals = [];
+    for (var n = 0; n < it; n++) {
+      var gA = lA * Math.exp(C.gaussian(rng) * sigma), gB = lB * Math.exp(C.gaussian(rng) * sigma);
+      var a = C.poissonSample(rng, gA), b = C.poissonSample(rng, gB);
+      if (a > MAXG || b > MAXG) continue;
+      var tMax = Math.max(1, 1 - gA * gB * rho, 1 + gA * rho, 1 + gB * rho, 1 - rho), w = (a <= 1 && b <= 1) ? Math.max(0, tau(a, b, gA, gB, rho)) : 1;
+      if (rng() * tMax > w) continue;
+      var key = a + '-' + b; counts[key] = (counts[key] || 0) + 1; kept++; totals.push(a + b);
+    }
+    var rows = []; for (var k in counts) { var pr = k.split('-'); rows.push({ a: +pr[0], b: +pr[1], p: counts[k] / kept }); }
+    totals.sort(function (x, y) { return x - y; });
+    return { rows: rows, iterationsRequested: it, iterationsRun: it, accepted: kept, totalGoals: { mean: C.mean(totals), median: C.quantile(totals, 0.5), variance: C.variance(totals), p10: C.quantile(totals, 0.1), p90: C.quantile(totals, 0.9) } };
+  }
+
+  function footballMarkets(rows, lines) {
+    var ou = {}, ls = lines || [1.5, 2.5, 3.5];
+    ls.forEach(function (L) { var o = sumWhere(rows, function (a, b) { return a + b > L; }); ou[L] = { over: o, under: 1 - o }; });
+    var home = sumWhere(rows, function (a, b) { return a > b; }), draw = sumWhere(rows, function (a, b) { return a === b; }), away = 1 - home - draw;
+    var btts = sumWhere(rows, function (a, b) { return a > 0 && b > 0; });
+    var top = rows.slice().sort(function (x, y) { return y.p - x.p; }).slice(0, 5).map(function (r) { return { score: r.a + '-' + r.b, p: r.p }; });
+    return { '1X2': { home: home, draw: draw, away: away }, doubleChance: { '1X': home + draw, 'X2': draw + away, '12': home + away },
+      dnb: { home: home / (home + away), away: away / (home + away) }, ou: ou, btts: { yes: btts, no: 1 - btts }, topScores: top };
+  }
+
+  // λ : forces attaque/défense relatives à la moyenne de ligue, mélange saison courante / historique (Early Season)
+  // team : {gf, ga, n, priorGf, priorGa, xgf, xga}  (par match). league : {avgHome, avgAway} ou {avg}
+  function footballLambdas(home, away, league, early) {
+    var warn = [], E = EA.context;
+    if (!league || (!C.isNum(league.avg) && !(C.isNum(league.avgHome) && C.isNum(league.avgAway)))) return { available: false, label: 'DATA UNAVAILABLE', reason: 'Moyenne de buts de la ligue manquante' };
+    var lh = C.isNum(league.avgHome) ? league.avgHome : league.avg, la = C.isNum(league.avgAway) ? league.avgAway : league.avg;
+    var teamAvg = (lh + la) / 2; if (!C.isNum(league.avgHome)) warn.push('Avantage domicile inconnu : aucun avantage appliqué (incertitude accrue)');
+    function w(t) { var n = C.num(t.n); if (n == null) return 1; var k = early && early.k != null ? early.k : C.DEFAULT_CONFIG.earlySeason.football.k; return n / (n + k); }
+    function strength(t, keyF, keyA, priorF, priorA, useXg) {
+      var wc = t._w;
+      var gf = useXg && C.num(t.xgf) != null ? t.xgf : t.gf, ga = useXg && C.num(t.xga) != null ? t.xga : t.ga;
+      var att = E.blend(gf, t[priorF], wc), def = E.blend(ga, t[priorA], wc);
+      return { att: att, def: def };
+    }
+    home = Object.assign({}, home); away = Object.assign({}, away);
+    home._w = C.num(home.priorGf) == null && C.num(home.priorGa) == null ? 1 : w(home); away._w = C.num(away.priorGf) == null && C.num(away.priorGa) == null ? 1 : w(away);
+    var useXg = C.num(home.xgf) != null && C.num(home.xga) != null && C.num(away.xgf) != null && C.num(away.xga) != null;
+    var H = strength(home, 'gf', 'ga', 'priorGf', 'priorGa', useXg), A = strength(away, 'gf', 'ga', 'priorGf', 'priorGa', useXg);
+    if (H.att == null || H.def == null || A.att == null || A.def == null) return { available: false, label: 'DATA UNAVAILABLE', reason: 'Buts marqués/encaissés par match manquants' };
+    var lamH = lh * (H.att / teamAvg) * (A.def / teamAvg), lamA = la * (A.att / teamAvg) * (H.def / teamAvg);
+    if (!(lamH > 0) || !(lamA > 0)) return { available: false, label: 'INSUFFICIENT DATA', reason: 'λ non positif' };
+    return { available: true, lambdaHome: lamH, lambdaAway: lamA, usedXg: useXg, warnings: warn, weights: { home: home._w, away: away._w },
+      parts: { lh: lh, la: la, teamAvg: teamAvg, hAtt: H.att, hDef: H.def, aAtt: A.att, aDef: A.def } };
+  }
+
+  function eloProbabilities(eH, eA, homeAdv) {
+    eH = C.num(eH); eA = C.num(eA); if (eH == null || eA == null) return null;
+    var adv = C.isNum(homeAdv) ? homeAdv : 60, exp = 1 / (1 + Math.pow(10, -((eH + adv) - eA) / 400));
+    var pd = C.clamp(0.30 - Math.abs(2 * exp - 1) * 0.20, 0.06, 0.30);
+    return { home: exp * (1 - pd), draw: pd, away: (1 - exp) * (1 - pd), drawIsHeuristic: true };
+  }
+
+  // ---------- BASKETBALL ----------
+  // team : {pace, ortg, drtg, n, priorPace, priorOrtg, priorDrtg}. league : {pace, ortg}. homeAdvPts : null si inconnu.
+  function basketExpectations(home, away, league, o) {
+    o = o || {}; var E = EA.context, early = o.early, wc = early && early.wCurrent != null ? early.wCurrent : 1;
+    function val(t, k) { var pr = t['prior' + k[0].toUpperCase() + k.slice(1)]; return E.blend(t[k], pr, C.num(pr) == null ? 1 : wc); }
+    var pH = val(home, 'pace'), pA = val(away, 'pace'), oH = val(home, 'ortg'), oA = val(away, 'ortg'), dH = val(home, 'drtg'), dA = val(away, 'drtg');
+    if ([pH, pA, oH, oA, dH, dA].some(function (x) { return x == null; })) return { available: false, label: 'DATA UNAVAILABLE', reason: 'Pace / ORtg / DRtg manquants pour au moins une équipe' };
+    var lgO = C.num(league && league.ortg), lgP = C.num(league && league.pace), warn = [];
+    if (lgO == null) { lgO = (oH + oA + dH + dA) / 4; warn.push('Moyenne de ligue ORtg absente : approximée par la moyenne des deux équipes'); }
+    var pace = lgP != null ? pH * pA / lgP : (pH + pA) / 2; if (lgP == null) warn.push('Pace de ligue absente : moyenne simple des deux équipes');
+    var eoH = oH + dA - lgO, eoA = oA + dH - lgO;
+    var homeAdv = C.num(o.homeAdvPts); if (homeAdv == null) warn.push('Avantage domicile inconnu : 0 appliqué (incertitude accrue)');
+    var ptsH = eoH * pace / 100 + (homeAdv || 0) / 2, ptsA = eoA * pace / 100 - (homeAdv || 0) / 2;
+    return { available: true, expectedPace: pace, expectedOffRatingHome: eoH, expectedOffRatingAway: eoA, expectedDefRatingHome: eoA, expectedDefRatingAway: eoH,
+      expectedPointsHome: ptsH, expectedPointsAway: ptsA, expectedMargin: ptsH - ptsA, expectedTotal: ptsH + ptsA, warnings: warn };
+  }
+  function estimateSd(values) { var v = (values || []).map(C.num).filter(function (x) { return x != null; }); if (v.length < 10) return null; return Math.sqrt(C.variance(v)); }
+
+  function simulateBasketball(exp, opts) {
+    opts = opts || {}; var it = opts.iterations || 10000, cfg = (opts.config || C.DEFAULT_CONFIG).basketSd;
+    var sdM = C.num(opts.sdMargin), sdT = C.num(opts.sdTotal), prov = false;
+    if (sdM == null) { sdM = cfg.margin; prov = true; } if (sdT == null) { sdT = cfg.total; prov = true; }
+    var rng = opts.rng || (opts.seed != null ? C.mulberry32(C.hashSeed(opts.seed)) : Math.random);
+    var margins = new Array(it), totals = new Array(it), win = 0, cover = 0, over = 0, sl = C.num(opts.spreadLine), tl = C.num(opts.totalLine);
+    for (var i = 0; i < it; i++) {
+      var m = exp.expectedMargin + C.gaussian(rng) * sdM, t = exp.expectedTotal + C.gaussian(rng) * sdT;
+      margins[i] = m; totals[i] = t; if (m > 0) win++; if (sl != null && m + sl > 0) cover++; if (tl != null && t > tl) over++;
+    }
+    var sm = margins.slice().sort(function (a, b) { return a - b; }), st = totals.slice().sort(function (a, b) { return a - b; });
+    return { iterationsRequested: it, iterationsRun: it, sdMargin: sdM, sdTotal: sdT, sdProvisional: prov,
+      pHome: win / it, pAway: 1 - win / it, pSpreadCover: sl != null ? cover / it : null, pOver: tl != null ? over / it : null, pUnder: tl != null ? 1 - over / it : null,
+      margin: { mean: C.mean(margins), median: C.quantile(sm, 0.5), variance: C.variance(margins), p10: C.quantile(sm, 0.1), p90: C.quantile(sm, 0.9) },
+      total: { mean: C.mean(totals), median: C.quantile(st, 0.5), variance: C.variance(totals), p10: C.quantile(st, 0.1), p90: C.quantile(st, 0.9) } };
+  }
+
+  // ---------- CONSENSUS ----------
+  // models : [{id, name, status, p, perf:{n, brier}, health:'HEALTHY'|..|'DISABLED'}]  p = probabilité du même événement
+  function consensus(models, cfg) {
+    var conf = cfg || C.DEFAULT_CONFIG, minN = conf.minSample.weights, act = (models || []).filter(function (m) { return C.isNum(m.p) && m.status !== 'UNAVAILABLE' && m.health !== 'DISABLED' && m.health !== 'DEGRADED'; });
+    var excluded = (models || []).filter(function (m) { return act.indexOf(m) < 0; }).map(function (m) { return { id: m.id, reason: (m.health === 'DISABLED' || m.health === 'DEGRADED') ? 'MODEL DEGRADED' : 'UNAVAILABLE' }; });
+    if (!act.length) return { p: null, label: 'DATA UNAVAILABLE', excluded: excluded };
+    var calibrated = act.every(function (m) { return m.perf && m.perf.n >= minN && C.isNum(m.perf.brier) && m.perf.brier > 0; });
+    var ws = act.map(function (m) { return calibrated ? 1 / m.perf.brier : 1; }), sw = ws.reduce(function (a, b) { return a + b; }, 0);
+    var p = act.reduce(function (s, m, i) { return s + m.p * ws[i] / sw; }, 0);
+    var ps = act.map(function (m) { return m.p; }), spread = (Math.max.apply(null, ps) - Math.min.apply(null, ps)) * 100, st = conf.stability;
+    return { p: p, spreadPts: spread, models: act.map(function (m, i) { return { id: m.id, p: m.p, weight: ws[i] / sw }; }), excluded: excluded,
+      weightsLabel: calibrated ? 'WEIGHTED BY OUT-OF-SAMPLE BRIER' : 'MODEL WEIGHTS NOT YET CALIBRATED',
+      stability: act.length < 2 ? 'Inconnue' : spread < st.stableSpreadPts ? 'Stable' : spread < st.mediumSpreadPts ? 'Moyenne' : 'Instable',
+      agreementPct: act.length < 2 ? null : Math.round(Math.max(0, 100 - spread * 5)) };
+  }
+
+  // ---------- CALIBRATION ----------
+  // obs : [{p, hit}] ; p ∈ [0,1], hit booléen
+  function calibration(obs) {
+    var v = (obs || []).filter(function (o) { return C.isNum(o.p) && o.p >= 0 && o.p <= 1 && (o.hit === true || o.hit === false); });
+    var n = v.length; if (!n) return { n: 0, label: 'INSUFFICIENT DATA', brier: null, logLoss: null, ece: null, buckets: bucketsEmpty() };
+    var brier = 0, ll = 0, buckets = bucketsEmpty();
+    v.forEach(function (o) { var y = o.hit ? 1 : 0; brier += (o.p - y) * (o.p - y); var q = C.clamp(o.p, 1e-4, 1 - 1e-4); ll += -(y ? Math.log(q) : Math.log(1 - q));
+      var bi = Math.min(9, Math.floor(o.p * 10)); buckets[bi].n++; buckets[bi].sumP += o.p; buckets[bi].hits += y; });
+    var ece = 0; buckets.forEach(function (b) { if (b.n) { b.meanP = b.sumP / b.n; b.freq = b.hits / b.n; ece += b.n / n * Math.abs(b.meanP - b.freq); } else { b.meanP = null; b.freq = null; } });
+    return { n: n, brier: brier / n, logLoss: ll / n, ece: ece, buckets: buckets, label: n < C.DEFAULT_CONFIG.minSample.calibration ? 'SAMPLE TOO SMALL' : 'OK' };
+  }
+  function bucketsEmpty() { var b = []; for (var i = 0; i < 10; i++) b.push({ range: (i * 10) + '–' + (i * 10 + 10) + '%', n: 0, sumP: 0, hits: 0, meanP: null, freq: null }); return b; }
+
+  EA.models = { poissonP: poissonP, tau: tau, poissonMatrix: poissonMatrix, sumWhere: sumWhere, simulateFootball: simulateFootball, footballMarkets: footballMarkets,
+    footballLambdas: footballLambdas, eloProbabilities: eloProbabilities, basketExpectations: basketExpectations, estimateSd: estimateSd, simulateBasketball: simulateBasketball,
+    consensus: consensus, calibration: calibration };
+  if (typeof module === 'object' && module.exports) module.exports = EA.models;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-value.js ===== */
+/* EA-VALUE 3.0 — MARKET / VALUE / RISK / DECISION / COMMENTARY / EVIDENCE / INFORMATION SHOCK.
+   Une cote n'entre JAMAIS dans P_MODEL. Probabilité élevée ≠ value. Préférer NO BET à un faux signal. */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') require('./ea-core.js');
+  var EA = g.EA, C = EA.core;
+
+  // ---------- MARKET ----------
+  function marketFromOdds(oddsList) {
+    var odds = (oddsList || []).map(C.num); if (!odds.length || odds.some(function (o) { return o == null || !(o > 1); })) return null;
+    var raw = odds.map(function (o) { return 1 / o; }), sum = raw.reduce(function (a, b) { return a + b; }, 0);
+    return { implied: raw, overround: sum, marginPct: (sum - 1) * 100, fairProbs: raw.map(function (r) { return r / sum; }), fairOdds: raw.map(function (r) { return sum / r; }) };
+  }
+
+  // ---------- VALUE ----------
+  function valueLine(pModel, odds, cfg) {
+    var v = (cfg || C.DEFAULT_CONFIG).value, p = C.num(pModel), o = C.num(odds);
+    if (p == null || p < 0 || p > 1) return { available: false, label: 'DATA UNAVAILABLE', reason: 'Probabilité modèle invalide' };
+    var fair = p > 0 ? 1 / p : null, target = p > 0 ? (1 + v.minEV) / p : null;
+    var out = { available: true, pModel: p, fairOdds: fair, targetMinimum: target, minEV: v.minEV, currentOdds: null, pMarket: null, edgePts: null, ev: null, status: 'NO_PRICE', label: 'AUCUNE COTE : value non calculable' };
+    if (o == null || !(o > 1)) return out;
+    out.currentOdds = o; out.pMarket = 1 / o; out.edgePts = (p - 1 / o) * 100; out.ev = p * o - 1;
+    if (target != null && o < target) { out.status = 'VALUE_LOST'; out.label = 'VALUE LOST'; }
+    else { out.status = 'OK'; out.label = 'PRIX ACCEPTABLE'; }
+    return out;
+  }
+
+  // ---------- DECISION ----------
+  // in : {mode:'VALUE'|'HIGH_PROBABILITY', value, dataQuality, contextQuality, stability, modelHealth, uncertaintyHalf, lineupConfirmed, earlyReliability, stakeOk}
+  function decide(inp, cfg) {
+    var conf = cfg || C.DEFAULT_CONFIG, V = conf.value, mode = inp.mode === 'HIGH_PROBABILITY' ? 'HIGH_PROBABILITY' : 'VALUE';
+    var no = [], check = [], vl = inp.value;
+    if (!vl || !vl.available) no.push('données insuffisantes (probabilité indisponible)');
+    if (C.isNum(inp.dataQuality) && inp.dataQuality < V.minDataQuality) no.push('données insuffisantes (qualité ' + Math.round(inp.dataQuality) + '/100)');
+    if (inp.dataQuality == null) no.push('données insuffisantes (qualité inconnue)');
+    if (inp.modelHealth === 'DISABLED' || inp.modelHealth === 'DEGRADED') no.push('modèle instable (MODEL DEGRADED)');
+    if (inp.stakeOk === false) no.push('STAKE SIZE TOO LARGE : PAPER BET');
+    if (vl && vl.available) {
+      if (mode === 'VALUE') {
+        if (vl.currentOdds == null) no.push('cote absente : value non calculable');
+        else if (vl.status === 'VALUE_LOST') no.push('cote insuffisante (VALUE LOST : ' + vl.currentOdds.toFixed(2) + ' < minimum ' + vl.targetMinimum.toFixed(2) + ')');
+        else if (vl.ev < vl.minEV) no.push('EV insuffisante');
+        else if (vl.ev > V.anomalyEV) check.push('EV > ' + Math.round(V.anomalyEV * 100) + ' % : anomalie possible, à vérifier avant toute décision');
+      } else if (vl.pModel < V.highProb) no.push('probabilité ' + Math.round(vl.pModel * 100) + ' % sous le seuil de ' + Math.round(V.highProb * 100) + ' %');
+    }
+    if (C.isNum(inp.uncertaintyHalf) && inp.uncertaintyHalf > 9) check.push('incertitude large (±' + inp.uncertaintyHalf.toFixed(1) + ' pts)');
+    if (inp.lineupConfirmed !== true) check.push('lineup inconnu / non confirmé');
+    if (C.isNum(inp.contextQuality) && inp.contextQuality < V.minContextQuality) check.push('contexte insuffisamment connu (' + Math.round(inp.contextQuality) + '/100)');
+    if (inp.stability === 'Instable') check.push('modèles instables (désaccord élevé)');
+    if (C.isNum(inp.earlyReliability) && inp.earlyReliability < 45) check.push('échantillon trop petit (fiabilité début de saison ' + Math.round(inp.earlyReliability) + '/100)');
+    if (inp.modelHealth === 'CAUTION') check.push('modèle sous surveillance (CAUTION)');
+    var d = no.length ? 'NO BET' : check.length ? 'CHECK' : 'BET';
+    var notes = mode === 'HIGH_PROBABILITY' ? ['HIGH PROBABILITY ≠ GUARANTEED', 'HIGH PROBABILITY ≠ VALUE'] : [];
+    if (mode === 'HIGH_PROBABILITY' && vl && vl.available && vl.ev != null && vl.ev < 0) notes.push('Probabilité élevée mais sans value au prix actuel');
+    return { decision: d, mode: mode, reasons: no.concat(check), blocking: no, cautions: check, notes: notes, signal: d === 'NO BET' && !vl ? 'NO QUALIFIED OPPORTUNITY' : d === 'NO BET' ? 'NO QUALIFIED OPPORTUNITY' : null };
+  }
+
+  // ---------- EVIDENCE LEDGER / FEATURE IMPORTANCE ----------
+  function evidenceLedger(factors) {
+    var f = (factors || []).filter(function (x) { return x && C.isNum(x.delta); });
+    var net = f.reduce(function (s, x) { return s + x.delta; }, 0);
+    return { factors: f.slice().sort(function (a, b) { return Math.abs(b.delta) - Math.abs(a.delta); }), net: net, unit: 'pts de probabilité' };
+  }
+  function featureImportance(factors) {
+    var f = (factors || []).filter(function (x) { return x && C.isNum(x.delta); }), tot = f.reduce(function (s, x) { return s + Math.abs(x.delta); }, 0);
+    return f.map(function (x) { var share = tot > 0 ? Math.abs(x.delta) / tot : 0; return { name: x.name, share: share, bar: '█'.repeat(Math.max(1, Math.round(share * 10))), sign: x.delta >= 0 ? '+' : '−' }; }).sort(function (a, b) { return b.share - a.share; });
+  }
+
+  // ---------- INFORMATION SHOCK ----------
+  function informationShock(before, after, cause, cfg) {
+    var th = (cfg || C.DEFAULT_CONFIG).shockPts; if (!C.isNum(before) || !C.isNum(after)) return { isShock: false, label: null, change: null };
+    var ch = (after - before) * 100;
+    return { isShock: Math.abs(ch) >= th, label: Math.abs(ch) >= th ? 'INFORMATION SHOCK' : null, before: before, after: after, change: ch, cause: cause || 'cause non identifiée' };
+  }
+  function diffContext(a, b) {
+    var out = []; if (!a || !b) return out;
+    ['effectif', 'fatigue', 'rotation'].forEach(function (k) { if (a[k] !== b[k]) out.push(k + ' : ' + a[k] + ' → ' + b[k]); });
+    if (a.lineupConfirmed !== b.lineupConfirmed) out.push(b.lineupConfirmed ? 'composition confirmée' : 'composition non confirmée');
+    if (C.isNum(a.odds) && C.isNum(b.odds) && a.odds !== b.odds) out.push('mouvement de cote ' + a.odds + ' → ' + b.odds);
+    return out;
+  }
+
+  // ---------- COMMENTARY ----------
+  function commentary(a) {
+    var pour = [], contre = [], risques = [], d = a.decision, ledger = (a.evidence && a.evidence.factors) || [];
+    ledger.filter(function (f) { return f.delta > 0; }).slice(0, 4).forEach(function (f) { pour.push(f.name + ' (+' + f.delta.toFixed(1) + ')'); });
+    ledger.filter(function (f) { return f.delta < 0; }).slice(0, 4).forEach(function (f) { contre.push(f.name + ' (' + f.delta.toFixed(1) + ')'); });
+    var v = a.value;
+    if (v && v.available && v.ev != null) { if (v.ev >= v.minEV) pour.push('EV ' + (v.ev * 100).toFixed(1) + ' % au prix actuel'); else contre.push('EV ' + (v.ev * 100).toFixed(1) + ' % (sous le seuil de ' + Math.round(v.minEV * 100) + ' %)'); }
+    if (v && v.status === 'VALUE_LOST') contre.push('cote sous le minimum acceptable');
+    if (a.modelAgreement) { if (a.stability === 'Stable') pour.push('modèles cohérents entre eux'); else if (a.stability === 'Instable') contre.push('modèles en désaccord'); }
+    if (d && d.cautions) d.cautions.forEach(function (c) { risques.push(c); });
+    if (d && d.blocking) d.blocking.forEach(function (c) { if (risques.indexOf(c) < 0) risques.push(c); });
+    if (a.context) {
+      if (!a.context.effectifKnown) risques.push('effectif : information manquante');
+      if (!a.context.fatigueKnown) risques.push('FATIGUE : INCONNUE');
+      if (!a.context.rotationKnown) risques.push('rotation : information manquante');
+    }
+    if (a.early && a.early.mode) risques.push('début de saison : coefficients PROVISIONAL WEIGHTS');
+    pour = pour.slice(0, 5); contre = contre.slice(0, 5);
+    var concl;
+    if (!d) concl = 'Analyse incomplète : aucune décision.';
+    else if (d.decision === 'BET') concl = 'Le prix, le contexte et la qualité des données sont réunis : signal exploitable, sans garantie de résultat.';
+    else if (d.decision === 'CHECK') concl = 'Le modèle détecte un signal, mais ' + (d.cautions[0] || 'des informations manquent') + ' : à surveiller plutôt qu\'à considérer comme une décision forte.';
+    else concl = 'NO QUALIFIED OPPORTUNITY : ' + (d.blocking[0] || 'avantage insuffisant') + '.';
+    return { decision: d ? d.decision : null, signal: a.signal || null, pour: pour, contre: contre, risques: risques,
+      prix: v && v.available ? { current: v.currentOdds, fair: v.fairOdds, minimum: v.targetMinimum } : null, stability: a.stability || 'Inconnue', dataQuality: a.dataQualityLabel || null, conclusion: concl };
+  }
+  function qualityLabel(dq) { return !C.isNum(dq) ? 'Low' : dq >= 75 ? 'High' : dq >= 55 ? 'Medium' : 'Low'; }
+
+  EA.value = { marketFromOdds: marketFromOdds, valueLine: valueLine, decide: decide, evidenceLedger: evidenceLedger, featureImportance: featureImportance,
+    informationShock: informationShock, diffContext: diffContext, commentary: commentary, qualityLabel: qualityLabel };
+  if (typeof module === 'object' && module.exports) module.exports = EA.value;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-bankroll.js ===== */
+/* EA-VALUE 3.0 — BANKROLL ENGINE + SIMULATEUR. Informatif : aucun bénéfice futur n'est garanti. */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') require('./ea-core.js');
+  var EA = g.EA, C = EA.core;
+  function kelly(p, odds) { if (!(p > 0 && p < 1 && odds > 1)) return 0; return Math.max(0, (p * odds - 1) / (odds - 1)); }
+  // bankroll: nombre > 0 ; minStake: mise minimale du bookmaker (optionnelle)
+  function suggestStake(o, cfg) {
+    var b = (cfg || C.DEFAULT_CONFIG).bankroll, bank = C.num(o.bankroll), p = C.num(o.p), odds = C.num(o.odds), minStake = C.num(o.minStake);
+    if (bank == null || bank <= 0) return { available: false, label: 'DATA UNAVAILABLE', reason: 'Bankroll non renseignée' };
+    if (p == null || odds == null) return { available: false, label: 'DATA UNAVAILABLE', reason: 'Probabilité ou cote manquante' };
+    var k = kelly(p, odds), cap = bank * b.maxStakePct, raw = bank * k * b.kellyFraction, stake = Math.min(raw, cap);
+    var tooLarge = minStake != null && minStake > cap;
+    var pct = stake / bank, tier = stake <= 0 ? 'AUCUNE' : pct <= b.tiers.micro + 1e-9 ? 'MICRO' : pct <= b.tiers.small + 1e-9 ? 'SMALL' : 'STANDARD';
+    if (tooLarge) return { available: true, stake: 0, stakePct: 0, tier: 'AUCUNE', kelly: k, cap: cap, stakeOk: false, label: 'STAKE SIZE TOO LARGE', advice: 'NO BET / PAPER BET' };
+    if (minStake != null && stake > 0 && stake < minStake) { stake = minStake; pct = stake / bank; tier = pct <= b.tiers.micro ? 'MICRO' : pct <= b.tiers.small ? 'SMALL' : 'STANDARD'; }
+    return { available: true, stake: stake, stakePct: pct, tier: tier, kelly: k, cap: cap, stakeOk: true, label: stake > 0 ? 'MISE INDICATIVE' : 'PAS DE MISE (Kelly ≤ 0)', allIn: false };
+  }
+  function simulate(o, cfg) {
+    var b = (cfg || C.DEFAULT_CONFIG).bankroll, sims = o.sims || 5000, n = o.nBets, p = o.winProb, odds = o.odds, pct = o.stakePct, bank0 = o.bankroll;
+    if (![sims, n, p, odds, pct, bank0].every(C.isNum) || n < 1 || bank0 <= 0 || p < 0 || p > 1 || odds <= 1 || pct <= 0 || pct >= 1) return { available: false, label: 'DATA UNAVAILABLE', reason: 'Paramètres invalides' };
+    var rng = o.seed != null ? C.mulberry32(C.hashSeed(o.seed)) : Math.random, finals = [], dds = [], streaks = [], ruin = 0, thr = bank0 * b.ruinThreshold;
+    for (var s = 0; s < sims; s++) {
+      var bank = bank0, peak = bank0, dd = 0, st = 0, ms = 0, ruined = false;
+      for (var i = 0; i < n; i++) { var stake = bank * pct; if (rng() < p) { bank += stake * (odds - 1); st = 0; } else { bank -= stake; st++; if (st > ms) ms = st; }
+        if (bank > peak) peak = bank; dd = Math.max(dd, (peak - bank) / peak); if (bank < thr) ruined = true; }
+      finals.push(bank); dds.push(dd); streaks.push(ms); if (ruined) ruin++;
+    }
+    finals.sort(function (a, c2) { return a - c2; }); streaks.sort(function (a, c2) { return a - c2; });
+    return { available: true, sims: sims, median: C.quantile(finals, 0.5), p10: C.quantile(finals, 0.1), p90: C.quantile(finals, 0.9), avgMaxDrawdown: C.mean(dds), medianLosingStreak: C.quantile(streaks, 0.5), p90LosingStreak: C.quantile(streaks, 0.9),
+      riskOfRuin: ruin / sims, ruinDefinition: 'bankroll passée sous ' + Math.round(b.ruinThreshold * 100) + ' % du capital initial', negativeEV: p * odds - 1 < 0, banner: 'SIMULATION — NOT A GUARANTEE' };
+  }
+  EA.bankroll = { kelly: kelly, suggestStake: suggestStake, simulate: simulate };
+  if (typeof module === 'object' && module.exports) module.exports = EA.bankroll;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-memory.js ===== */
+/* EA-VALUE 3.0 — EA MEMORY, CLV, COMPETITION MEMORY, WALK-FORWARD BACKTEST, MODEL HEALTH, AUTO DISCOVERY.
+   Une prédiction enregistrée n'est jamais modifiée : seul un bloc `result` est ajouté après le match. */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') { require('./ea-core.js'); require('./ea-models.js'); }
+  var EA = g.EA, C = EA.core;
+  var KEY = 'ea_pro_memory', SCHEMA = 1;
+
+  function frozenPart(r) { return { sport: r.sport, competition: r.competition, matchKey: r.matchKey, matchDate: r.matchDate, market: r.market, selection: r.selection, odds: r.odds, pModel: r.pModel, fairOdds: r.fairOdds, ev: r.ev, decision: r.decision, modelVersion: r.modelVersion, modelProbs: r.modelProbs, dataQuality: r.dataQuality, stability: r.stability, createdAt: r.createdAt }; }
+  function hashOf(r) { return C.hashSeed(JSON.stringify(frozenPart(r))); }
+
+  function clv(entry, closing) {
+    entry = C.num(entry); closing = C.num(closing); if (entry == null || closing == null || !(entry > 1) || !(closing > 1)) return null;
+    return { clvProbPts: (1 / closing - 1 / entry) * 100, oddsMovePct: (closing / entry - 1) * 100 };
+  }
+
+  function createMemory(storage, key) {
+    var K = key || KEY;
+    function load() { try { var raw = storage.getItem(K); if (!raw) return { schema: SCHEMA, analyses: [] }; var o = JSON.parse(raw); if (!o || !Array.isArray(o.analyses)) return { schema: SCHEMA, analyses: [] }; return o; } catch (e) { return { schema: SCHEMA, analyses: [] }; } }
+    function save(o) { storage.setItem(K, JSON.stringify(o)); }
+    return {
+      all: function () { return load().analyses; },
+      add: function (rec, now) {
+        var o = load(), t = C.isNum(now) ? now : Date.now();
+        var r = Object.assign({}, rec, { id: rec.id || ('a' + t.toString(36) + Math.random().toString(36).slice(2, 7)), createdAt: t, result: null });
+        if (!r.matchKey) r.matchKey = [r.sport, r.competition, r.home, r.away, r.matchDate].join('|');
+        r.modelVersion = r.modelVersion || C.VERSION; r.predictionHash = hashOf(r);
+        o.analyses.push(r); save(o); return r;
+      },
+      setClosing: function (id, closingOdds) { var o = load(), r = o.analyses.find(function (x) { return x.id === id; }); if (!r) return null; if (r.closingOdds != null) return r; var c = C.num(closingOdds); if (c == null || !(c > 1)) return null; r.closingOdds = c; save(o); return r; },
+      settle: function (id, outcome, o2) {
+        o2 = o2 || {}; var o = load(), r = o.analyses.find(function (x) { return x.id === id; }); if (!r || r.result) return r;
+        if (['won', 'lost', 'void'].indexOf(outcome) < 0) return null;
+        var stake = C.num(o2.stake) != null && o2.stake > 0 ? o2.stake : null, unit = stake == null ? 1 : stake, odds = C.num(r.odds);
+        var profit = outcome === 'void' ? 0 : (odds == null ? null : outcome === 'won' ? unit * (odds - 1) : -unit);
+        if (C.num(o2.closingOdds) != null && r.closingOdds == null && o2.closingOdds > 1) r.closingOdds = C.num(o2.closingOdds);
+        r.result = { outcome: outcome, settledAt: C.isNum(o2.now) ? o2.now : Date.now(), stake: stake, profit: profit, profitUnits: profit == null ? null : (stake == null ? profit : profit / stake),
+          error: outcome === 'void' ? null : (outcome === 'won' ? 1 : 0) - r.pModel };
+        save(o); return r;
+      },
+      remove: function (id) { var o = load(); o.analyses = o.analyses.filter(function (x) { return x.id !== id; }); save(o); },
+      previous: function (matchKey, market, selection) { var l = load().analyses.filter(function (x) { return x.matchKey === matchKey && x.market === market && x.selection === selection; }); return l.length ? l[l.length - 1] : null; },
+      verify: function (r) { return r.predictionHash === hashOf(r); }
+    };
+  }
+
+  function settled(records) { return records.filter(function (r) { return r.result && r.result.outcome !== 'void' && C.isNum(r.pModel); }); }
+  function recClv(r) { return clv(r.odds, r.closingOdds); }
+
+  // ---------- STATISTIQUES (globales / par sport-compétition-marché) ----------
+  function stats(records, cfg) {
+    var minN = (cfg || C.DEFAULT_CONFIG).minSample.competitionStats, s = settled(records), n = s.length;
+    var base = { N: records.length, settled: n };
+    if (!n) return Object.assign(base, { label: 'SAMPLE TOO SMALL', roi: null, yield: null, profit: null, hitRate: null, brier: null, clvAvg: null, clvPositivePct: null, clvN: 0 });
+    var withOdds = s.filter(function (r) { return C.num(r.odds) != null && r.odds > 1; });
+    var stakeSum = withOdds.reduce(function (a, r) { return a + (r.result.stake || 1); }, 0), profit = withOdds.reduce(function (a, r) { return a + (r.result.profit || 0); }, 0);
+    var c = records.map(recClv).filter(Boolean), cal = EA.models.calibration(s.map(function (r) { return { p: r.pModel, hit: r.result.outcome === 'won' }; }));
+    return Object.assign(base, { label: n < minN ? 'SAMPLE TOO SMALL' : 'OK', profit: withOdds.length ? profit : null, roi: withOdds.length && stakeSum > 0 ? profit / stakeSum : null, yield: withOdds.length && stakeSum > 0 ? profit / stakeSum : null,
+      hitRate: s.filter(function (r) { return r.result.outcome === 'won'; }).length / n, brier: cal.brier, logLoss: cal.logLoss, ece: cal.ece,
+      clvAvg: c.length ? C.mean(c.map(function (x) { return x.clvProbPts; })) : null, clvPositivePct: c.length ? c.filter(function (x) { return x.clvProbPts > 0; }).length / c.length * 100 : null, clvN: c.length,
+      clvLabel: c.length ? null : 'CLV UNAVAILABLE' });
+  }
+  function groupBy(records, keyFn, cfg) { var m = {}; records.forEach(function (r) { var k = keyFn(r); (m[k] = m[k] || []).push(r); }); var out = {}; Object.keys(m).forEach(function (k) { out[k] = stats(m[k], cfg); }); return out; }
+  function competitionMemory(records, cfg) {
+    return { bySport: groupBy(records, function (r) { return r.sport || '?'; }, cfg), byCompetition: groupBy(records, function (r) { return (r.sport || '?') + ' / ' + (r.competition || '?'); }, cfg),
+      byMarket: groupBy(records, function (r) { return (r.sport || '?') + ' / ' + (r.competition || '?') + ' / ' + (r.market || '?'); }, cfg) };
+  }
+
+  // ---------- WALK-FORWARD BACKTEST ----------
+  function metricsFor(seg) {
+    var n = seg.length; if (!n) return { N: 0 };
+    var profit = 0, cum = 0, peak = 0, dd = 0, streak = 0, maxStreak = 0, stakeSum = 0;
+    seg.forEach(function (r) { var u = r.result.profitUnits; if (u == null) return; stakeSum += 1; profit += u; cum += u; if (cum > peak) peak = cum; dd = Math.max(dd, peak - cum); if (u < 0) { streak++; maxStreak = Math.max(maxStreak, streak); } else streak = 0; });
+    var cal = EA.models.calibration(seg.map(function (r) { return { p: r.pModel, hit: r.result.outcome === 'won' }; })), c = seg.map(recClv).filter(Boolean);
+    return { N: n, profitUnits: profit, roi: stakeSum ? profit / stakeSum : null, yield: stakeSum ? profit / stakeSum : null, maxDrawdownUnits: dd, maxLosingStreak: maxStreak, brier: cal.brier, logLoss: cal.logLoss, ece: cal.ece, calibration: cal.buckets,
+      clvAvg: c.length ? C.mean(c.map(function (x) { return x.clvProbPts; })) : null };
+  }
+  function walkForward(records, o) {
+    o = o || {}; var cfg = o.config || C.DEFAULT_CONFIG, tf = o.trainFrac == null ? 0.6 : o.trainFrac, vf = o.validFrac == null ? 0.2 : o.validFrac, excluded = [];
+    var elig = settled(records).filter(function (r) {
+      var ok = r.predictionHash === hashOf(r); if (!ok) { excluded.push({ id: r.id, reason: 'PREDICTION MODIFIÉE (hash invalide)' }); return false; }
+      var md = Date.parse(r.matchDate); if (isFinite(md) && r.createdAt > md + 86400000) { excluded.push({ id: r.id, reason: 'LOOK-AHEAD SUSPECT (créée après le match)' }); return false; }
+      return true; });
+    elig.sort(function (a, b) { return (Date.parse(a.matchDate) || a.createdAt) - (Date.parse(b.matchDate) || b.createdAt) || a.createdAt - b.createdAt; });
+    if (elig.length < cfg.minSample.backtest) return { label: 'INSUFFICIENT HISTORICAL DATA', N: elig.length, required: cfg.minSample.backtest, excluded: excluded };
+    var i1 = Math.floor(elig.length * tf), i2 = Math.floor(elig.length * (tf + vf));
+    var running = [], seen = [];
+    elig.forEach(function (r) { if (seen.length >= 5) { running.push({ date: r.matchDate, priorBrier: EA.models.calibration(seen.map(function (x) { return { p: x.pModel, hit: x.result.outcome === 'won' }; })).brier }); } seen.push(r); });
+    return { label: 'OK', N: elig.length, excluded: excluded, training: metricsFor(elig.slice(0, i1)), validation: metricsFor(elig.slice(i1, i2)), test: metricsFor(elig.slice(i2)), pointInTimeBrier: running,
+      note: 'Aucun paramètre n\'est ajusté : les segments sont chronologiques, chaque prédiction est celle figée à l\'analyse (aucun look-ahead).' };
+  }
+
+  // ---------- MODEL HEALTH / KILL SWITCH ----------
+  function worst(a, b) { var o = ['HEALTHY', 'CAUTION', 'DEGRADED', 'DISABLED']; return o.indexOf(a) >= o.indexOf(b) ? a : b; }
+  function modelPerf(records) {
+    var ids = {}; settled(records).forEach(function (r) { for (var k in (r.modelProbs || {})) ids[k] = 1; });
+    var out = {}; Object.keys(ids).forEach(function (id) { var obs = settled(records).filter(function (r) { return C.isNum((r.modelProbs || {})[id]); }).map(function (r) { return { p: r.modelProbs[id], hit: r.result.outcome === 'won' }; }); var c = EA.models.calibration(obs); out[id] = { n: c.n, brier: c.brier, logLoss: c.logLoss, ece: c.ece }; });
+    return out;
+  }
+  function modelHealth(records, modelId, cfg) {
+    var h = (cfg || C.DEFAULT_CONFIG).health, s = settled(records).filter(function (r) { return !modelId || modelId === 'consensus' || C.isNum((r.modelProbs || {})[modelId]); });
+    if (s.length < h.minN) return { state: null, emoji: '⚪', label: 'INSUFFICIENT DATA', n: s.length, required: h.minN, thresholdsProvisional: true };
+    var cal = EA.models.calibration(s.map(function (r) { return { p: (modelId && modelId !== 'consensus') ? r.modelProbs[modelId] : r.pModel, hit: r.result.outcome === 'won' }; }));
+    var state = 'HEALTHY', reasons = [];
+    function chk(v, t, name, higherIsWorse) { if (v == null) return; var lvl = higherIsWorse ? (v >= t.disabled ? 'DISABLED' : v >= t.degraded ? 'DEGRADED' : v >= t.caution ? 'CAUTION' : 'HEALTHY') : (v <= t.disabled ? 'DISABLED' : v <= t.degraded ? 'DEGRADED' : v <= t.caution ? 'CAUTION' : 'HEALTHY'); if (lvl !== 'HEALTHY') reasons.push(name + ' ' + lvl); state = worst(state, lvl); }
+    chk(cal.brier, h.brier, 'Brier', true); chk(cal.ece, h.ece, 'ECE', true);
+    var c = s.map(recClv).filter(Boolean), clvAvg = c.length ? C.mean(c.map(function (x) { return x.clvProbPts; })) : null; chk(clvAvg, h.clvPts, 'CLV', false);
+    var m = metricsFor(s);
+    var E = { HEALTHY: '🟢', CAUTION: '🟡', DEGRADED: '🟠', DISABLED: '🔴' };
+    return { state: state, emoji: E[state], label: state === 'DEGRADED' || state === 'DISABLED' ? 'MODEL DEGRADED' : state, n: s.length, brier: cal.brier, logLoss: cal.logLoss, ece: cal.ece, clvAvg: clvAvg, maxDrawdownUnits: m.maxDrawdownUnits, reasons: reasons, thresholdsProvisional: true };
+  }
+  // Kill switch : un modèle dégradé n'est plus pondéré automatiquement ; son historique reste intact
+  function killSwitchWeight(state) { return (state === 'DEGRADED' || state === 'DISABLED') ? 0 : 1; }
+
+  // ---------- AUTO DISCOVERY (EXPÉRIMENTAL — aucun effet sur la production) ----------
+  function autoDiscovery(records, cfg) {
+    var minN = (cfg || C.DEFAULT_CONFIG).minSample.calibration, s = settled(records), names = {};
+    s.forEach(function (r) { for (var k in (r.features || {})) if (C.isNum(r.features[k])) names[k] = 1; });
+    var out = [];
+    Object.keys(names).forEach(function (k) {
+      var pts = s.filter(function (r) { return C.isNum((r.features || {})[k]); }).map(function (r) { return { x: r.features[k], y: (r.result.outcome === 'won' ? 1 : 0) - r.pModel }; });
+      if (pts.length < minN) { out.push({ feature: k, n: pts.length, label: 'INSUFFICIENT DATA', stage: 'EXPERIMENTAL' }); return; }
+      var mx = C.mean(pts.map(function (p) { return p.x; })), my = C.mean(pts.map(function (p) { return p.y; })), sxy = 0, sxx = 0, syy = 0;
+      pts.forEach(function (p) { sxy += (p.x - mx) * (p.y - my); sxx += (p.x - mx) * (p.x - mx); syy += (p.y - my) * (p.y - my); });
+      out.push({ feature: k, n: pts.length, corrWithResidual: sxx > 0 && syy > 0 ? sxy / Math.sqrt(sxx * syy) : null, stage: 'EXPERIMENTAL', label: 'EXPERIMENTAL — validation et test requis avant toute promotion' });
+    });
+    return { candidates: out.sort(function (a, b) { return Math.abs(b.corrWithResidual || 0) - Math.abs(a.corrWithResidual || 0); }), productionChanged: false, note: 'Aucun changement automatique du modèle de production.' };
+  }
+
+  EA.memory = { KEY: KEY, SCHEMA: SCHEMA, createMemory: createMemory, clv: clv, hashOf: hashOf, stats: stats, competitionMemory: competitionMemory, walkForward: walkForward,
+    modelPerf: modelPerf, modelHealth: modelHealth, killSwitchWeight: killSwitchWeight, autoDiscovery: autoDiscovery, metricsFor: metricsFor };
+  if (typeof module === 'object' && module.exports) module.exports = EA.memory;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-storage.js ===== */
+/* EA-VALUE 3.0 — STOCKAGE : storageVersion, backup avant migration, restauration automatique en cas d'échec.
+   Ne touche jamais aux clés historiques de l'utilisateur (ea_v3_*, ea_daily_archive, IndexedDB…). */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') require('./ea-core.js');
+  var EA = g.EA, C = EA.core;
+  var VERSION_KEY = 'ea_storage_version', BACKUP_KEY = 'ea_backup_last', SETTINGS_KEY = 'ea_pro_settings', MEMORY_KEY = 'ea_pro_memory';
+  var DEFAULT_SETTINGS = { mode: 'VALUE', fast: false, mcIterations: 10000, bankroll: null, minStake: null, sport: 'football' };
+
+  var MIGRATIONS = [
+    { to: 1, name: 'v0 → v1 : marquage de version (données historiques inchangées)', touches: [], up: function () { } },
+    { to: 2, name: 'v1 → v2 : création de EA Memory et des réglages Pro', touches: [MEMORY_KEY, SETTINGS_KEY], up: function (st) {
+      if (st.getItem(MEMORY_KEY) == null) st.setItem(MEMORY_KEY, JSON.stringify({ schema: 1, analyses: [] }));
+      if (st.getItem(SETTINGS_KEY) == null) st.setItem(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
+    } }
+  ];
+  var TARGET = MIGRATIONS[MIGRATIONS.length - 1].to;
+
+  function currentVersion(st) { var n = parseInt(st.getItem(VERSION_KEY), 10); return isFinite(n) && n >= 0 ? n : 0; }
+  function snapshot(st, keys) { var s = {}; keys.forEach(function (k) { s[k] = st.getItem(k); }); return s; }
+  function restore(st, snap) { Object.keys(snap).forEach(function (k) { if (snap[k] === null) st.removeItem(k); else st.setItem(k, snap[k]); }); }
+
+  // opts.registry / opts.target permettent de tester des migrations défaillantes
+  function migrate(st, opts) {
+    opts = opts || {}; var reg = opts.registry || MIGRATIONS, target = opts.target == null ? TARGET : opts.target, from = currentVersion(st), log = [];
+    if (from > target) return { ok: false, from: from, to: from, error: 'VERSION_TROP_RECENTE', log: log };
+    for (var i = 0; i < reg.length; i++) {
+      var m = reg[i]; if (m.to <= from || m.to > target) continue;
+      var snap = snapshot(st, m.touches), prevVer = currentVersion(st);
+      try { st.setItem(BACKUP_KEY, JSON.stringify({ from: prevVer, to: m.to, ts: Date.now(), name: m.name, snapshot: snap })); }
+      catch (e) { return { ok: false, from: prevVer, to: prevVer, error: 'BACKUP_FAILED', restored: false, log: log }; }
+      try { m.up(st); if (typeof m.verify === 'function' && !m.verify(st)) throw new Error('VERIFY_FAILED'); st.setItem(VERSION_KEY, String(m.to)); log.push('OK ' + m.name); }
+      catch (e) { try { restore(st, snap); st.setItem(VERSION_KEY, String(prevVer)); } catch (e2) { return { ok: false, from: prevVer, to: prevVer, error: String(e && e.message || e), restored: false, log: log }; }
+        log.push('ÉCHEC ' + m.name + ' → backup restauré'); return { ok: false, from: prevVer, to: prevVer, error: String(e && e.message || e), restored: true, log: log }; }
+    }
+    return { ok: true, from: from, to: currentVersion(st), log: log };
+  }
+  function loadSettings(st) { try { var o = JSON.parse(st.getItem(SETTINGS_KEY)); return Object.assign({}, DEFAULT_SETTINGS, o || {}); } catch (e) { return Object.assign({}, DEFAULT_SETTINGS); } }
+  function saveSettings(st, s) { try { st.setItem(SETTINGS_KEY, JSON.stringify(Object.assign({}, DEFAULT_SETTINGS, s))); return true; } catch (e) { return false; } }
+  // Clés Pro à inclure dans l'export/import de sauvegarde
+  var EXPORT_KEYS = [MEMORY_KEY, SETTINGS_KEY, VERSION_KEY];
+
+  EA.storage = { VERSION_KEY: VERSION_KEY, BACKUP_KEY: BACKUP_KEY, SETTINGS_KEY: SETTINGS_KEY, MEMORY_KEY: MEMORY_KEY, MIGRATIONS: MIGRATIONS, TARGET: TARGET, EXPORT_KEYS: EXPORT_KEYS,
+    DEFAULT_SETTINGS: DEFAULT_SETTINGS, currentVersion: currentVersion, migrate: migrate, loadSettings: loadSettings, saveSettings: saveSettings };
+  if (typeof module === 'object' && module.exports) module.exports = EA.storage;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-engine.js ===== */
+/* EA-VALUE 3.0 — ORCHESTRATEUR : Data → Quality → Context → Model → Consensus → Market → Value → Risk → Decision → Commentary.
+   Produit un objet d'analyse unique. Les modules restent séparés ; ce fichier ne contient aucune formule statistique propre. */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') { ['core', 'context', 'models', 'value', 'bankroll', 'memory'].forEach(function (m) { require('./ea-' + m + '.js'); }); }
+  var EA = g.EA, C = EA.core, X = EA.context, M = EA.models, V = EA.value, B = EA.bankroll;
+
+  function erf(x) { var s = x < 0 ? -1 : 1; x = Math.abs(x); var t = 1 / (1 + 0.3275911 * x), y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return s * y; }
+  function phi(z) { return 0.5 * (1 + erf(z / Math.SQRT2)); }
+
+  function dataQualityFrom(fields, freshStatus) {
+    var have = fields.filter(function (f) { return f.ok; }).length, tot = fields.length, base = tot ? 100 * have / tot : 0;
+    var mult = { GREEN: 1, YELLOW: 0.9, RED: 0.7, UNKNOWN: 0.85 }[freshStatus || 'UNKNOWN'];
+    return { score: Math.round(base * mult), have: have, total: tot, missing: fields.filter(function (f) { return !f.ok; }).map(function (f) { return f.name; }), freshness: freshStatus };
+  }
+  function ctxSide(c, sport) {
+    c = c || {}; var eff = X.assessEffectif(c.effectif), fat = X.assessFatigue(c.fatigue), rot = X.assessRotation(c.rotation);
+    return { effectif: eff, fatigue: fat, rotation: rot };
+  }
+  function ctxMerge(h, a, dq, fresh) {
+    function cq(s) { return X.contextQuality({ dataQuality: dq, effectif: s.effectif, fatigue: s.fatigue, rotation: s.rotation, freshnessStatus: fresh }); }
+    var ch = cq(h), ca = cq(a);
+    return { score: Math.round((ch.score + ca.score) / 2), home: ch, away: ca, extraUncertaintyPts: C.round((ch.extraUncertaintyPts + ca.extraUncertaintyPts), 1), notProbability: true };
+  }
+
+  function pickFrom(sel, rows, lines) { return sel; }
+  // ---------------- FOOTBALL ----------------
+  function selPredicate(market, sel) {
+    if (market === '1X2') return sel === 'home' ? function (a, b) { return a > b; } : sel === 'draw' ? function (a, b) { return a === b; } : function (a, b) { return a < b; };
+    if (market.indexOf('ou:') === 0) { var L = parseFloat(market.slice(3)); return sel === 'over' ? function (a, b) { return a + b > L; } : function (a, b) { return a + b < L; }; }
+    if (market === 'btts') return sel === 'yes' ? function (a, b) { return a > 0 && b > 0; } : function (a, b) { return !(a > 0 && b > 0); };
+    return null;
+  }
+  function footballOdds(inp) {
+    var out = [], m = inp.markets || {}, x2 = m['1X2'];
+    if (x2) { ['home', 'draw', 'away'].forEach(function (s) { out.push({ market: '1X2', selection: s, odds: C.num(x2[s]) }); }); }
+    if (m.ou && C.num(m.ou.line) != null) { ['over', 'under'].forEach(function (s) { out.push({ market: 'ou:' + m.ou.line, selection: s, odds: C.num(m.ou[s]) }); }); }
+    if (m.btts) { ['yes', 'no'].forEach(function (s) { out.push({ market: 'btts', selection: s, odds: C.num(m.btts[s]) }); }); }
+    return out;
+  }
+
+  function analyzeFootball(inp) {
+    var cfg = inp.config || C.DEFAULT_CONFIG, warnings = [], now = inp.now || Date.now();
+    var hs = inp.homeStats || {}, as = inp.awayStats || {}, league = inp.league || {}, rho = inp.rho == null ? -0.1 : inp.rho;
+    var fresh = C.freshness(inp.dataTimestamp, now, cfg);
+    var kFb = cfg.earlySeason.football.k;
+    var minN = Math.min(C.num(hs.n) == null ? Infinity : hs.n, C.num(as.n) == null ? Infinity : as.n); if (minN === Infinity) minN = null;
+    var prior = C.num(hs.priorGf) != null && C.num(hs.priorGa) != null && C.num(as.priorGf) != null && C.num(as.priorGa) != null;
+    var early = X.earlySeason({ sport: 'football', gamesPlayed: minN, priorAvailable: prior, squadStability: inp.squadStability, dataQuality: null }, cfg);
+    var fields = [{ name: 'buts marqués (dom.)', ok: C.num(hs.gf) != null }, { name: 'buts encaissés (dom.)', ok: C.num(hs.ga) != null }, { name: 'buts marqués (ext.)', ok: C.num(as.gf) != null }, { name: 'buts encaissés (ext.)', ok: C.num(as.ga) != null },
+      { name: 'matchs joués', ok: minN != null }, { name: 'moyenne de ligue', ok: C.isNum(league.avg) || (C.isNum(league.avgHome) && C.isNum(league.avgAway)) }, { name: 'domicile/extérieur ligue', ok: C.isNum(league.avgHome) && C.isNum(league.avgAway) },
+      { name: 'historique saison précédente', ok: prior }, { name: 'Elo', ok: C.num(hs.elo) != null && C.num(as.elo) != null }, { name: 'xG', ok: C.num(hs.xgf) != null && C.num(as.xgf) != null }];
+    var dq = dataQualityFrom(fields, fresh.status);
+    var early2 = X.earlySeason({ sport: 'football', gamesPlayed: minN, priorAvailable: prior, squadStability: inp.squadStability, dataQuality: dq.score }, cfg);
+    var cH = ctxSide((inp.context || {}).home), cA = ctxSide((inp.context || {}).away), cq = ctxMerge(cH, cA, dq.score, fresh.status);
+
+    var L = M.footballLambdas(hs, as, league, { k: kFb });
+    var res = { sport: 'football', version: C.VERSION, home: inp.home, away: inp.away, competition: inp.competition, matchDate: inp.matchDate, mode: inp.mode === 'HIGH_PROBABILITY' ? 'HIGH_PROBABILITY' : 'VALUE',
+      dataQuality: dq, freshness: fresh, early: early2, context: { home: cH, away: cA, quality: cq }, warnings: warnings, models: [], markets: [], pick: null };
+    if (!L.available) { res.unavailable = L; res.decision = { decision: 'NO BET', reasons: ['données insuffisantes : ' + L.reason], blocking: ['données insuffisantes : ' + L.reason], cautions: [], notes: [], signal: 'NO QUALIFIED OPPORTUNITY' }; res.signal = 'INSUFFICIENT DATA'; res.commentary = V.commentary({ decision: res.decision, signal: res.signal, context: {}, dataQualityLabel: V.qualityLabel(dq.score) }); return res; }
+    L.warnings.forEach(function (w) { warnings.push(w); });
+
+    // corrections de contexte : uniquement si calculées à partir de données
+    var penH = X.absencePenalty(cH.effectif), penA = X.absencePenalty(cA.effectif), fH = X.fatigueMultiplier(cH.fatigue.score), fA = X.fatigueMultiplier(cA.fatigue.score);
+    var lamH = L.lambdaHome * penH.multiplier * fH, lamA = L.lambdaAway * penA.multiplier * fA;
+    if (cH.effectif.level !== 'green' && cH.effectif.level !== 'unknown' && !penH.applied) warnings.push('Domicile : IMPACT JOUEUR INCONNU (aucune correction)');
+    if (cA.effectif.level !== 'green' && cA.effectif.level !== 'unknown' && !penA.applied) warnings.push('Extérieur : IMPACT JOUEUR INCONNU (aucune correction)');
+
+    var it = inp.iterations || (inp.fast ? cfg.mc.fast : cfg.mc.default);
+    var sigma = 0.35 * (1 - C.clamp(dq.score / 100, 0, 1)) * 0.5 + 0.05;   // incertitude paramétrique croissante quand la qualité baisse
+    var sim = M.simulateFootball(lamH, lamA, { iterations: it, rho: rho, sigma: sigma, seed: inp.seed });
+    var mDC = M.poissonMatrix(lamH, lamA, rho), mPo = M.poissonMatrix(lamH, lamA, 0);
+    var mcM = M.footballMarkets(sim.rows, [parseFloat(((inp.markets || {}).ou || {}).line) || 2.5]);
+    var xgOn = L.usedXg;
+    var elo = M.eloProbabilities(hs.elo, as.elo, inp.homeAdvElo);
+    res.lambdas = { home: lamH, away: lamA, base: { home: L.lambdaHome, away: L.lambdaAway }, usedXg: xgOn };
+    res.simulation = { iterationsRun: sim.iterationsRun, accepted: sim.accepted, totalGoals: sim.totalGoals, seed: inp.seed == null ? null : inp.seed, sigma: sigma };
+    res.modelStatus = EA.core.MODEL_STATUS.filter(function (s) { return s.sport !== 'basketball'; }).map(function (s) { var st = s.status; if (s.id === 'xg' && !xgOn) st = 'UNAVAILABLE'; if (s.id === 'elo' && !elo) st = 'UNAVAILABLE'; return Object.assign({}, s, { status: st }); });
+
+    var odds = footballOdds(inp), health = inp.modelHealth || {}, perf = inp.modelPerf || {};
+    var seen = {}; odds.forEach(function (o) { seen[o.market + '|' + o.selection] = o; });
+    // sélections toujours évaluées (probabilités), cotes facultatives
+    var ouLine = C.num(((inp.markets || {}).ou || {}).line) || 2.5;
+    var sels = [['1X2', 'home'], ['1X2', 'draw'], ['1X2', 'away'], ['ou:' + ouLine, 'over'], ['ou:' + ouLine, 'under'], ['btts', 'yes'], ['btts', 'no']];
+    var entries = sels.map(function (sl) {
+      var pred = selPredicate(sl[0], sl[1]), pv = { poisson: M.sumWhere(mPo, pred), 'dixon-coles': M.sumWhere(mDC, pred), 'monte-carlo-fb': M.sumWhere(sim.rows, pred) };
+      var models = [{ id: 'poisson', name: 'Poisson', status: 'IMPLEMENTED', p: pv.poisson }, { id: 'dixon-coles', name: 'Dixon-Coles', status: 'IMPLEMENTED', p: pv['dixon-coles'] }, { id: 'monte-carlo-fb', name: 'Monte Carlo', status: 'IMPLEMENTED', p: pv['monte-carlo-fb'] }];
+      if (sl[0] === '1X2' && elo) models.push({ id: 'elo', name: 'Elo', status: 'PARTIAL', p: elo[sl[1]] }), pv.elo = elo[sl[1]];
+      models.forEach(function (m) { m.health = (health[m.id] || {}).state || null; m.perf = perf[m.id] || null; });
+      var cons = M.consensus(models, cfg), o = seen[sl[0] + '|' + sl[1]] || { odds: null };
+      return { market: sl[0], selection: sl[1], modelProbs: pv, models: models, consensus: cons, p: cons.p, odds: o.odds };
+    });
+    // dévigage informatif du marché 1X2 (n'entre jamais dans P_MODEL)
+    var x2 = (inp.markets || {})['1X2'], mk = x2 ? V.marketFromOdds([x2.home, x2.draw, x2.away]) : null;
+    res.marketBenchmark = mk ? { overroundPct: mk.marginPct, fair: { home: mk.fairProbs[0], draw: mk.fairProbs[1], away: mk.fairProbs[2] } } : null;
+
+    var spreadHalf = function (e) { return 2.5 + cq.extraUncertaintyPts + early2.extraUncertaintyPts + (e.consensus.spreadPts || 0) / 2; };
+    var allLineup = cH.rotation.lineupConfirmed === true && cA.rotation.lineupConfirmed === true;
+    var bankroll = C.num(inp.bankroll), minStake = C.num(inp.minStake);
+    res.markets = entries.map(function (e) {
+      var vl = V.valueLine(e.p, e.odds, cfg), half = spreadHalf(e);
+      var st = (vl.available && vl.currentOdds != null && bankroll != null) ? B.suggestStake({ bankroll: bankroll, p: e.p, odds: e.odds, minStake: minStake }, cfg) : null;
+      var d = V.decide({ mode: res.mode, value: vl, dataQuality: dq.score, contextQuality: cq.score, stability: e.consensus.stability, modelHealth: (health.consensus || {}).state || null, uncertaintyHalf: half, lineupConfirmed: allLineup, earlyReliability: early2.mode ? early2.reliability : null, stakeOk: st ? st.stakeOk : undefined }, cfg);
+      return { market: e.market, selection: e.selection, p: e.p, modelProbs: e.modelProbs, odds: e.odds, value: vl, uncertaintyHalfPts: half, stability: e.consensus.stability, weightsLabel: e.consensus.weightsLabel, agreementPct: e.consensus.agreementPct, decision: d, stake: st };
+    });
+    finalize(res, cfg, {
+      ledger: function (m) { return footballLedger(m, L, penH, penA, fH, fA, rho); }, dq: dq, cq: cq, early: early2 });
+    return res;
+  }
+
+  function footballLedger(m, L, penH, penA, fH, fA, rho) {
+    var pred = selPredicate(m.market, m.selection); if (!pred) return [];
+    var P = function (lh, la) { return M.sumWhere(M.poissonMatrix(lh, la, rho), pred); }, pt = L.parts, steps = [], cur, prev;
+    var lh0 = pt.lh, la0 = pt.la; prev = P(lh0, la0);
+    var lhA = pt.lh * (pt.hAtt / pt.teamAvg), laA = pt.la * (pt.aAtt / pt.teamAvg); cur = P(lhA, laA); steps.push({ name: 'Attaque des deux équipes', delta: (cur - prev) * 100 }); prev = cur;
+    cur = P(L.lambdaHome, L.lambdaAway); steps.push({ name: 'Défense des deux équipes', delta: (cur - prev) * 100 }); prev = cur;
+    cur = P(L.lambdaHome * penH.multiplier, L.lambdaAway * penA.multiplier); if (penH.applied || penA.applied) steps.push({ name: 'Absences (impact calculé)', delta: (cur - prev) * 100 }); prev = cur;
+    cur = P(L.lambdaHome * penH.multiplier * fH, L.lambdaAway * penA.multiplier * fA); if (fH !== 1 || fA !== 1) steps.push({ name: 'Fatigue (calendrier)', delta: (cur - prev) * 100 });
+    return steps;
+  }
+
+  // ---------------- BASKETBALL ----------------
+  function analyzeBasketball(inp) {
+    var cfg = inp.config || C.DEFAULT_CONFIG, warnings = [], now = inp.now || Date.now(), hs = inp.homeStats || {}, as = inp.awayStats || {}, league = inp.league || {};
+    var fresh = C.freshness(inp.dataTimestamp, now, cfg), health = inp.modelHealth || {}, perf = inp.modelPerf || {};
+    var minN = Math.min(C.num(hs.n) == null ? Infinity : hs.n, C.num(as.n) == null ? Infinity : as.n); if (minN === Infinity) minN = null;
+    var prior = ['priorPace', 'priorOrtg', 'priorDrtg'].every(function (k) { return C.num(hs[k]) != null && C.num(as[k]) != null; });
+    var e0 = X.earlySeason({ sport: 'basketball', gamesPlayed: minN, priorAvailable: prior, squadStability: inp.squadStability }, cfg);
+    var fields = ['pace', 'ortg', 'drtg'].reduce(function (a, k) { a.push({ name: k + ' (dom.)', ok: C.num(hs[k]) != null }, { name: k + ' (ext.)', ok: C.num(as[k]) != null }); return a; }, []);
+    fields.push({ name: 'matchs joués', ok: minN != null }, { name: 'moyennes de ligue', ok: C.num(league.pace) != null && C.num(league.ortg) != null }, { name: 'avantage domicile', ok: C.num(inp.homeAdvPts) != null }, { name: 'historique précédent', ok: prior });
+    var dq = dataQualityFrom(fields, fresh.status), early = X.earlySeason({ sport: 'basketball', gamesPlayed: minN, priorAvailable: prior, squadStability: inp.squadStability, dataQuality: dq.score }, cfg);
+    var cH = ctxSide((inp.context || {}).home), cA = ctxSide((inp.context || {}).away), cq = ctxMerge(cH, cA, dq.score, fresh.status);
+    var res = { sport: 'basketball', version: C.VERSION, home: inp.home, away: inp.away, competition: inp.competition, matchDate: inp.matchDate, mode: inp.mode === 'HIGH_PROBABILITY' ? 'HIGH_PROBABILITY' : 'VALUE',
+      dataQuality: dq, freshness: fresh, early: early, context: { home: cH, away: cA, quality: cq }, warnings: warnings, markets: [], pick: null };
+    var ex = M.basketExpectations(hs, as, league, { early: { wCurrent: early.wCurrent }, homeAdvPts: inp.homeAdvPts });
+    if (!ex.available) { res.unavailable = ex; res.decision = { decision: 'NO BET', reasons: ['données insuffisantes : ' + ex.reason], blocking: ['données insuffisantes : ' + ex.reason], cautions: [], notes: [], signal: 'NO QUALIFIED OPPORTUNITY' }; res.signal = 'INSUFFICIENT DATA'; res.commentary = V.commentary({ decision: res.decision, signal: res.signal, context: {}, dataQualityLabel: V.qualityLabel(dq.score) }); return res; }
+    ex.warnings.forEach(function (w) { warnings.push(w); });
+    var penH = X.absencePenalty(cH.effectif), penA = X.absencePenalty(cA.effectif), fH = X.fatigueMultiplier(cH.fatigue.score), fA = X.fatigueMultiplier(cA.fatigue.score);
+    if (cH.effectif.level !== 'green' && cH.effectif.level !== 'unknown' && !penH.applied) warnings.push('Domicile : IMPACT JOUEUR INCONNU (aucune correction)');
+    if (cA.effectif.level !== 'green' && cA.effectif.level !== 'unknown' && !penA.applied) warnings.push('Extérieur : IMPACT JOUEUR INCONNU (aucune correction)');
+    var adj = { expectedPointsHome: ex.expectedPointsHome * penH.multiplier * fH, expectedPointsAway: ex.expectedPointsAway * penA.multiplier * fA };
+    adj.expectedMargin = adj.expectedPointsHome - adj.expectedPointsAway; adj.expectedTotal = adj.expectedPointsHome + adj.expectedPointsAway;
+    var sdM = C.num(inp.sdMargin), sdT = C.num(inp.sdTotal), sdProv = sdM == null || sdT == null; sdM = sdM == null ? cfg.basketSd.margin : sdM; sdT = sdT == null ? cfg.basketSd.total : sdT;
+    if (sdProv) warnings.push('Écarts-types de marge/total PROVISOIRES (non estimés sur des matchs fournis)');
+    var it = inp.iterations || (inp.fast ? cfg.mc.fast : cfg.mc.default), sl = C.num(inp.spreadLine), tl = C.num(inp.totalLine);
+    var sim = M.simulateBasketball(adj, { iterations: it, sdMargin: sdM, sdTotal: sdT, spreadLine: sl, totalLine: tl, seed: inp.seed, config: cfg });
+    res.expectations = { pace: ex.expectedPace, ortgHome: ex.expectedOffRatingHome, ortgAway: ex.expectedOffRatingAway, drtgHome: ex.expectedDefRatingHome, drtgAway: ex.expectedDefRatingAway, pointsHome: adj.expectedPointsHome, pointsAway: adj.expectedPointsAway, margin: adj.expectedMargin, total: adj.expectedTotal };
+    res.simulation = { iterationsRun: sim.iterationsRun, sdMargin: sdM, sdTotal: sdT, sdProvisional: sdProv, margin: sim.margin, total: sim.total, seed: inp.seed == null ? null : inp.seed };
+    res.modelStatus = EA.core.MODEL_STATUS.filter(function (s) { return s.sport !== 'football'; });
+
+    var an = { pHome: phi(adj.expectedMargin / sdM) };
+    var mk = inp.markets || {}, ml = mk.moneyline || {}, sp = mk.spread || {}, tt = mk.total || {};
+    var defs = [{ market: 'ml', selection: 'home', an: an.pHome, mc: sim.pHome, odds: ml.home }, { market: 'ml', selection: 'away', an: 1 - an.pHome, mc: sim.pAway, odds: ml.away }];
+    if (sl != null) { var pc = phi((adj.expectedMargin + sl) / sdM); defs.push({ market: 'spread:' + sl, selection: 'home', an: pc, mc: sim.pSpreadCover, odds: sp.home }, { market: 'spread:' + sl, selection: 'away', an: 1 - pc, mc: 1 - sim.pSpreadCover, odds: sp.away }); }
+    if (tl != null) { var po = 1 - phi((tl - adj.expectedTotal) / sdT); defs.push({ market: 'total:' + tl, selection: 'over', an: po, mc: sim.pOver, odds: tt.over }, { market: 'total:' + tl, selection: 'under', an: 1 - po, mc: sim.pUnder, odds: tt.under }); }
+    var mkb = ml.home && ml.away ? V.marketFromOdds([ml.home, ml.away]) : null;
+    res.marketBenchmark = mkb ? { overroundPct: mkb.marginPct, fair: { home: mkb.fairProbs[0], away: mkb.fairProbs[1] } } : null;
+    var allLineup = cH.rotation.lineupConfirmed === true && cA.rotation.lineupConfirmed === true, bankroll = C.num(inp.bankroll), minStake = C.num(inp.minStake);
+    res.markets = defs.map(function (d) {
+      var models = [{ id: 'bk-ratings', name: 'Ratings/pace (analytique)', status: 'IMPLEMENTED', p: d.an }, { id: 'monte-carlo-bk', name: 'Monte Carlo', status: sdProv ? 'PARTIAL' : 'IMPLEMENTED', p: d.mc }];
+      models.forEach(function (m) { m.health = (health[m.id] || {}).state || null; m.perf = perf[m.id] || null; });
+      var cons = M.consensus(models, cfg), vl = V.valueLine(cons.p, d.odds, cfg), half = 3 + cq.extraUncertaintyPts + early.extraUncertaintyPts + (sdProv ? 1.5 : 0) + (cons.spreadPts || 0) / 2;
+      var st = (vl.available && vl.currentOdds != null && bankroll != null) ? B.suggestStake({ bankroll: bankroll, p: cons.p, odds: d.odds, minStake: minStake }, cfg) : null;
+      var dec = V.decide({ mode: res.mode, value: vl, dataQuality: dq.score, contextQuality: cq.score, stability: cons.stability, modelHealth: (health.consensus || {}).state || null, uncertaintyHalf: half, lineupConfirmed: allLineup, earlyReliability: early.mode ? early.reliability : null, stakeOk: st ? st.stakeOk : undefined }, cfg);
+      return { market: d.market, selection: d.selection, p: cons.p, modelProbs: { 'bk-ratings': d.an, 'monte-carlo-bk': d.mc }, odds: C.num(d.odds), value: vl, uncertaintyHalfPts: half, stability: cons.stability, weightsLabel: cons.weightsLabel, agreementPct: cons.agreementPct, decision: dec, stake: st };
+    });
+    finalize(res, cfg, { ledger: function (m) { return basketLedger(m, ex, hs, as, league, inp, penH, penA, fH, fA, sdM, sdT, sl, tl); }, dq: dq, cq: cq, early: early });
+    return res;
+  }
+  function basketLedger(m, ex, hs, as, league, inp, penH, penA, fH, fA, sdM, sdT, sl, tl) {
+    var steps = [], prev, cur, lgO = C.num(league.ortg), lgP = C.num(league.pace);
+    var prob = function (mar, tot) { if (m.market === 'ml') return m.selection === 'home' ? phi(mar / sdM) : 1 - phi(mar / sdM);
+      if (m.market.indexOf('spread:') === 0) { var p = phi((mar + sl) / sdM); return m.selection === 'home' ? p : 1 - p; }
+      var po = 1 - phi((tl - tot) / sdT); return m.selection === 'over' ? po : 1 - po; };
+    var homeHalf = (C.num(inp.homeAdvPts) || 0) / 2;
+    // neutre : points de ligue, marge nulle
+    var baseTot = (lgO != null && lgP != null) ? 2 * lgO * lgP / 100 : null; if (m.market.indexOf('total:') === 0 && baseTot == null) return [];
+    var margNeutral = 0, totNeutral = baseTot != null ? baseTot : ex.expectedTotal; prev = prob(margNeutral, totNeutral);
+    // rythme + efficacité (sans avantage domicile)
+    var oh = ex.expectedPointsHome - homeHalf, oa = ex.expectedPointsAway + homeHalf;
+    cur = prob(oh - oa, oh + oa); steps.push({ name: 'Pace et efficacité (ORtg/DRtg)', delta: (cur - prev) * 100 }); prev = cur;
+    if (homeHalf) { cur = prob(ex.expectedMargin, ex.expectedTotal); steps.push({ name: 'Avantage domicile', delta: (cur - prev) * 100 }); prev = cur; }
+    var pH = ex.expectedPointsHome * penH.multiplier, pA = ex.expectedPointsAway * penA.multiplier;
+    if (penH.applied || penA.applied) { cur = prob(pH - pA, pH + pA); steps.push({ name: 'Absences (impact calculé)', delta: (cur - prev) * 100 }); prev = cur; }
+    if (fH !== 1 || fA !== 1) { var qH = pH * fH, qA = pA * fA; cur = prob(qH - qA, qH + qA); steps.push({ name: 'Fatigue (calendrier)', delta: (cur - prev) * 100 }); }
+    return steps;
+  }
+
+  // ---------------- commun : choix du pick, ledger, commentaire ----------------
+  function finalize(res, cfg, h) {
+    var rank = { 'BET': 0, 'CHECK': 1, 'NO BET': 2 };
+    var scored = res.markets.slice().sort(function (a, b) {
+      var ra = rank[a.decision.decision], rb = rank[b.decision.decision]; if (ra !== rb) return ra - rb;
+      if (res.mode === 'HIGH_PROBABILITY') return b.p - a.p;
+      var ea = a.value.ev == null ? -9 : a.value.ev, eb = b.value.ev == null ? -9 : b.value.ev; return eb - ea; });
+    var best = scored[0]; res.pick = best;
+    res.decision = best.decision; res.signal = best.decision.decision === 'NO BET' ? 'NO QUALIFIED OPPORTUNITY' : (best.market + ' ' + best.selection + ' : ' + (best.p * 100).toFixed(1) + ' %' + (best.value.ev != null ? ', EV ' + (best.value.ev * 100).toFixed(1) + ' %' : ''));
+    res.evidence = V.evidenceLedger(h.ledger(best)); res.featureImportance = V.featureImportance(res.evidence.factors);
+    res.stability = best.stability; res.modelAgreementPct = best.agreementPct;
+    res.commentary = V.commentary({ decision: best.decision, signal: res.signal, value: best.value, evidence: res.evidence, stability: best.stability, modelAgreement: best.agreementPct,
+      context: { effectifKnown: res.context.home.effectif.known && res.context.away.effectif.known, fatigueKnown: res.context.home.fatigue.known && res.context.away.fatigue.known, rotationKnown: res.context.home.rotation.known && res.context.away.rotation.known },
+      early: res.early, dataQualityLabel: V.qualityLabel(res.dataQuality.score) });
+    res.weightsLabel = best.weightsLabel;
+  }
+
+  // Enregistrement EA Memory (prédiction figée)
+  function toMemoryRecord(res, pick) {
+    var p = pick || res.pick; if (!p) return null;
+    return { sport: res.sport, competition: res.competition || '', home: res.home, away: res.away, matchDate: res.matchDate, market: p.market, selection: p.selection, odds: p.odds, pModel: p.p, fairOdds: p.value && p.value.fairOdds, ev: p.value && p.value.ev,
+      decision: p.decision.decision, mode: res.mode, modelVersion: res.version, modelProbs: p.modelProbs, dataQuality: res.dataQuality.score, contextQuality: res.context.quality.score, stability: p.stability,
+      features: (res.evidence.factors || []).reduce(function (o, f) { o[f.name] = f.delta; return o; }, {}), dataUsed: res.dataQuality.total - res.dataQuality.missing.length + '/' + res.dataQuality.total,
+      contextSnapshot: { effectif: res.context.home.effectif.level + '/' + res.context.away.effectif.level, fatigue: res.context.home.fatigue.level + '/' + res.context.away.fatigue.level, rotation: res.context.home.rotation.level + '/' + res.context.away.rotation.level, lineupConfirmed: res.context.home.rotation.lineupConfirmed === true && res.context.away.rotation.lineupConfirmed === true } };
+  }
+  EA.engine = { analyzeFootball: analyzeFootball, analyzeBasketball: analyzeBasketball, toMemoryRecord: toMemoryRecord, phi: phi };
+  if (typeof module === 'object' && module.exports) module.exports = EA.engine;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-ui.js ===== */
+/* EA-VALUE 3.0 — INTERFACE PRO (onglet « Pro 3.0 ») : zones aérées, une colonne sur mobile. Aucune formule ici : tout passe par EA.engine. */
+(function (g) {
+  'use strict';
+  var EA = g.EA, C = EA.core, doc = g.document;
+  var LS = (function () { try { g.localStorage.setItem('__t', '1'); g.localStorage.removeItem('__t'); return g.localStorage; } catch (e) { var m = {}; return { getItem: function (k) { return k in m ? m[k] : null; }, setItem: function (k, v) { m[k] = String(v); }, removeItem: function (k) { delete m[k]; } }; } })();
+  var S = { sport: 'football', mode: 'VALUE', tab: 'analyse', ctx: { h: {}, a: {} }, last: null, shock: null, settings: null, memory: null, msg: '' };
+  var LV = ['green', 'yellow', 'orange', 'red', 'unknown'];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function $(id) { return doc.getElementById(id); }
+  function nv(id) { var e = $(id); if (!e) return null; var v = String(e.value).replace(',', '.').trim(); return v === '' ? null : C.num(v); }
+  function sv(id) { var e = $(id); return e ? String(e.value).trim() : ''; }
+  function pc(p) { return C.isNum(p) ? (p * 100).toFixed(1) + ' %' : 'DATA UNAVAILABLE'; }
+  function od(o) { return C.isNum(o) ? o.toFixed(2) : '—'; }
+  function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function cfg() { var o = S.settings.configOverride; return o ? C.merge(C.DEFAULT_CONFIG, o) : C.DEFAULT_CONFIG; }
+  function save() { EA.storage.saveSettings(LS, S.settings); }
+  function records() { return S.memory.all(); }
+  function chip(txt, cls) { return '<span class="pro-chip ' + (cls || '') + '">' + esc(txt) + '</span>'; }
+  function qcls(v) { return !C.isNum(v) ? 'grey' : v >= 75 ? 'green' : v >= 55 ? 'yellow' : 'red'; }
+  function decCls(d) { return d === 'NO BET' ? 'NOBET' : d; }
+
+  // ---------- squelette ----------
+  function field(id, label, ph, extra) { return '<div class="pro-field"><label for="' + id + '">' + label + '</label><input class="pro-in" id="' + id + '" type="text" inputmode="decimal" placeholder="' + (ph || '') + '" ' + (extra || '') + '></div>'; }
+  function emoGroup(side, key, title) {
+    var cur = S.ctx[side][key] || 'unknown';
+    return '<div><div class="pro-lab">' + title + '</div><div class="pro-emos" data-side="' + side + '" data-key="' + key + '">' +
+      LV.map(function (l) { return '<button type="button" class="pro-emo' + (l === cur ? ' on' : '') + '" data-v="' + l + '" aria-label="' + esc(EA.context.LABELS[key][l]) + '">' + EA.context.EMOJI[l] + '</button>'; }).join('') +
+      '</div><div class="pro-state" id="st_' + side + '_' + key + '">' + esc(EA.context.LABELS[key][cur]) + '</div></div>';
+  }
+  function lineupGroup(side) {
+    var cur = S.ctx[side].lineup || 'unknown', opts = [['yes', 'Confirmée'], ['no', 'Non confirmée'], ['unknown', 'Inconnue']];
+    return '<div><div class="pro-lab">Composition officielle</div><div class="pro-emos" data-side="' + side + '" data-key="lineup">' + opts.map(function (o) { return '<button type="button" class="pro-emo' + (o[0] === cur ? ' on' : '') + '" style="font-size:12px" data-v="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>';
+  }
+  function sideBlock(side, name) {
+    var fb = S.sport === 'football';
+    var stats = fb ? field('p_' + side + '_gf', 'Buts marqués / match', '1.8') + field('p_' + side + '_ga', 'Buts encaissés / match', '1.0') + field('p_' + side + '_n', 'Matchs joués', '8') + field('p_' + side + '_elo', 'Elo (optionnel)', '1650')
+      : field('p_' + side + '_pace', 'Pace', '99') + field('p_' + side + '_ortg', 'Off. rating', '114') + field('p_' + side + '_drtg', 'Def. rating', '112') + field('p_' + side + '_n', 'Matchs joués', '20');
+    var prior = fb ? field('p_' + side + '_pgf', 'Buts marqués saison préc.', '') + field('p_' + side + '_pga', 'Buts encaissés saison préc.', '') + field('p_' + side + '_xgf', 'xG / match', '') + field('p_' + side + '_xga', 'xGA / match', '')
+      : field('p_' + side + '_ppace', 'Pace saison préc.', '') + field('p_' + side + '_portg', 'ORtg saison préc.', '') + field('p_' + side + '_pdrtg', 'DRtg saison préc.', '');
+    var pl = fb ? 'Nom, buts, passes déc. (une ligne par absent)' : 'Nom, points/match, passes/match, rebonds/match';
+    var tt = fb ? field('p_' + side + '_t1', 'Buts de l\'équipe (même période)', '') + field('p_' + side + '_t2', 'Passes déc. équipe', '') : field('p_' + side + '_t1', 'Points/match équipe', '') + field('p_' + side + '_t2', 'Passes/match équipe', '') + field('p_' + side + '_t3', 'Rebonds/match équipe', '');
+    return '<div class="pro-side"><h4 id="p_' + side + '_title">' + esc(name) + '</h4><div class="pro-fields">' + stats + '</div>' +
+      '<details class="pro-det"><summary>Historique saison précédente / ' + (fb ? 'xG' : 'compléments') + ' (optionnel)</summary><div class="pro-fields">' + prior + '</div></details>' +
+      emoGroup(side, 'effectif', 'EFFECTIF — joueurs importants absents ?') + emoGroup(side, 'fatigue', 'FATIGUE') + emoGroup(side, 'rotation', 'ROTATION / COMPOSITION') + lineupGroup(side) +
+      '<details class="pro-det"><summary>Détails facultatifs : absents, calendrier</summary><div class="pro-field"><label for="p_' + side + '_pl">' + pl + '</label><textarea class="pro-in" id="p_' + side + '_pl"></textarea></div><div class="pro-fields">' + tt + '</div>' +
+      '<div class="pro-field"><label for="p_' + side + '_dates">Dates des derniers matchs (AAAA-MM-JJ, séparées par des virgules)</label><textarea class="pro-in" id="p_' + side + '_dates"></textarea></div></details></div>';
+  }
+  function shell() {
+    return '<div class="pro-wrap">' +
+      '<div class="pro-card pro-head"><div class="pro-title"><b>EA VALUE PRO</b><span class="pro-ver" id="proVer">' + C.VERSION + '</span></div>' +
+      '<div class="pro-row"><div class="pro-seg" id="proSport"><button data-v="football">⚽ Football</button><button data-v="basketball">🏀 Basketball</button></div><div class="pro-chip grey" id="proDate">' + today() + '</div></div>' +
+      '<div class="pro-row"><div class="pro-seg" id="proMode"><button data-v="VALUE">MODE VALUE</button><button data-v="HIGH_PROBABILITY">HIGH PROBABILITY</button></div><div class="pro-seg" style="flex:0 1 120px"><button id="proFast">FAST MODE</button></div></div></div>' +
+      '<div class="pro-card pro-sum" id="proSummary" role="button" tabindex="0"></div>' +
+      '<div class="pro-subnav" id="proNav"><button data-t="analyse">ANALYSE</button><button data-t="marches">MARCHÉS</button><button data-t="decision">DÉCISION</button><button data-t="historique">HISTORIQUE</button><button data-t="lab">MODEL LAB</button><button data-t="bankroll">BANKROLL</button></div>' +
+      '<div class="pro-pane" id="pane-analyse"></div><div class="pro-pane" id="pane-marches"></div><div class="pro-pane" id="pane-decision"></div><div class="pro-pane" id="pane-historique"></div><div class="pro-pane" id="pane-lab"></div><div class="pro-pane" id="pane-bankroll"></div></div>';
+  }
+  function renderAnalyse() {
+    var fb = S.sport === 'football';
+    var lg = fb ? field('p_lgH', 'Buts/match à domicile (ligue)', '1.5') + field('p_lgA', 'Buts/match à l\'extérieur (ligue)', '1.2')
+      : field('p_lgPace', 'Pace de ligue', '98') + field('p_lgOrtg', 'Off. rating de ligue', '113') + field('p_homeAdv', 'Avantage domicile (points)', '2.5');
+    var sd = fb ? '' : '<details class="pro-det"><summary>Écarts-types (optionnel — sinon PROVISOIRES)</summary><div class="pro-fields">' + field('p_sdM', 'Écart-type de la marge', '') + field('p_sdT', 'Écart-type du total', '') + '</div></details>';
+    $('pane-analyse').innerHTML =
+      '<div class="pro-card"><h3>Match center</h3><div class="pro-fields">' +
+      '<div class="pro-field"><label for="p_home">Équipe à domicile</label><input class="pro-in" id="p_home" type="text" autocomplete="off"></div><div class="pro-field"><label for="p_away">Équipe à l\'extérieur</label><input class="pro-in" id="p_away" type="text" autocomplete="off"></div>' +
+      '<div class="pro-field"><label for="p_comp">Compétition</label><input class="pro-in" id="p_comp" type="text"></div><div class="pro-field"><label for="p_date">Date du match</label><input class="pro-in" id="p_date" type="date" value="' + today() + '"></div>' +
+      '<div class="pro-field" style="grid-column:1/-1"><label for="p_dts">Date des statistiques saisies (fraîcheur)</label><input class="pro-in" id="p_dts" type="date" value="' + today() + '"></div></div></div>' +
+      '<div class="pro-card"><h3>Ligue et début de saison</h3><div class="pro-fields">' + lg + '</div>' + sd +
+      '<div class="pro-field"><label for="p_squad">Stabilité de l\'effectif (mercato, changements)</label><select class="pro-in" id="p_squad"><option value="unknown">Je ne sais pas</option><option value="stable">Stable</option><option value="changed">Modifié</option></select></div></div>' +
+      '<div class="pro-grid two">' + sideBlock('h', 'Domicile') + sideBlock('a', 'Extérieur') + '</div>' +
+      '<div class="pro-card"><button class="pro-btn primary" id="proRun" type="button">ANALYSER</button><p class="pro-dim" id="proRunMsg">Champ vide = information manquante (DATA UNAVAILABLE) : rien n\'est inventé, l\'incertitude augmente.</p></div>';
+  }
+  function renderMarches() {
+    var fb = S.sport === 'football', body;
+    if (fb) body = '<div class="pro-card"><h3>1X2</h3><div class="pro-fields">' + field('p_o_h', 'Domicile', '1.90') + field('p_o_d', 'Nul', '3.40') + field('p_o_a', 'Extérieur', '4.20') + '</div></div>' +
+      '<div class="pro-card"><h3>Total de buts</h3><div class="pro-fields">' + field('p_o_ol', 'Ligne', '2.5') + '<div></div>' + field('p_o_ov', 'Plus de', '1.90') + field('p_o_un', 'Moins de', '1.90') + '</div></div>' +
+      '<div class="pro-card"><h3>BTTS</h3><div class="pro-fields">' + field('p_o_by', 'Oui', '1.80') + field('p_o_bn', 'Non', '1.95') + '</div></div>';
+    else body = '<div class="pro-card"><h3>Moneyline</h3><div class="pro-fields">' + field('p_o_mh', 'Domicile', '1.70') + field('p_o_ma', 'Extérieur', '2.20') + '</div></div>' +
+      '<div class="pro-card"><h3>Handicap (ligne du domicile)</h3><div class="pro-fields">' + field('p_o_sl', 'Ligne (ex. -3.5)', '-3.5') + '<div></div>' + field('p_o_sh', 'Cote domicile', '1.91') + field('p_o_sa', 'Cote extérieur', '1.91') + '</div></div>' +
+      '<div class="pro-card"><h3>Total de points</h3><div class="pro-fields">' + field('p_o_tl', 'Ligne', '224.5') + '<div></div>' + field('p_o_to', 'Plus de', '1.91') + field('p_o_tu', 'Moins de', '1.91') + '</div></div>';
+    $('pane-marches').innerHTML = body + '<div class="pro-card"><button class="pro-btn primary" id="proRun2" type="button">RECALCULER</button><p class="pro-dim">Les cotes ne modifient jamais la probabilité du modèle : elles servent au prix, à l\'edge et à l\'EV.</p></div><div id="proValue"></div>';
+  }
+
+  // ---------- collecte ----------
+  function parsePlayers(txt, fb) {
+    return String(txt || '').split(/\n/).map(function (l) { return l.trim(); }).filter(Boolean).map(function (l) {
+      var p = l.split(','); var a = C.num((p[1] || '').replace(',', '.')), b = C.num(p[2]), c = C.num(p[3]);
+      return fb ? { name: p[0].trim(), goals: a, assists: b } : { name: p[0].trim(), ppg: a, apg: b, rpg: c };
+    });
+  }
+  function ctxFor(side) {
+    var fb = S.sport === 'football', c = S.ctx[side], pl = parsePlayers(sv('p_' + side + '_pl'), fb);
+    var team = fb ? { goals: nv('p_' + side + '_t1'), assists: nv('p_' + side + '_t2') } : { ppg: nv('p_' + side + '_t1'), apg: nv('p_' + side + '_t2'), rpg: nv('p_' + side + '_t3') };
+    var dates = sv('p_' + side + '_dates').split(/[,\s;]+/).filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); });
+    return { effectif: { level: c.effectif || 'unknown', players: pl, team: team }, fatigue: { level: c.fatigue || 'unknown', schedule: dates.length ? { matchDate: sv('p_date'), previousDates: dates } : null },
+      rotation: { level: c.rotation || 'unknown', lineupConfirmed: c.lineup === 'yes' ? true : c.lineup === 'no' ? false : null } };
+  }
+  function statsFor(side) {
+    if (S.sport === 'football') return { gf: nv('p_' + side + '_gf'), ga: nv('p_' + side + '_ga'), n: nv('p_' + side + '_n'), elo: nv('p_' + side + '_elo'), priorGf: nv('p_' + side + '_pgf'), priorGa: nv('p_' + side + '_pga'), xgf: nv('p_' + side + '_xgf'), xga: nv('p_' + side + '_xga') };
+    return { pace: nv('p_' + side + '_pace'), ortg: nv('p_' + side + '_ortg'), drtg: nv('p_' + side + '_drtg'), n: nv('p_' + side + '_n'), priorPace: nv('p_' + side + '_ppace'), priorOrtg: nv('p_' + side + '_portg'), priorDrtg: nv('p_' + side + '_pdrtg') };
+  }
+  function collect() {
+    var recs = records(), perf = EA.memory.modelPerf(recs), health = { consensus: EA.memory.modelHealth(recs, 'consensus', cfg()) };
+    Object.keys(perf).forEach(function (id) { health[id] = EA.memory.modelHealth(recs, id, cfg()); });
+    var ts = sv('p_dts'), base = { sport: S.sport, home: sv('p_home') || 'Domicile', away: sv('p_away') || 'Extérieur', competition: sv('p_comp'), matchDate: sv('p_date') || today(), dataTimestamp: ts ? ts + 'T12:00:00' : null,
+      homeStats: statsFor('h'), awayStats: statsFor('a'), squadStability: sv('p_squad'), context: { home: ctxFor('h'), away: ctxFor('a') }, mode: S.mode, fast: !!S.settings.fast, iterations: S.settings.fast ? null : S.settings.mcIterations,
+      bankroll: S.settings.bankroll, minStake: S.settings.minStake, config: cfg(), modelPerf: perf, modelHealth: health };
+    if (S.sport === 'football') {
+      base.league = { avgHome: nv('p_lgH'), avgAway: nv('p_lgA') };
+      base.markets = { '1X2': { home: nv('p_o_h'), draw: nv('p_o_d'), away: nv('p_o_a') }, ou: { line: nv('p_o_ol') || 2.5, over: nv('p_o_ov'), under: nv('p_o_un') }, btts: { yes: nv('p_o_by'), no: nv('p_o_bn') } };
+      if (!$('p_o_h')) { base.markets = (S.lastInput && S.lastInput.markets) || {}; }
+    } else {
+      base.league = { pace: nv('p_lgPace'), ortg: nv('p_lgOrtg') }; base.homeAdvPts = nv('p_homeAdv'); base.sdMargin = nv('p_sdM'); base.sdTotal = nv('p_sdT');
+      base.spreadLine = nv('p_o_sl'); base.totalLine = nv('p_o_tl');
+      base.markets = { moneyline: { home: nv('p_o_mh'), away: nv('p_o_ma') }, spread: { home: nv('p_o_sh'), away: nv('p_o_sa') }, total: { over: nv('p_o_to'), under: nv('p_o_tu') } };
+    }
+    return base;
+  }
+
+  // ---------- rendu des résultats ----------
+  function mLabel(m, r) {
+    var mk = m.market, s = m.selection, h = esc(r.home), a = esc(r.away);
+    if (mk === '1X2') return '1X2 · ' + (s === 'home' ? 'Victoire ' + h : s === 'draw' ? 'Match nul' : 'Victoire ' + a);
+    if (mk.indexOf('ou:') === 0) return (s === 'over' ? 'Plus de ' : 'Moins de ') + mk.slice(3) + ' buts';
+    if (mk === 'btts') return 'BTTS · ' + (s === 'yes' ? 'Oui' : 'Non');
+    if (mk === 'ml') return 'Moneyline · ' + (s === 'home' ? h : a);
+    if (mk.indexOf('spread:') === 0) { var L = parseFloat(mk.slice(7)); var v = s === 'home' ? L : -L; return 'Handicap · ' + (s === 'home' ? h : a) + ' ' + (v > 0 ? '+' : '') + v; }
+    if (mk.indexOf('total:') === 0) return (s === 'over' ? 'Plus de ' : 'Moins de ') + mk.slice(6) + ' points';
+    return mk + ' ' + s;
+  }
+  function renderSummary() {
+    var r = S.last, el = $('proSummary');
+    if (!r) { el.innerHTML = '<h3>Décision</h3><p class="pro-dim">Aucune analyse. Renseigne les données puis appuie sur ANALYSER.</p>'; return; }
+    el.innerHTML = '<h3>Décision · signal principal</h3><div class="pro-dec ' + decCls(r.decision.decision) + '">' + esc(r.decision.decision) + '</div><p>' + esc(r.signal) + '</p><div class="pro-row">' +
+      chip('Data ' + r.dataQuality.score + '/100', qcls(r.dataQuality.score)) + chip('Contexte ' + r.context.quality.score + '/100', qcls(r.context.quality.score)) + chip('Stabilité ' + r.stability, r.stability === 'Stable' ? 'green' : r.stability === 'Instable' ? 'red' : 'yellow') + '</div>';
+  }
+  function renderDecision() {
+    var r = S.last, el = $('pane-decision'); if (!r) { el.innerHTML = '<div class="pro-card"><p class="pro-dim">Aucune analyse pour le moment.</p></div>'; return; }
+    if (!r.pick) {
+      var u = r.unavailable || {};
+      el.innerHTML = '<div class="pro-card"><h3>Decision center</h3><div class="pro-dec NOBET">NO BET</div><p><b>NO QUALIFIED OPPORTUNITY</b></p><p class="pro-warn">' + esc(u.label || 'INSUFFICIENT DATA') + ' : ' + esc(u.reason || 'données insuffisantes') + '</p><p class="pro-dim">Aucune valeur n\'est inventée : complète les statistiques manquantes puis relance l\'analyse.</p></div>' +
+        '<div class="pro-card"><h3>Qualité des informations</h3><div class="pro-kv"><span>Data Quality</span><span>' + r.dataQuality.score + '/100</span></div>' + (r.dataQuality.missing.length ? '<p class="pro-dim">Manquant : ' + r.dataQuality.missing.map(esc).join(', ') + '</p>' : '') + '</div>';
+      return;
+    }
+    var d = r.decision, c = r.commentary, e = r.early, cq = r.context.quality, dq = r.dataQuality, fr = r.freshness, html = '';
+    html += '<div class="pro-card"><h3>Decision center</h3><div class="pro-dec ' + decCls(d.decision) + '">' + esc(d.decision) + '</div><p><b>' + esc(mLabel(r.pick, r)) + '</b></p>' +
+      (d.reasons.length ? '<ul class="pro-list">' + d.reasons.slice(0, 5).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
+      d.notes.map(function (n) { return '<p class="pro-warn">' + esc(n) + '</p>'; }).join('') + '</div>';
+    if (S.shock && S.shock.isShock) html += '<div class="pro-shock"><h3>INFORMATION SHOCK</h3><p>Probabilité : ' + (S.shock.before * 100).toFixed(0) + ' % → ' + (S.shock.after * 100).toFixed(0) + ' % (' + (S.shock.change > 0 ? '+' : '') + S.shock.change.toFixed(1) + ' points)</p><p class="pro-dim">Cause : ' + esc(S.shock.cause) + '</p></div>';
+    html += '<div class="pro-card"><h3>Commentaire</h3><p><b>Signal principal.</b> ' + esc(c.signal) + '</p>' +
+      '<div><div class="pro-lab">POUR</div><ul class="pro-list">' + (c.pour.length ? c.pour.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') : '<li>Aucun facteur favorable documenté</li>') + '</ul></div>' +
+      '<div><div class="pro-lab">CONTRE</div><ul class="pro-list">' + (c.contre.length ? c.contre.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') : '<li>Aucun facteur défavorable documenté</li>') + '</ul></div>' +
+      '<div><div class="pro-lab">RISQUES</div><ul class="pro-list">' + (c.risques.length ? c.risques.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') : '<li>Aucun risque signalé</li>') + '</ul></div>' +
+      (c.prix ? '<div class="pro-kv"><span>Cote actuelle</span><span>' + od(c.prix.current) + '</span><span>Cote juste</span><span>' + od(c.prix.fair) + '</span><span>Minimum acceptable</span><span>' + od(c.prix.minimum) + '</span></div>' : '') +
+      '<div class="pro-kv"><span>Stabilité</span><span>' + esc(c.stability) + '</span><span>Qualité des données</span><span>' + esc(c.dataQuality) + '</span></div><p><b>Conclusion.</b> ' + esc(c.conclusion) + '</p></div>';
+    html += '<div class="pro-card"><h3>Qualité des informations</h3><div class="pro-kv"><span>Data Quality</span><span>' + dq.score + '/100</span><span>Early Season Reliability</span><span>' + (e && e.reliability != null ? e.reliability + '/100' : 'INSUFFICIENT DATA') + '</span><span>Context Quality</span><span>' + cq.score + '/100</span><span>Fraîcheur</span><span>' + esc(fr.label) + (fr.ageHours != null ? ' (' + Math.round(fr.ageHours) + ' h)' : '') + '</span></div>' +
+      '<p class="pro-dim">Ces scores mesurent la fiabilité des informations, PAS une probabilité de victoire.</p>' +
+      (e && e.mode != null ? '<p class="pro-dim">' + esc(e.label) + ' · échantillon ' + esc(e.details.echantillon) + ' · historique ' + esc(e.details.historique) + ' · effectif ' + esc(e.details.effectif) + ' · incertitude ' + esc(e.details.incertitude) + ' · ' + esc(e.weightsStatus) + '</p>' : '') +
+      (dq.missing.length ? '<details class="pro-det"><summary>Données manquantes (' + dq.missing.length + ')</summary><p class="pro-dim">' + dq.missing.map(esc).join(', ') + '</p></details>' : '') + '</div>';
+    var cx = r.context;
+    html += '<div class="pro-card"><h3>Contexte</h3><div class="pro-kv"><span>Effectif dom. / ext.</span><span>' + cx.home.effectif.emoji + ' ' + cx.away.effectif.emoji + '</span><span>Impact estimé</span><span>' + esc(cx.home.effectif.impact) + ' / ' + esc(cx.away.effectif.impact) + '</span><span>Fatigue</span><span>' + cx.home.fatigue.emoji + ' ' + cx.away.fatigue.emoji + '</span><span>Rotation</span><span>' + cx.home.rotation.emoji + ' ' + cx.away.rotation.emoji + '</span></div>' +
+      (cx.home.rotation.lineupConfirmed && cx.away.rotation.lineupConfirmed ? '' : '<p class="pro-warn">LINEUP NOT CONFIRMED</p>') + '</div>';
+    var models = Object.keys(r.pick.modelProbs).map(function (id) { var st = (r.modelStatus.filter(function (m) { return m.id === id; })[0] || {}).status || 'IMPLEMENTED'; return '<span>' + esc(id) + ' · ' + esc(st) + '</span><span>' + pc(r.pick.modelProbs[id]) + '</span>'; }).join('');
+    html += '<div class="pro-card"><h3>Model center</h3><div class="pro-kv">' + models + '<span><b>Consensus</b></span><span><b>' + pc(r.pick.p) + '</b></span></div><p class="pro-dim">' + esc(r.weightsLabel) + ' · accord ' + (r.modelAgreementPct != null ? r.modelAgreementPct + ' %' : 'inconnu') + ' · ' +
+      (r.simulation ? 'Monte Carlo : ' + r.simulation.iterationsRun + ' simulations réellement exécutées' : '') + (r.simulation && r.simulation.sdProvisional ? ' · écarts-types PROVISOIRES' : '') + '</p>' +
+      (r.expectations ? '<div class="pro-kv"><span>Pace attendue</span><span>' + r.expectations.pace.toFixed(1) + '</span><span>Points attendus</span><span>' + r.expectations.pointsHome.toFixed(1) + ' – ' + r.expectations.pointsAway.toFixed(1) + '</span><span>Marge attendue</span><span>' + r.expectations.margin.toFixed(1) + '</span><span>Total attendu</span><span>' + r.expectations.total.toFixed(1) + '</span></div>' : '') +
+      (r.lambdas ? '<div class="pro-kv"><span>Buts attendus (λ)</span><span>' + r.lambdas.home.toFixed(2) + ' – ' + r.lambdas.away.toFixed(2) + '</span></div>' : '') +
+      (r.marketBenchmark ? '<p class="pro-dim">Benchmark marché (informatif, hors P_MODEL) : marge ' + r.marketBenchmark.overroundPct.toFixed(1) + ' %</p>' : '') + '</div>';
+    var fi = r.featureImportance, mx = Math.max.apply(null, [0.0001].concat(r.evidence.factors.map(function (f) { return Math.abs(f.delta); })));
+    html += '<div class="pro-card"><h3>Evidence ledger</h3>' + (r.evidence.factors.length ? r.evidence.factors.map(function (f) { return '<div class="pro-bar"><span>' + esc(f.name) + ' <b class="pro-mono">' + (f.delta > 0 ? '+' : '') + f.delta.toFixed(1) + '</b></span><span><i class="' + (f.delta < 0 ? 'neg' : '') + '" style="width:' + Math.max(4, Math.round(Math.abs(f.delta) / mx * 100)) + '%"></i></span></div>'; }).join('') +
+      '<div class="pro-kv"><span><b>NET IMPACT</b></span><span><b>' + (r.evidence.net > 0 ? '+' : '') + r.evidence.net.toFixed(1) + ' pts</b></span></div>' : '<p class="pro-dim">DATA UNAVAILABLE</p>') + '<p class="pro-dim">Contribution de chaque facteur à la probabilité du signal, en points.</p></div>';
+    if (r.warnings.length) html += '<div class="pro-card"><h3>Avertissements</h3>' + r.warnings.map(function (w) { return '<p class="pro-warn">' + esc(w) + '</p>'; }).join('') + '</div>';
+    html += '<div class="pro-card"><button class="pro-btn primary" data-save="' + r.markets.indexOf(r.pick) + '" type="button">ENREGISTRER DANS EA MEMORY</button><p class="pro-dim" id="proSaveMsg">' + esc(S.msg) + '</p></div>';
+    el.innerHTML = html;
+  }
+  function renderValue() {
+    var r = S.last, el = $('proValue'); if (!el) return; if (!r || !r.pick) { el.innerHTML = r ? '<div class="pro-card"><p class="pro-warn">INSUFFICIENT DATA : value non calculable.</p></div>' : ''; return; }
+    el.innerHTML = '<div class="pro-card"><h3>Value center</h3></div>' + r.markets.map(function (m, i) {
+      var v = m.value;
+      return '<div class="pro-card"><div class="pro-row" style="justify-content:space-between;align-items:center"><b>' + mLabel(m, r) + '</b>' + chip(m.decision.decision, m.decision.decision === 'BET' ? 'green' : m.decision.decision === 'CHECK' ? 'yellow' : 'red') + '</div>' +
+        '<div class="pro-kv"><span>Probabilité</span><span>' + pc(m.p) + '</span><span>Cote juste</span><span>' + od(v.fairOdds) + '</span><span>Cote actuelle</span><span>' + od(v.currentOdds) + '</span><span>Edge</span><span>' + (v.edgePts != null ? (v.edgePts > 0 ? '+' : '') + v.edgePts.toFixed(1) + ' pts' : '—') + '</span><span>EV</span><span>' + (v.ev != null ? (v.ev * 100).toFixed(1) + ' %' : '—') + '</span><span>Minimum acceptable</span><span>' + od(v.targetMinimum) + '</span></div>' +
+        (v.status === 'VALUE_LOST' ? '<p class="pro-warn">VALUE LOST — NO BET</p>' : v.status === 'NO_PRICE' ? '<p class="pro-dim">Aucune cote saisie : value non calculable.</p>' : '') +
+        '<p class="pro-dim">Fourchette d\'incertitude heuristique ±' + m.uncertaintyHalfPts.toFixed(1) + ' pts (garde-fou, pas un intervalle de confiance calibré).</p>' +
+        '<button class="pro-btn small" data-save="' + i + '" type="button">Enregistrer ce marché</button></div>';
+    }).join('');
+  }
+  function renderHistorique() {
+    var recs = records(), st = EA.memory.stats(recs, cfg()), cm = EA.memory.competitionMemory(recs, cfg()), el = $('pane-historique');
+    var f = function (v, d, suf) { return C.isNum(v) ? v.toFixed(d) + (suf || '') : 'DATA UNAVAILABLE'; };
+    var html = '<div class="pro-card"><h3>Mémoire EA</h3><div class="pro-kv"><span>Analyses enregistrées</span><span>' + st.N + '</span><span>Résultats saisis</span><span>' + st.settled + '</span><span>ROI (cotes connues)</span><span>' + (st.roi != null ? (st.roi * 100).toFixed(1) + ' %' : 'DATA UNAVAILABLE') + '</span><span>Taux de réussite</span><span>' + (st.hitRate != null ? (st.hitRate * 100).toFixed(0) + ' %' : '—') + '</span><span>CLV moyen</span><span>' + (st.clvAvg != null ? (st.clvAvg > 0 ? '+' : '') + st.clvAvg.toFixed(2) + ' pts' : 'CLV UNAVAILABLE') + '</span><span>CLV positif</span><span>' + (st.clvPositivePct != null ? st.clvPositivePct.toFixed(0) + ' %' : '—') + '</span></div>' + (st.label === 'SAMPLE TOO SMALL' ? '<p class="pro-warn">SAMPLE TOO SMALL — ces chiffres ne sont pas exploitables.</p>' : '') + '</div>';
+    var groups = Object.keys(cm.byMarket);
+    if (groups.length) html += '<div class="pro-card"><h3>Par sport · compétition · marché</h3>' + groups.map(function (k) { var s = cm.byMarket[k]; return '<div class="pro-kv"><span>' + esc(k) + '</span><span>N=' + s.settled + (s.label === 'SAMPLE TOO SMALL' ? ' · SAMPLE TOO SMALL' : ' · ROI ' + (s.roi != null ? (s.roi * 100).toFixed(1) + ' %' : '—') + ' · CLV ' + (s.clvAvg != null ? s.clvAvg.toFixed(2) : 'UNAVAILABLE')) + '</span></div>'; }).join('') + '</div>';
+    if (!recs.length) html += '<div class="pro-card"><p class="pro-dim">Aucune analyse enregistrée. Utilise « Enregistrer dans EA Memory » après une analyse.</p></div>';
+    html += recs.slice().reverse().map(function (r) {
+      var res = r.result, cl = EA.memory.clv(r.odds, r.closingOdds), rr = { home: r.home, away: r.away };
+      return '<div class="pro-card"><div class="pro-row" style="justify-content:space-between"><b>' + esc(r.home) + ' – ' + esc(r.away) + '</b>' + chip(r.decision, r.decision === 'BET' ? 'green' : r.decision === 'CHECK' ? 'yellow' : 'red') + '</div><p class="pro-dim">' + esc(r.competition || '—') + ' · ' + esc(r.matchDate) + ' · ' + esc(r.modelVersion) + '</p>' +
+        '<div class="pro-kv"><span>' + esc(mLabel(r, rr)) + '</span><span>P ' + pc(r.pModel) + '</span><span>Cote d\'analyse</span><span>' + od(r.odds) + '</span><span>Cote juste</span><span>' + od(r.fairOdds) + '</span><span>Cote de clôture</span><span>' + (r.closingOdds ? od(r.closingOdds) : 'CLV UNAVAILABLE') + '</span>' + (cl ? '<span>CLV</span><span>' + (cl.clvProbPts > 0 ? '+' : '') + cl.clvProbPts.toFixed(2) + ' pts</span>' : '') + '</div>' +
+        (res ? '<p><b>' + (res.outcome === 'won' ? 'Gagné' : res.outcome === 'lost' ? 'Perdu' : 'Annulé') + '</b> · profit ' + (res.profit != null ? res.profit.toFixed(2) + (res.stake ? '' : ' u') : '—') + ' · erreur ' + (res.error != null ? res.error.toFixed(2) : '—') + '</p>' :
+          '<div class="pro-fields"><div class="pro-field"><label for="cl_' + r.id + '">Cote de clôture</label><input class="pro-in" id="cl_' + r.id + '" inputmode="decimal"></div><div class="pro-field"><label for="sk_' + r.id + '">Mise (optionnel)</label><input class="pro-in" id="sk_' + r.id + '" inputmode="decimal"></div></div><div class="pro-row"><button class="pro-btn small" data-settle="won" data-id="' + r.id + '" type="button">Gagné</button><button class="pro-btn small" data-settle="lost" data-id="' + r.id + '" type="button">Perdu</button><button class="pro-btn small" data-settle="void" data-id="' + r.id + '" type="button">Annulé</button></div>') +
+        '<button class="pro-btn small" data-del="' + r.id + '" type="button">Supprimer</button></div>';
+    }).join('');
+    el.innerHTML = html;
+  }
+  function healthChip(h) { if (!h || h.state == null) return chip('⚪ INSUFFICIENT DATA' + (h && h.n != null ? ' (' + h.n + '/' + h.required + ')' : ''), 'grey'); return chip(h.emoji + ' ' + h.label, h.state === 'HEALTHY' ? 'green' : h.state === 'CAUTION' ? 'yellow' : 'red'); }
+  function renderLab() {
+    var recs = records(), set = recs.filter(function (r) { return r.result && r.result.outcome !== 'void'; }), cal = EA.models.calibration(set.map(function (r) { return { p: r.pModel, hit: r.result.outcome === 'won' }; }));
+    var statusList = (S.last && S.last.modelStatus) || C.MODEL_STATUS, html = '<div class="pro-card"><h3>Statut des modèles</h3><div class="pro-kv">' + statusList.map(function (m) { return '<span>' + esc(m.name) + '</span><span>' + esc(m.status) + '</span>'; }).join('') + '</div><details class="pro-det"><summary>Notes</summary>' + C.MODEL_STATUS.map(function (m) { return '<p class="pro-dim"><b>' + esc(m.name) + '</b> : ' + esc(m.note) + '</p>'; }).join('') + '</details>' +
+      '<p class="pro-dim">' + esc(S.last ? S.last.weightsLabel : 'MODEL WEIGHTS NOT YET CALIBRATED') + '</p></div>';
+    html += '<div class="pro-card"><h3>Calibration</h3>' + (cal.n ? '<div class="pro-kv"><span>Brier</span><span>' + cal.brier.toFixed(3) + '</span><span>Log Loss</span><span>' + cal.logLoss.toFixed(3) + '</span><span>ECE</span><span>' + cal.ece.toFixed(3) + '</span><span>N</span><span>' + cal.n + (cal.label === 'SAMPLE TOO SMALL' ? ' · SAMPLE TOO SMALL' : '') + '</span></div>' +
+      cal.buckets.map(function (b) { return '<div class="pro-bk"><span>' + b.range + '</span><span>' + (b.n ? '<i style="width:' + Math.round(b.freq * 100) + '%"></i>' : '<span class="pro-dim">—</span>') + '</span><span>' + (b.n ? Math.round(b.meanP * 100) + '→' + Math.round(b.freq * 100) + '% (' + b.n + ')' : '') + '</span></div>'; }).join('') + '<p class="pro-dim">Probabilité prédite → fréquence réelle, par tranche.</p>' : '<p class="pro-dim">INSUFFICIENT DATA : aucun résultat enregistré.</p>') + '</div>';
+    var wf = EA.memory.walkForward(recs, { config: cfg() });
+    html += '<div class="pro-card"><h3>Backtest walk-forward</h3>' + (wf.label !== 'OK' ? '<p class="pro-warn">' + esc(wf.label) + ' (' + wf.N + '/' + wf.required + ' analyses vérifiables)</p>' : ['training', 'validation', 'test'].map(function (k) { var m = wf[k]; return '<div class="pro-lab">' + k.toUpperCase() + ' · N=' + m.N + '</div><div class="pro-kv"><span>ROI / Yield</span><span>' + (m.roi != null ? (m.roi * 100).toFixed(1) + ' %' : '—') + '</span><span>Profit (unités)</span><span>' + (m.profitUnits != null ? m.profitUnits.toFixed(2) : '—') + '</span><span>Drawdown max</span><span>' + (m.maxDrawdownUnits != null ? m.maxDrawdownUnits.toFixed(2) : '—') + '</span><span>Série perdante max</span><span>' + m.maxLosingStreak + '</span><span>Brier / Log Loss</span><span>' + f2(m.brier) + ' / ' + f2(m.logLoss) + '</span><span>CLV</span><span>' + (m.clvAvg != null ? m.clvAvg.toFixed(2) : 'CLV UNAVAILABLE') + '</span></div>'; }).join('') + '<p class="pro-dim">' + esc(wf.note) + '</p>') +
+      (wf.excluded && wf.excluded.length ? '<p class="pro-warn">' + wf.excluded.length + ' analyse(s) exclue(s) : ' + esc(wf.excluded[0].reason) + '</p>' : '') + '</div>';
+    var perf = EA.memory.modelPerf(recs), ids = ['consensus'].concat(Object.keys(perf));
+    html += '<div class="pro-card"><h3>Model health</h3>' + ids.map(function (id) { var h = EA.memory.modelHealth(recs, id, cfg()); return '<div class="pro-row" style="justify-content:space-between;align-items:center"><span>' + esc(id) + '</span>' + healthChip(h) + '</div>' + (h.reasons && h.reasons.length ? '<p class="pro-dim">' + esc(h.reasons.join(', ')) + '</p>' : ''); }).join('') + '<p class="pro-dim">Seuils PROVISOIRES et configurables. Un modèle DEGRADED/DISABLED n\'est plus pondéré, son historique est conservé.</p></div>';
+    var ad = EA.memory.autoDiscovery(recs, cfg());
+    html += '<div class="pro-card"><h3>Auto Discovery · EXPERIMENTAL</h3>' + (ad.candidates.length ? ad.candidates.slice(0, 6).map(function (c) { return '<div class="pro-kv"><span>' + esc(c.feature) + ' (N=' + c.n + ')</span><span>' + (c.corrWithResidual != null ? c.corrWithResidual.toFixed(2) : 'INSUFFICIENT DATA') + '</span></div>'; }).join('') : '<p class="pro-dim">INSUFFICIENT DATA</p>') + '<p class="pro-dim">' + esc(ad.note) + ' Cycle : EXPERIMENTAL → VALIDATION → TEST → PRODUCTION (promotion manuelle, non automatisée).</p></div>';
+    html += '<div class="pro-card"><h3>Réglages</h3><div class="pro-field"><label for="setMc">Simulations Monte Carlo</label><select class="pro-in" id="setMc">' + cfg().mc.options.map(function (o) { return '<option value="' + o + '"' + (o === S.settings.mcIterations ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select></div>' +
+      '<p class="pro-dim">FAST MODE : ' + (S.settings.fast ? 'actif (' + cfg().mc.fast + ' simulations, animations coupées)' : 'inactif') + '</p>' +
+      '<details class="pro-det"><summary>Configuration avancée (JSON, fusionnée avec les valeurs par défaut)</summary><textarea class="pro-in" id="setCfg" style="min-height:120px" placeholder=\'{"value":{"minEV":0.06}}\'>' + esc(S.settings.configOverride ? JSON.stringify(S.settings.configOverride) : '') + '</textarea><div class="pro-row"><button class="pro-btn small" id="setCfgSave" type="button">Appliquer</button><button class="pro-btn small" id="setCfgReset" type="button">Réinitialiser</button></div><p class="pro-dim" id="setCfgMsg"></p></details></div>';
+    html += '<div class="pro-card"><h3>À propos · Debug</h3><div class="pro-kv"><span>Version</span><span>' + C.VERSION + '</span><span>storageVersion</span><span>' + EA.storage.currentVersion(LS) + ' / ' + EA.storage.TARGET + '</span><span>Analyses en mémoire</span><span>' + recs.length + '</span><span>Coefficients</span><span>' + (C.DEFAULT_CONFIG.provisional ? 'PROVISIONAL WEIGHTS' : 'validés') + '</span></div><p class="pro-dim">STATISTICAL MODEL · MODEL ENGINE · DECISION ENGINE. Aucune probabilité n\'est garantie.</p></div>';
+    $('pane-lab').innerHTML = html;
+  }
+  function f2(v) { return C.isNum(v) ? v.toFixed(3) : '—'; }
+  function renderBankroll() {
+    var recs = records(), set = recs.filter(function (r) { return r.result && r.result.stake && r.result.profit != null; }).sort(function (a, b) { return a.result.settledAt - b.result.settledAt; }), cum = 0, peak = 0, dd = 0;
+    set.forEach(function (r) { cum += r.result.profit; if (cum > peak) peak = cum; dd = Math.max(dd, peak - cum); });
+    var st = S.last && S.last.pick && S.last.pick.odds ? EA.bankroll.suggestStake({ bankroll: S.settings.bankroll, p: S.last.pick.p, odds: S.last.pick.odds, minStake: S.settings.minStake }, cfg()) : null;
+    var html = '<div class="pro-card"><h3>Bankroll</h3><div class="pro-fields">' + field('bkBank', 'Bankroll', String(S.settings.bankroll || '')) + field('bkMin', 'Mise minimale du bookmaker (optionnel)', String(S.settings.minStake || '')) + '</div><button class="pro-btn" id="bkSave" type="button">Enregistrer</button>' +
+      '<div class="pro-kv"><span>Profit/perte (paris avec mise)</span><span>' + (set.length ? cum.toFixed(2) : 'DATA UNAVAILABLE') + '</span><span>Drawdown maximal</span><span>' + (set.length ? dd.toFixed(2) : '—') + '</span><span>Paris avec mise</span><span>' + set.length + '</span></div></div>';
+    html += '<div class="pro-card"><h3>Mise indicative</h3>' + (st ? (st.available ? '<div class="pro-kv"><span>Niveau</span><span>' + esc(st.tier) + '</span><span>Mise</span><span>' + st.stake.toFixed(2) + '</span><span>Part de bankroll</span><span>' + (st.stakePct * 100).toFixed(2) + ' %</span><span>Plafond</span><span>' + st.cap.toFixed(2) + '</span></div><p class="' + (st.stakeOk ? 'pro-dim' : 'pro-warn') + '">' + esc(st.label) + (st.advice ? ' — ' + esc(st.advice) : '') + '</p>' : '<p class="pro-dim">' + esc(st.label) + ' : ' + esc(st.reason) + '</p>') : '<p class="pro-dim">Analyse avec cote et bankroll renseignées requise.</p>') +
+      '<p class="pro-dim">Kelly fractionné, plafonné, jamais all-in. Indicatif : aucun gain futur n\'est garanti.</p></div>';
+    html += '<div class="pro-card"><h3>Simulateur de bankroll</h3><div class="pro-fields">' + field('sm_n', 'Nombre de paris', '100') + field('sm_pct', 'Mise (% bankroll)', '1') + field('sm_odds', 'Cote moyenne', '1.90') + field('sm_p', 'Probabilité de gain (%)', '55') + '</div>' +
+      '<div class="pro-field"><label for="sm_k">Simulations</label><select class="pro-in" id="sm_k"><option>1000</option><option selected>5000</option><option>10000</option></select></div><button class="pro-btn primary" id="smRun" type="button">SIMULER</button><div id="smOut"></div></div>';
+    $('pane-bankroll').innerHTML = html;
+    if (S.settings.bankroll != null) $('bkBank').value = S.settings.bankroll; if (S.settings.minStake != null) $('bkMin').value = S.settings.minStake;
+  }
+
+  // ---------- actions ----------
+  function run() {
+    var input = collect(); S.lastInput = input;
+    var res = S.sport === 'football' ? EA.engine.analyzeFootball(input) : EA.engine.analyzeBasketball(input);
+    S.shock = null;
+    if (res.pick) {
+      var key = [res.sport, res.competition || '', res.home, res.away, res.matchDate].join('|'), prev = S.memory.previous(key, res.pick.market, res.pick.selection), cur = EA.engine.toMemoryRecord(res);
+      if (prev) { var cause = EA.value.diffContext(Object.assign({}, prev.contextSnapshot, { odds: prev.odds }), Object.assign({}, cur.contextSnapshot, { odds: cur.odds })); S.shock = EA.value.informationShock(prev.pModel, res.pick.p, cause.length ? cause.join(' ; ') : 'nouvelles données saisies', cfg()); }
+    }
+    S.last = res; S.msg = ''; renderSummary(); renderValue(); renderDecision(); if (S.tab === 'analyse') { var m = $('proRunMsg'); if (m) m.textContent = 'Analyse terminée : ' + res.decision.decision + '.'; }
+    if (S.tab === 'analyse' || S.tab === 'marches') tab('decision');
+  }
+  function tab(t) {
+    S.tab = t; ['analyse', 'marches', 'decision', 'historique', 'lab', 'bankroll'].forEach(function (k) { $('pane-' + k).classList.toggle('on', k === t); });
+    Array.prototype.forEach.call($('proNav').children, function (b) { b.classList.toggle('on', b.dataset.t === t); });
+    if (t === 'historique') renderHistorique(); if (t === 'lab') renderLab(); if (t === 'bankroll') renderBankroll(); if (t === 'decision') renderDecision(); if (t === 'marches') renderValue();
+  }
+  function setSport(sp) {
+    S.sport = sp; S.settings.sport = sp; save(); S.last = null; S.shock = null; S.ctx = { h: {}, a: {} };
+    Array.prototype.forEach.call($('proSport').children, function (b) { b.classList.toggle('on', b.dataset.v === sp); });
+    renderAnalyse(); renderMarches(); renderSummary(); renderDecision(); bindForm();
+  }
+  function setMode(m) { S.mode = m; S.settings.mode = m; save(); Array.prototype.forEach.call($('proMode').children, function (b) { b.classList.toggle('on', b.dataset.v === m); }); if (S.last && S.lastInput) run(); }
+  function applyFast() { g.EA_FAST = !!S.settings.fast; doc.body.classList.toggle('ea-fast', !!S.settings.fast); $('proFast').classList.toggle('on', !!S.settings.fast); }
+  function saveRecord(idx) {
+    var r = S.last; if (!r || !r.markets[idx]) return; var rec = EA.engine.toMemoryRecord(r, r.markets[idx]);
+    try { S.memory.add(rec); S.msg = 'Analyse enregistrée (prédiction figée, non modifiable).'; } catch (e) { S.msg = 'Enregistrement impossible : stockage plein ou indisponible.'; }
+    var m = $('proSaveMsg'); if (m) m.textContent = S.msg;
+  }
+  function bindForm() {
+    Array.prototype.forEach.call(doc.querySelectorAll('#pane-analyse .pro-emos'), function (grp) {
+      grp.addEventListener('click', function (ev) {
+        var b = ev.target.closest('button'); if (!b) return; var side = grp.dataset.side, key = grp.dataset.key; S.ctx[side][key] = b.dataset.v;
+        Array.prototype.forEach.call(grp.children, function (x) { x.classList.toggle('on', x === b); });
+        var st = $('st_' + side + '_' + key); if (st && EA.context.LABELS[key]) st.textContent = EA.context.LABELS[key][b.dataset.v];
+      });
+    });
+    var hi = $('p_home'), ai = $('p_away'); if (hi) hi.addEventListener('input', function () { $('p_h_title').textContent = hi.value || 'Domicile'; }); if (ai) ai.addEventListener('input', function () { $('p_a_title').textContent = ai.value || 'Extérieur'; });
+    var b1 = $('proRun'), b2 = $('proRun2'); if (b1) b1.addEventListener('click', run); if (b2) b2.addEventListener('click', run);
+  }
+  function bindGlobal() {
+    $('proSport').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b && b.dataset.v !== S.sport) setSport(b.dataset.v); });
+    $('proMode').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setMode(b.dataset.v); });
+    $('proFast').addEventListener('click', function () { S.settings.fast = !S.settings.fast; save(); applyFast(); });
+    $('proNav').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) tab(b.dataset.t); });
+    $('proSummary').addEventListener('click', function () { if (S.last) tab('decision'); });
+    $('proSummary').addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && S.last) { e.preventDefault(); tab('decision'); } });
+    $('eaProRoot').addEventListener('click', function (e) {
+      var t = e.target.closest('button'); if (!t) return;
+      if (t.dataset.save != null) { saveRecord(parseInt(t.dataset.save, 10)); return; }
+      if (t.dataset.settle) { var id = t.dataset.id; S.memory.settle(id, t.dataset.settle, { closingOdds: nv('cl_' + id), stake: nv('sk_' + id) }); renderHistorique(); return; }
+      if (t.dataset.del) { if (g.confirm('Supprimer cette analyse de la mémoire ?')) { S.memory.remove(t.dataset.del); renderHistorique(); } return; }
+      if (t.id === 'bkSave') { S.settings.bankroll = nv('bkBank'); S.settings.minStake = nv('bkMin'); save(); renderBankroll(); return; }
+      if (t.id === 'smRun') {
+        var out = EA.bankroll.simulate({ bankroll: S.settings.bankroll || 100, nBets: nv('sm_n'), stakePct: (nv('sm_pct') || 0) / 100, odds: nv('sm_odds'), winProb: (nv('sm_p') || 0) / 100, sims: parseInt($('sm_k').value, 10) }, cfg());
+        $('smOut').innerHTML = out.available ? '<div class="pro-kv"><span>Résultat médian</span><span>' + out.median.toFixed(0) + '</span><span>Percentile 10</span><span>' + out.p10.toFixed(0) + '</span><span>Percentile 90</span><span>' + out.p90.toFixed(0) + '</span><span>Drawdown moyen max</span><span>' + (out.avgMaxDrawdown * 100).toFixed(0) + ' %</span><span>Série perdante (médiane / p90)</span><span>' + out.medianLosingStreak + ' / ' + out.p90LosingStreak + '</span><span>Risque de ruine</span><span>' + (out.riskOfRuin * 100).toFixed(1) + ' %</span></div><p class="pro-dim">Ruine : ' + esc(out.ruinDefinition) + (out.negativeEV ? ' · EV négative avec ces paramètres' : '') + '</p><p class="pro-warn"><b>' + out.banner + '</b></p>' : '<p class="pro-warn">' + esc(out.label) + ' : ' + esc(out.reason) + '</p>';
+        return;
+      }
+      if (t.id === 'setCfgSave') { try { var o = JSON.parse($('setCfg').value || 'null'); S.settings.configOverride = o; save(); $('setCfgMsg').textContent = 'Configuration appliquée.'; } catch (err) { $('setCfgMsg').textContent = 'JSON invalide : configuration inchangée.'; } return; }
+      if (t.id === 'setCfgReset') { S.settings.configOverride = null; save(); renderLab(); return; }
+    });
+    $('eaProRoot').addEventListener('change', function (e) { if (e.target.id === 'setMc') { S.settings.mcIterations = parseInt(e.target.value, 10); save(); } });
+  }
+  function init() {
+    var root = $('eaProRoot'); if (!root) return;
+    var mig = EA.storage.migrate(LS); S.migration = mig;
+    S.settings = EA.storage.loadSettings(LS); S.memory = EA.memory.createMemory(LS); S.sport = S.settings.sport || 'football'; S.mode = S.settings.mode || 'VALUE';
+    root.innerHTML = shell(); renderAnalyse(); renderMarches(); renderSummary(); bindGlobal(); bindForm();
+    Array.prototype.forEach.call($('proSport').children, function (b) { b.classList.toggle('on', b.dataset.v === S.sport); });
+    Array.prototype.forEach.call($('proMode').children, function (b) { b.classList.toggle('on', b.dataset.v === S.mode); });
+    applyFast(); tab('analyse');
+    if (!mig.ok) { var m = $('proRunMsg'); if (m) m.textContent = 'Migration du stockage non appliquée (' + mig.error + ')' + (mig.restored ? ' — sauvegarde restaurée.' : '.'); }
+    var vl = doc.getElementById('eaVersionLine'); if (vl) vl.textContent = 'EA Value Pro ' + C.VERSION;
+  }
+  EA.ui = { init: init, _state: S, _collect: collect, _run: run };
+  if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init); else init();
+})(typeof window !== 'undefined' ? window : global);
+
+} catch (eaErr) {
+  window.__EA_PRO_ERROR = eaErr;
+  document.addEventListener('DOMContentLoaded', function () {
+    var r = document.getElementById('eaProRoot');
+    if (r) r.innerHTML = '<div style="padding:18px;color:#ff8f86;font:14px/1.5 system-ui">Pro 3.0 n\'a pas pu démarrer : ' + String(eaErr && eaErr.message || eaErr) + '</div>';
+  });
+}
+</script>
 <script>
 /* ================================================================
    0. UTILS PARTAGÉS
@@ -3017,7 +4334,20 @@ function simulateMonteCarloMatrix(lambdaA,lambdaB,dataConfidence,iterations=1500
   const rows=[]; for(const key in counts){ const [a,b]=key.split('-').map(Number); rows.push({a,b,p:counts[key]/(total||1)}); }
   return rows;
 }
-function poissonDist(total,maxK=25){ const rows=[]; let sum=0; for(let k=0;k<=maxK;k++){ const p=poissonP(k,total); rows.push({k,p}); sum+=p; } rows.forEach(r=>r.p/=sum); return rows; }
+function poissonDist(total,maxK){
+  // CORRECTIF : la borne était fixée à 25. Pour une moyenne élevée (rebonds ~88, passes ~45), toute la
+  // masse de probabilité se trouvait au-delà de k=25 ; après renormalisation, tout s'écrasait sur k=25
+  // et "Moins de 87.5 rebonds" sortait à 100 %. La borne suit désormais la moyenne, et le calcul se fait
+  // en logarithmes (factorial(k) déborde vers Infinity au-delà de k=170).
+  if(maxK==null) maxK=Math.max(25, Math.ceil(total+8*Math.sqrt(total)+10));
+  const rows=[]; let sum=0, logFact=0;
+  for(let k=0;k<=maxK;k++){
+    if(k>1) logFact+=Math.log(k);
+    const p=total>0 ? Math.exp(-total + k*Math.log(total) - logFact) : (k===0?1:0);
+    rows.push({k,p}); sum+=p;
+  }
+  rows.forEach(r=>r.p/=sum); return rows;
+}
 function pickTotalLineMarket(total,minLine,unitLabel){
   const dist=poissonDist(total); const baseLine=Math.max(minLine,Math.floor(total)-0.5); const lineOptions=[baseLine,baseLine+1,baseLine+2];
   let best=null;
@@ -5696,10 +7026,16 @@ function computeBasketPoints(){
     aggFactorUsed: bkMatchFlags.leg==='retour' ? {factorA:bkAggAdj.factorA, factorB:bkAggAdj.factorB} : null, aggDiff: bkAggAdj.diff||0};
 }
 function simulateBasketball(pointsA, pointsB, dataConfidence, iterations=12000, sigmaMult=1){
-  const sigma = (14*(1-clamp01(dataConfidence)) + 8) * sigmaMult;
+  // CORRECTIF : l'ancienne version tirait deux bruits indépendants de σ=8 (écart-type de la marge ~11,3
+  // ET du total ~11,3). En vrai basket, la marge varie d'environ 12 pts et le total d'environ 17 pts
+  // (les deux équipes partagent le rythme du match). On ajoute donc (1) un bruit de rythme commun aux
+  // deux équipes et (2) une erreur sur l'écart attendu lui-même : le modèle n'est jamais sûr à 100 %.
+  const sigma = (8.5 + 14*(1-clamp01(dataConfidence))) * sigmaMult;
+  const paceSd = 6 * sigmaMult, modelErrSd = 4 * sigmaMult;
   const sims=[];
   for(let n=0;n<iterations;n++){
-    const sA=Math.max(55, pointsA+gaussianNoise()*sigma), sB=Math.max(55, pointsB+gaussianNoise()*sigma);
+    const pace=gaussianNoise()*paceSd, err=gaussianNoise()*modelErrSd/2;
+    const sA=Math.max(55, pointsA+pace+err+gaussianNoise()*sigma), sB=Math.max(55, pointsB+pace-err+gaussianNoise()*sigma);
     sims.push({a:Math.round(sA), b:Math.round(sB)});
   }
   return sims;
@@ -5788,7 +7124,12 @@ function runAnalysisBk(){
   // peut exister même quand les points attendus sont proches — on nuance le vainqueur ici.
   // strengthGapBk vient désormais de computeBasketPoints (calculé une seule fois, plus de
   // recalcul redondant ici avec les mêmes entrées).
-  const pWinA = clamp01(pWinARaw + strengthGapBk*0.07);
+  // CORRECTIF : le nudge de force était ajouté tel quel (jusqu'à +7 pts), même quand la simulation
+  // donnait déjà 97 % — d'où 99,7 %. Il est désormais pondéré par 4p(1-p) : maximal sur un match
+  // équilibré, quasi nul sur un gros favori. Plafond de sécurité à 95 % : aucun modèle statistique
+  // alimenté à la main ne justifie plus de certitude sur un match de basket.
+  const BK_MAX_WIN_P = 0.95;
+  const pWinA = Math.min(BK_MAX_WIN_P, Math.max(1-BK_MAX_WIN_P, pWinARaw + strengthGapBk*0.07*4*pWinARaw*(1-pWinARaw)));
   const pWinB = 1-pWinA;
   const favTeam = pWinA>=pWinB ? nameA : nameB, favP = Math.max(pWinA,pWinB);
 
