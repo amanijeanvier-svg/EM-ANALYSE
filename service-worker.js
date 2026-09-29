@@ -7,7 +7,7 @@
    d'autre à ce fichier. C'est ce qui garantit que les utilisateurs
    reçoivent la nouvelle version sans avoir à désinstaller/réinstaller.
 ================================================================= */
-const CACHE_NAME = 'ea-cabinet-cache-v21';
+const CACHE_NAME = 'ea-cabinet-cache-v22';
 // index.html embarque désormais tout le code Pro 3.0 (CSS + modules JS) : seuls les fichiers
 // statiques ci-dessous sont pré-cachés. Chaque fichier est ajouté séparément — avant, un seul
 // 404 dans cache.addAll() faisait échouer toute l'installation et l'app restait sur l'ancienne version.
