@@ -1866,7 +1866,7 @@ try {
   var EA = g.EA, C = EA.core;
   var KEY = 'ea_pro_memory', SCHEMA = 1;
 
-  function frozenPart(r) { return { sport: r.sport, competition: r.competition, matchKey: r.matchKey, matchDate: r.matchDate, market: r.market, selection: r.selection, odds: r.odds, pModel: r.pModel, fairOdds: r.fairOdds, ev: r.ev, decision: r.decision, modelVersion: r.modelVersion, modelProbs: r.modelProbs, dataQuality: r.dataQuality, stability: r.stability, createdAt: r.createdAt }; }
+  function frozenPart(r) { return { sport: r.sport, competition: r.competition, matchKey: r.matchKey, matchDate: r.matchDate, market: r.market, selection: r.selection, odds: r.odds, pModel: r.pModel, fairOdds: r.fairOdds, ev: r.ev, decision: r.decision, modelVersion: r.modelVersion, modelProbs: r.modelProbs, dataQuality: r.dataQuality, stability: r.stability, createdAt: r.createdAt, type: r.type, legs: r.legs, snapshot: r.snapshot }; }
   function hashOf(r) { return C.hashSeed(JSON.stringify(frozenPart(r))); }
 
   function clv(entry, closing) {
@@ -1884,6 +1884,8 @@ try {
         var o = load(), t = C.isNum(now) ? now : Date.now();
         var r = Object.assign({}, rec, { id: rec.id || ('a' + t.toString(36) + Math.random().toString(36).slice(2, 7)), createdAt: t, result: null });
         if (!r.matchKey) r.matchKey = [r.sport, r.competition, r.home, r.away, r.matchDate].join('|');
+        var prev = null; o.analyses.forEach(function (x) { if (x.matchKey === r.matchKey && x.market === r.market && x.selection === r.selection) prev = x; });
+        r.version = prev ? (prev.version || 1) + 1 : 1; if (prev) r.supersedes = prev.id;
         r.modelVersion = r.modelVersion || C.VERSION; r.predictionHash = hashOf(r);
         o.analyses.push(r); save(o); return r;
       },
@@ -1895,7 +1897,7 @@ try {
         var profit = outcome === 'void' ? 0 : (odds == null ? null : outcome === 'won' ? unit * (odds - 1) : -unit);
         if (C.num(o2.closingOdds) != null && r.closingOdds == null && o2.closingOdds > 1) r.closingOdds = C.num(o2.closingOdds);
         r.result = { outcome: outcome, settledAt: C.isNum(o2.now) ? o2.now : Date.now(), stake: stake, profit: profit, profitUnits: profit == null ? null : (stake == null ? profit : profit / stake),
-          error: outcome === 'void' ? null : (outcome === 'won' ? 1 : 0) - r.pModel };
+          score: (C.num(o2.score && o2.score.a) != null && C.num(o2.score && o2.score.b) != null) ? { a: C.num(o2.score.a), b: C.num(o2.score.b) } : null, error: outcome === 'void' ? null : (outcome === 'won' ? 1 : 0) - r.pModel };
         save(o); return r;
       },
       remove: function (id) { var o = load(); o.analyses = o.analyses.filter(function (x) { return x.id !== id; }); save(o); },
@@ -2038,6 +2040,346 @@ try {
   EA.storage = { VERSION_KEY: VERSION_KEY, BACKUP_KEY: BACKUP_KEY, SETTINGS_KEY: SETTINGS_KEY, MEMORY_KEY: MEMORY_KEY, MIGRATIONS: MIGRATIONS, TARGET: TARGET, EXPORT_KEYS: EXPORT_KEYS,
     DEFAULT_SETTINGS: DEFAULT_SETTINGS, currentVersion: currentVersion, migrate: migrate, loadSettings: loadSettings, saveSettings: saveSettings };
   if (typeof module === 'object' && module.exports) module.exports = EA.storage;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-parlay.js ===== */
+/* EA-VALUE 3.0 — CORRELATION ENGINE + PARLAY OPTIMIZER (bloc unique « COMBINÉ RENTABLE »).
+   « Rentable » = mathématiquement favorable selon le modèle et ses hypothèses, jamais une garantie.
+   Les corrélations ci-dessous sont des valeurs PROVISOIRES (non estimées sur données) : configurables via cfg.parlay.rho. */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') require('./ea-core.js');
+  var EA = g.EA;
+  var DEF = { minEV: 0.05, minJointP: 0.30, maxLegs: 4, maxPool: 12, minDataQuality: 60, maxLegHalfPts: 9, complexityPenalty: 0.01, sgpOddsHaircut: 0.93,
+    rho: { 'over|btts_yes': 0.55, 'under|btts_no': 0.55, 'over|btts_no': -0.55, 'under|btts_yes': -0.55, 'win|over': 0.15, 'win|under': -0.15, 'draw|under': 0.25, 'draw|over': -0.25, 'win|btts_yes': -0.10, 'win|btts_no': 0.20, 'draw|btts_yes': 0.10, 'draw|btts_no': -0.10 } };
+  function cfgOf(c) { var u = (c && c.parlay) || {}, o = {}; Object.keys(DEF).forEach(function (k) { o[k] = u[k] != null ? u[k] : DEF[k]; }); if (u.rho) { o.rho = {}; Object.keys(DEF.rho).forEach(function (k) { o.rho[k] = DEF.rho[k]; }); Object.keys(u.rho).forEach(function (k) { o.rho[k] = u.rho[k]; }); } return o; }
+
+  // classe d'une sélection : over/under/btts_yes/btts_no/win/draw ; null = inconnue
+  function kind(l) {
+    var m = String(l.market || ''), s = String(l.selection || '');
+    if (/^ou:/.test(m) || m === 'total') return s === 'over' ? 'over' : s === 'under' ? 'under' : null;
+    if (m === 'btts') return s === 'yes' ? 'btts_yes' : s === 'no' ? 'btts_no' : null;
+    if (m === '1X2') return s === 'draw' ? 'draw' : (s === 'home' || s === 'away') ? 'win' : null;
+    if (m === 'ml') return 'win';
+    return null;
+  }
+  // Probabilité jointe de deux jambes d'un même match. null = combinaison invalide (exclusive / dépendance inconnue).
+  function pairJoint(a, b, cfg) {
+    var ka = kind(a), kb = kind(b);
+    if (a.market === b.market && a.selection !== b.selection) return { joint: null, why: 'issues exclusives du même marché' };
+    if (a.market === b.market || (ka === 'win' && kb === 'win')) return { joint: null, why: 'même marché / même scénario' };
+    if (ka === 'over' && kb === 'over' || ka === 'under' && kb === 'under') return { joint: null, why: 'deux totaux du même match' };
+    if (!ka || !kb) return { joint: null, why: 'dépendance inconnue entre marchés du même match' };
+    var rho = cfg.rho[ka + '|' + kb]; if (rho == null) rho = cfg.rho[kb + '|' + ka];
+    if (rho == null) return { joint: null, why: 'dépendance inconnue (' + ka + ' / ' + kb + ')' };
+    var pa = a.p, pb = b.p, j = pa * pb + rho * Math.sqrt(pa * (1 - pa) * pb * (1 - pb));
+    j = Math.max(Math.max(0, pa + pb - 1), Math.min(pa, pb, j));        // bornes de Fréchet
+    return { joint: j, rho: rho, indep: pa * pb };
+  }
+  // Évalue une combinaison. pOf(l) = p ou p pessimiste (p − incertitude)
+  function joint(legs, cfg, low) {
+    var groups = {}, notes = [], sgp = false;
+    legs.forEach(function (l) { (groups[l.matchKey] = groups[l.matchKey] || []).push(l); });
+    var p = 1;
+    for (var k in groups) {
+      var gp = groups[k];
+      var pv = gp.map(function (l) { return Math.max(0.001, l.p - (low ? (l.uncertaintyHalfPts || 0) / 100 : 0)); });
+      if (gp.length === 1) { p *= pv[0]; continue; }
+      if (gp.length > 2) return { invalid: 'plus de 2 jambes dépendantes dans le même match' };
+      var r = pairJoint({ market: gp[0].market, selection: gp[0].selection, p: pv[0] }, { market: gp[1].market, selection: gp[1].selection, p: pv[1] }, cfg);
+      if (r.joint == null) return { invalid: r.why };
+      sgp = true; p *= r.joint;
+      if (!low) notes.push(gp[0].label + ' : ρ=' + r.rho.toFixed(2) + ' PROVISOIRE → ' + (r.indep * 100).toFixed(1) + ' % (indépendance) corrigé en ' + (r.joint * 100).toFixed(1) + ' %');
+    }
+    return { p: p, sgp: sgp, notes: notes };
+  }
+
+  function legOk(l, cfg) {
+    if (!l || !(l.odds > 1) || !(l.p > 0 && l.p < 1) || !l.value || l.value.status !== 'OK') return 'cote ou prix insuffisant';
+    if (l.decision !== 'BET') return 'décision individuelle ≠ BET';
+    if (l.weight != null && l.weight < 1 && l.value.ev < cfg.minEV / l.weight) return 'marché historiquement peu fiable (poids ' + l.weight.toFixed(2) + ') : EV exigé ' + (cfg.minEV / l.weight * 100).toFixed(1) + ' %';
+    if ((l.dataQuality == null) || l.dataQuality < cfg.minDataQuality) return 'données insuffisantes ou inconnues';
+    if ((l.uncertaintyHalfPts || 0) > cfg.maxLegHalfPts) return 'incertitude trop élevée';
+    return null;
+  }
+  function sharpe(p, o) { var sd = o * Math.sqrt(p * (1 - p)); return sd > 0 ? (p * o - 1) / sd : -Infinity; }
+
+  function optimize(pool, config) {
+    var cfg = cfgOf(config), rejected = [], elig = [];
+    (pool || []).forEach(function (l) { var w = legOk(l, cfg); if (w) rejected.push({ leg: l.label + ' · ' + l.market + ' ' + l.selection, why: w }); else elig.push(l); });
+    elig.sort(function (a, b) { return b.value.ev - a.value.ev; }); elig = elig.slice(0, cfg.maxPool);
+    // meilleur simple (EV pessimiste ajusté du risque)
+    var bestSingle = null;
+    elig.forEach(function (l) { var pl = Math.max(0.001, l.p - (l.uncertaintyHalfPts || 0) / 100), s = sharpe(pl, l.odds); if (pl * l.odds - 1 > 0 && (!bestSingle || s > bestSingle.sharpe)) bestSingle = { leg: l, sharpe: s, evLow: pl * l.odds - 1 }; });
+    var best = null, tested = 0, invalid = 0;
+    (function rec(start, cur) {
+      if (cur.length >= 2) {
+        tested++;
+        var hi = joint(cur, cfg, false), lo = joint(cur, cfg, true);
+        if (hi.invalid || lo.invalid) invalid++;
+        else {
+          var o = cur.reduce(function (a, l) { return a * l.odds; }, 1) * (hi.sgp ? cfg.sgpOddsHaircut : 1);
+          var ev = hi.p * o - 1, evLow = lo.p * o - 1;
+          if (ev >= cfg.minEV && evLow > 0 && hi.p >= cfg.minJointP) {
+            var score = evLow - cfg.complexityPenalty * (cur.length - 1);
+            if (!best || score > best.score) best = { score: score, legs: cur.slice(), odds: o, p: hi.p, pLow: lo.p, ev: ev, evLow: evLow, sgp: hi.sgp, notes: hi.notes };
+          }
+        }
+      }
+      if (cur.length >= cfg.maxLegs) return;
+      for (var i = start; i < elig.length; i++) { cur.push(elig[i]); rec(i + 1, cur); cur.pop(); }
+    })(0, []);
+    var out = { status: 'NO_BET', tested: tested, invalidCombos: invalid, eligible: elig.length, rejected: rejected, bestSingle: bestSingle,
+      message: 'Aucune combinaison ne présente actuellement un avantage statistique suffisant compte tenu des probabilités calibrées, du prix, de l\'incertitude et de la corrélation.' };
+    if (!best) return out;
+    var dq = Math.min.apply(null, best.legs.map(function (l) { return l.dataQuality; }));
+    var half = (best.p - best.pLow) * 100;
+    out.status = 'BET'; out.legs = best.legs; out.odds = best.odds; out.pJoint = best.p; out.pJointLow = best.pLow; out.pMarket = 1 / best.odds; out.edgePts = (best.p - 1 / best.odds) * 100;
+    out.ev = best.ev; out.evLow = best.evLow; out.minOdds = (1 + cfg.minEV) / best.p; out.dataQuality = dq; out.uncertaintyHalfPts = half; out.correlationNotes = best.notes;
+    out.sameMatchWarning = best.sgp ? 'Jambes du même match : la cote réelle d\'un pari combiné du même match est souvent inférieure au produit des cotes (décote PROVISOIRE de ' + Math.round((1 - cfg.sgpOddsHaircut) * 100) + ' % appliquée). Vérifiez la cote proposée.' : null;
+    out.risk = (best.pLow >= 0.45 && best.legs.length <= 2) ? 'Moyen' : (best.pLow >= 0.30 ? 'Élevé' : 'Très élevé');
+    out.calibration = best.legs.some(function (l) { return /NOT YET CALIBRATED/i.test(l.weightsLabel || ''); }) ? 'non calibrée (échantillon insuffisant)' : 'calibrée';
+    if (bestSingle && bestSingle.sharpe >= sharpe(best.pLow, best.odds)) { out.preferSingle = true; out.preferMessage = 'Le meilleur choix statistique est le pari simple.'; }
+    return out;
+  }
+  EA.parlay = { optimize: optimize, pairJoint: pairJoint, joint: joint, kind: kind, DEFAULTS: DEF };
+  if (typeof module === 'object' && module.exports) module.exports = EA.parlay;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-postmortem.js ===== */
+/* EA-VALUE 3.0 — POST-MATCH ANALYSIS + ERROR MEMORY.
+   Le diagnostic est une HYPOTHÈSE AUTOMATIQUE tirée des seules données enregistrées ; une observation ne prouve rien.
+   Ne modifie jamais la prédiction figée et ne change AUCUN paramètre du modèle : la prudence est affichée, pas appliquée. */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') require('./ea-core.js');
+  var EA = g.EA, C = EA.core;
+  var CFG = { minN: 30, strongN: 100, gapCaution: -0.08, lowEV: 0.03, lowDQ: 60 };
+  function num(v) { return C.num(v); }
+
+  function scoreNote(r) {
+    var s = r.result && r.result.score; if (!s) return null;
+    var tot = s.a + s.b, m = String(r.market || ''), sel = r.selection;
+    if (m === 'btts') return sel === 'yes' && (s.a === 0 || s.b === 0) ? (tot >= 3 ? 'Le match a dépassé le seuil de buts (' + tot + ') mais une des équipes n\'a pas marqué.' : 'Une des équipes n\'a pas marqué (' + s.a + '-' + s.b + ').') : sel === 'no' && s.a > 0 && s.b > 0 ? 'Les deux équipes ont marqué (' + s.a + '-' + s.b + ').' : null;
+    if (/^ou:/.test(m)) { var line = parseFloat(m.slice(3)); return sel === 'over' ? 'Total de ' + tot + ' pour une ligne à ' + line + '.' : 'Total de ' + tot + ' : ' + (tot > line ? 'au-dessus' : 'sous') + ' la ligne ' + line + '.'; }
+    if (m === '1X2' || m === 'ml') return 'Score final ' + s.a + '-' + s.b + '.';
+    return 'Score final ' + s.a + '-' + s.b + '.';
+  }
+
+  function analyze(r) {
+    if (!r || !r.result || r.result.outcome === 'void') return null;
+    var won = r.result.outcome === 'won', p = num(r.pModel), o = num(r.odds), ev = (p != null && o != null && o > 1) ? p * o - 1 : null;
+    var dq = r.dataQuality && num(r.dataQuality.score), cat, why;
+    if (won) { cat = p != null && p >= 0.5 ? 'bonne estimation' : 'variance favorable'; why = cat === 'bonne estimation' ? 'Événement jugé probable (' + (p * 100).toFixed(0) + ' %) et réalisé.' : 'Événement jugé peu probable (' + (p * 100).toFixed(0) + ' %) mais réalisé.'; }
+    else if (dq != null && dq < CFG.lowDQ) { cat = 'information inconnue'; why = 'Qualité de données basse (' + dq + '/100) au moment de l\'analyse.'; }
+    else if (ev != null && ev < CFG.lowEV) { cat = 'cote insuffisante'; why = 'Avantage très faible à l\'analyse (EV ' + (ev * 100).toFixed(1) + ' %) : la marge d\'erreur absorbait tout l\'edge.'; }
+    else if (p != null && p >= 0.55) { cat = 'variance'; why = 'Probabilité de ' + (p * 100).toFixed(0) + ' % : un échec reste attendu environ ' + Math.round((1 - p) * 100) + ' fois sur 100.'; }
+    else { cat = 'mauvaise estimation'; why = 'Probabilité modérée (' + (p == null ? '?' : (p * 100).toFixed(0)) + ' %) : l\'estimation était peu discriminante.'; }
+    return { id: r.id, outcome: r.result.outcome, category: cat, why: why, scoreNote: scoreNote(r), auto: true,
+      note: 'Hypothèse automatique, à confirmer ; une seule observation ne justifie aucune modification du modèle.' };
+  }
+
+  // Mémoire des erreurs : par sport / compétition / marché, sans jamais ajuster le modèle.
+  function errorMemory(records, cfg) {
+    var c = Object.assign({}, CFG, cfg || {}), groups = {};
+    (records || []).forEach(function (r) {
+      var a = analyze(r); if (!a) return;
+      var k = [r.sport || '?', r.competition || '?', String(r.market || '?')].join(' / '), g2 = groups[k] = groups[k] || { n: 0, won: 0, lost: 0, sumP: 0, cats: {} };
+      g2.n++; if (a.outcome === 'won') g2.won++; else { g2.lost++; g2.cats[a.category] = (g2.cats[a.category] || 0) + 1; }
+      g2.sumP += num(r.pModel) == null ? 0 : r.pModel;
+    });
+    Object.keys(groups).forEach(function (k) {
+      var x = groups[k]; x.hitRate = x.won / x.n; x.meanP = x.sumP / x.n; x.gap = x.hitRate - x.meanP;
+      var top = Object.keys(x.cats).sort(function (a, b) { return x.cats[b] - x.cats[a]; })[0]; x.frequentError = top || null;
+      if (x.n < c.minN) { x.caution = 'ÉCHANTILLON INSUFFISANT'; x.level = 'NONE'; }
+      else if (x.gap <= c.gapCaution) { x.level = x.n >= c.strongN ? 'STRONG' : 'LIGHT'; x.caution = x.level === 'STRONG' ? 'PRUDENCE FORTE : probabilités annoncées surestimées' : 'PRUDENCE LÉGÈRE : probabilités annoncées surestimées'; }
+      else { x.level = 'NONE'; x.caution = 'aucun écart notable'; }
+    });
+    return { groups: groups, config: c };
+  }
+  EA.postmortem = { analyze: analyze, errorMemory: errorMemory, CFG: CFG };
+  if (typeof module === 'object' && module.exports) module.exports = EA.postmortem;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-calibration.js ===== */
+/* EA-VALUE 3.0 — CALIBRATION PAR TRANCHES + LEAGUE PROFILE.
+   Affichage et mesure uniquement : aucune probabilité n'est recalibrée sur un petit échantillon.
+   Les paliers d'échantillon sont configurables (cfg.sampleLevels, en nombre d'observations). */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') require('./ea-core.js');
+  var EA = g.EA, C = EA.core;
+  var EDGES = [0, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 1.0001];
+  var NAMES = ['0–50 %', '50–55 %', '55–60 %', '60–65 %', '65–70 %', '70–75 %', '75–80 %', '80–85 %', '85–90 %', '90 % +'];
+  var LEVELS = [{ min: 500, label: 'Solide' }, { min: 300, label: 'Bon' }, { min: 100, label: 'Modéré' }, { min: 50, label: 'Faible' }, { min: 0, label: 'Très faible' }];
+  function sampleLevel(n, levels) {
+    var L = (levels || LEVELS).slice().sort(function (a, b) { return b.min - a.min; });
+    for (var i = 0; i < L.length; i++) if (n >= L[i].min) return L[i].label;
+    return 'Très faible';
+  }
+  function wilson(k, n) { if (!n) return null; var z = 1.96, p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)); return [Math.max(0, (c - m) / d), Math.min(1, (c + m) / d)]; }
+  function settled(rs) { return (rs || []).filter(function (r) { return r && r.result && r.result.outcome !== 'void' && C.num(r.pModel) != null && r.pModel >= 0 && r.pModel <= 1; }); }
+
+  function buckets(records, levels) {
+    var s = settled(records), out = NAMES.map(function (nm, i) { return { name: nm, lo: EDGES[i], n: 0, wins: 0, sumP: 0 }; });
+    s.forEach(function (r) { for (var i = 0; i < NAMES.length; i++) if (r.pModel >= EDGES[i] && r.pModel < EDGES[i + 1]) { var b = out[i]; b.n++; b.sumP += r.pModel; if (r.result.outcome === 'won') b.wins++; break; } });
+    out.forEach(function (b) {
+      b.level = sampleLevel(b.n, levels);
+      if (!b.n) { b.text = b.name + ' — aucune observation'; return; }
+      b.meanP = b.sumP / b.n; b.freq = b.wins / b.n; b.error = b.freq - b.meanP; b.ci = wilson(b.wins, b.n);
+      b.text = b.name + ' — calibration ' + b.level.toLowerCase() + ' : ' + (b.n < 50 ? 'seulement ' : '') + b.n + ' observation' + (b.n > 1 ? 's' : '');
+      b.reliable = b.n >= 100;                       // en dessous : affichage seul, jamais de conclusion
+    });
+    var n = s.length, brier = n ? s.reduce(function (a, r) { var y = r.result.outcome === 'won' ? 1 : 0; return a + Math.pow(r.pModel - y, 2); }, 0) / n : null;
+    var ll = n ? s.reduce(function (a, r) { var p = Math.min(1 - 1e-4, Math.max(1e-4, r.pModel)), y = r.result.outcome === 'won'; return a - Math.log(y ? p : 1 - p); }, 0) / n : null;
+    var ece = n ? out.reduce(function (a, b) { return b.n ? a + b.n / n * Math.abs(b.error) : a; }, 0) : null;
+    return { buckets: out, n: n, level: sampleLevel(n, levels), brier: brier, logLoss: ll, ece: ece, insufficient: n < 50 };
+  }
+
+  // Profil par compétition : mesures de scores seulement si les scores ont été saisis ; rien n'est inventé.
+  function leagueProfiles(records, cfg, levels) {
+    var by = {}, minN = (cfg && cfg.minSample && cfg.minSample.competitionStats) || 30;
+    (records || []).forEach(function (r) { var k = (r.sport || '?') + ' / ' + (r.competition || '—'); (by[k] = by[k] || []).push(r); });
+    var out = {};
+    Object.keys(by).forEach(function (k) {
+      var rs = by[k], s = settled(rs), st = EA.memory && EA.memory.stats ? EA.memory.stats(rs, cfg) : {}, sc = s.filter(function (r) { return r.result.score; }).map(function (r) { return r.result.score; });
+      var P = { key: k, predictions: rs.length, settled: s.length, scores: sc.length, level: sampleLevel(s.length, levels), enough: s.length >= minN, roi: st.roi == null ? null : st.roi, clvAvg: st.clvAvg == null ? null : st.clvAvg, brier: st.brier == null ? null : st.brier, markets: {} };
+      var mk = {}; s.forEach(function (r) { var m = String(r.market || '?'); (mk[m] = mk[m] || []).push(r); });
+      Object.keys(mk).forEach(function (m) { var a = mk[m], w = a.filter(function (r) { return r.result.outcome === 'won'; }).length; P.markets[m] = { n: a.length, hit: w / a.length, meanP: a.reduce(function (x, r) { return x + r.pModel; }, 0) / a.length, level: sampleLevel(a.length, levels) }; });
+      if (sc.length >= minN) {
+        var tot = sc.map(function (x) { return x.a + x.b; });
+        P.avgTotal = C.mean(tot); P.variance = C.mean(tot.map(function (t) { return Math.pow(t - P.avgTotal, 2); })); P.homeWinPct = sc.filter(function (x) { return x.a > x.b; }).length / sc.length; P.avgHomeMargin = C.mean(sc.map(function (x) { return x.a - x.b; }));
+        if (/^football/.test(k)) { P.bttsPct = sc.filter(function (x) { return x.a > 0 && x.b > 0; }).length / sc.length; P.over25Pct = tot.filter(function (t) { return t > 2.5; }).length / sc.length; }
+      }
+      P.note = P.enough ? 'profil exploitable' : 'ÉCHANTILLON INSUFFISANT : aucune pondération par compétition';
+      out[k] = P;
+    });
+    return out;
+  }
+  EA.calibration = { buckets: buckets, leagueProfiles: leagueProfiles, sampleLevel: sampleLevel, wilson: wilson, EDGES: EDGES, NAMES: NAMES, LEVELS: LEVELS };
+  if (typeof module === 'object' && module.exports) module.exports = EA.calibration;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-snapshot.js ===== */
+/* EA-VALUE 3.0 — PRE-MATCH SNAPSHOT (immuable, versionné) + COMBINÉS (enregistrement) + SIMPLES vs COMBINÉS.
+   Le snapshot est inclus dans le hash de la prédiction : toute modification a posteriori est détectable. */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') { require('./ea-core.js'); require('./ea-calibration.js'); }
+  var EA = g.EA, C = EA.core;
+  function build(res, idx, input, combo, now) {
+    var t = C.isNum(now) ? now : Date.now(), pick = res && res.markets && res.markets[idx], inp = null;
+    try { inp = input ? JSON.parse(JSON.stringify(input)) : null; } catch (e) { inp = null; }
+    var com = ''; try { com = JSON.stringify(res.commentary || ''); if (com.length > 2000) com = com.slice(0, 2000) + '…'; } catch (e) { com = ''; }
+    return { savedAt: new Date(t).toISOString(), engineVersion: C.VERSION, input: inp,
+      markets: ((res && res.markets) || []).map(function (m) { return { market: m.market, selection: m.selection, p: m.p, odds: m.odds == null ? null : m.odds, edgePts: m.odds > 1 ? Math.round((m.p - 1 / m.odds) * 1000) / 10 : null, ev: m.value && m.value.ev != null ? m.value.ev : null, decision: m.decision && m.decision.decision || null, uncertaintyHalfPts: m.uncertaintyHalfPts == null ? null : m.uncertaintyHalfPts }; }),
+      selection: pick ? { market: pick.market, selection: pick.selection } : null, dataQuality: res && res.dataQuality ? res.dataQuality.score : null, commentary: com,
+      combo: combo && combo.status === 'BET' ? { legs: combo.legs.map(function (l) { return l.label + ' · ' + l.market + ' ' + l.selection + ' @ ' + l.odds; }), odds: combo.odds, pJoint: combo.pJoint, ev: combo.ev } : null };
+  }
+  // Un combiné est enregistré comme un pari (type 'combo') : réglable, hashé, mais exclu des statistiques des paris simples.
+  function toRecord(r, now) {
+    var t = C.isNum(now) ? now : Date.now(), d = new Date(t).toISOString().slice(0, 10);
+    return { type: 'combo', sport: 'multi', competition: '—', home: 'Combiné', away: r.legs.length + ' sélections', matchDate: d, matchKey: 'combo|' + t, market: 'combo', selection: r.legs.map(function (l) { return l.label + ' ' + l.market + ' ' + l.selection; }).join(' + '),
+      odds: Math.round(r.odds * 100) / 100, pModel: r.pJoint, ev: r.ev, decision: 'BET', legCount: r.legs.length,
+      legs: r.legs.map(function (l) { return { label: l.label, market: l.market, selection: l.selection, odds: l.odds, p: l.p }; }), dataQuality: { score: r.dataQuality },
+      snapshot: { savedAt: new Date(t).toISOString(), engineVersion: C.VERSION, combo: { odds: r.odds, pJoint: r.pJoint, pJointLow: r.pJointLow, ev: r.ev, evLow: r.evLow, minOdds: r.minOdds, correlationNotes: r.correlationNotes } } };
+  }
+  function seg(rs) {
+    var s = rs.filter(function (r) { return r.result && r.result.outcome !== 'void'; }), n = s.length, w = s.filter(function (r) { return r.result.outcome === 'won'; }).length;
+    var u = s.filter(function (r) { return r.result.profitUnits != null; }), roi = u.length ? u.reduce(function (a, r) { return a + r.result.profitUnits; }, 0) / u.length : null;
+    return { n: n, won: w, lost: n - w, hitRate: n ? w / n : null, roi: roi, avgOdds: n ? s.reduce(function (a, r) { return a + (r.odds || 0); }, 0) / n : null, meanEV: n ? s.reduce(function (a, r) { return a + (r.ev || 0); }, 0) / n : null,
+      meanP: n ? s.reduce(function (a, r) { return a + (r.pModel || 0); }, 0) / n : null, avgLegs: n && s[0].legCount ? s.reduce(function (a, r) { return a + (r.legCount || 1); }, 0) / n : null, level: EA.calibration.sampleLevel(n) };
+  }
+  function simplesVsCombos(records, opts) {
+    var o = Object.assign({ minN: 30, roiGap: 0.05 }, opts || {}), all = records || [];
+    var S = seg(all.filter(function (r) { return r.type !== 'combo'; })), K = seg(all.filter(function (r) { return r.type === 'combo'; }));
+    var v, code;
+    if (S.n < o.minN || K.n < o.minN) { code = 'INSUFFISANT'; v = 'Échantillon insuffisant (simples ' + S.n + ', combinés ' + K.n + ' ; minimum ' + o.minN + ' chacun) : aucune conclusion.'; }
+    else if (S.roi != null && K.roi != null && K.roi <= S.roi - o.roiGap) { code = 'COMBINES_MOINS_BONS'; v = 'Les combinés sont durablement moins performants que les simples (ROI ' + (K.roi * 100).toFixed(1) + ' % vs ' + (S.roi * 100).toFixed(1) + ' %) : privilégier le pari simple.'; }
+    else if (S.roi != null && K.roi != null && K.roi >= S.roi + o.roiGap) { code = 'COMBINES_MEILLEURS'; v = 'Les combinés font mieux que les simples sur cet échantillon (à confirmer avec davantage de données).'; }
+    else { code = 'PAS_DE_DIFFERENCE'; v = 'Pas de différence concluante entre simples et combinés.'; }
+    return { simples: S, combos: K, code: code, verdict: v };
+  }
+  EA.snapshot = { build: build, toRecord: toRecord, simplesVsCombos: simplesVsCombos };
+  if (typeof module === 'object' && module.exports) module.exports = EA.snapshot;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-market.js ===== */
+/* EA-VALUE 3.0 — MARKET PERFORMANCE + POIDS PAR MARCHÉ (adaptation progressive et bornée).
+   Un marché n'est jamais supprimé : son poids reste dans [0,70 ; 1,05] et ne bouge qu'à partir de 100 observations. */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') { require('./ea-core.js'); require('./ea-models.js'); require('./ea-memory.js'); require('./ea-calibration.js'); }
+  var EA = g.EA, C = EA.core;
+  var CFG = { minDocumented: 30, minWeightN: 100, shrink: 200, k: 1.5, wMin: 0.70, wMax: 1.05 };
+  function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+  function perf(records, cfg) {
+    var c = Object.assign({}, CFG, cfg || {}), by = {};
+    (records || []).forEach(function (r) { if (r.type === 'combo' || !r.result || r.result.outcome === 'void' || C.num(r.pModel) == null) return; var k = (r.sport || '?') + '/' + (r.market || '?'); (by[k] = by[k] || []).push(r); });
+    var out = {};
+    Object.keys(by).forEach(function (k) {
+      var a = by[k], n = a.length, won = a.filter(function (r) { return r.result.outcome === 'won'; }).length, u = a.filter(function (r) { return r.result.profitUnits != null; });
+      var clv = a.map(function (r) { return EA.memory.clv(r.odds, r.closingOdds); }).filter(Boolean), meanP = a.reduce(function (s, r) { return s + r.pModel; }, 0) / n, hit = won / n, gap = hit - meanP;
+      var X = { key: k, n: n, won: won, lost: n - won, hit: hit, meanP: meanP, gap: gap, roi: u.length ? u.reduce(function (s, r) { return s + r.result.profitUnits; }, 0) / u.length : null,
+        meanEV: a.reduce(function (s, r) { return s + (r.ev || 0); }, 0) / n, clv: clv.length ? clv.reduce(function (s, x) { return s + x.clvProbPts; }, 0) / clv.length : null,
+        brier: a.reduce(function (s, r) { return s + Math.pow(r.pModel - (r.result.outcome === 'won' ? 1 : 0), 2); }, 0) / n, level: EA.calibration.sampleLevel(n), documented: n >= c.minDocumented };
+      if (n < c.minWeightN) { X.weight = 1; X.reason = 'poids inchangé (moins de ' + c.minWeightN + ' observations)'; }
+      else { X.weight = Math.round(clamp(1 + clamp(gap * c.k * n / (n + c.shrink), -(1 - c.wMin), c.wMax - 1), c.wMin, c.wMax) * 1000) / 1000; X.reason = X.weight < 1 ? 'probabilités annoncées surestimées : prudence accrue (exigence d\'EV relevée)' : X.weight > 1 ? 'marché bien calibré : léger assouplissement' : 'neutre'; }
+      out[k] = X;
+    });
+    return out;
+  }
+  function weightMap(records, cfg) { var p = perf(records, cfg), m = {}; Object.keys(p).forEach(function (k) { m[k] = p[k].weight; }); return m; }
+  EA.market = { perf: perf, weightMap: weightMap, CFG: CFG };
+  if (typeof module === 'object' && module.exports) module.exports = EA.market;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-risk.js ===== */
+/* EA-VALUE 3.0 — RISK ENGINE (exposition, drawdown, séries de pertes, anti-martingale) + BACKTEST DES RÈGLES V3.
+   Le moteur ne fait que PLAFONNER ou RÉDUIRE une mise : jamais d'augmentation après une perte, jamais de martingale. */
+(function (g) {
+  'use strict';
+  if (typeof require === 'function' && typeof window === 'undefined') require('./ea-core.js');
+  var EA = g.EA, C = EA.core;
+  var CFG = { maxStakePct: 0.02, maxExposurePct: 0.08, ddReducePct: 0.20, ddReduceFactor: 0.5, streakReduce: 5 };
+  function settledStaked(rs) { return (rs || []).filter(function (r) { return r.result && r.result.stake && r.result.profit != null; }).sort(function (a, b) { return a.result.settledAt - b.result.settledAt; }); }
+  function assess(o) {
+    var c = Object.assign({}, CFG, o.cfg || {}), bank = C.num(o.bankroll), flags = [], proposed = C.num(o.proposed);
+    if (bank == null || !(bank > 0) || proposed == null) return { stake: null, flags: ['DATA UNAVAILABLE : bankroll ou mise inconnue'], level: 'INCONNU' };
+    var open = (o.records || []).filter(function (r) { return !r.result && C.num(r.plannedStake) != null; }), exposure = open.reduce(function (s, r) { return s + r.plannedStake; }, 0);
+    var st = settledStaked(o.records), cum = 0, peak = 0, dd = 0, streak = 0;
+    st.forEach(function (r) { cum += r.result.profit; peak = Math.max(peak, cum); dd = Math.max(dd, peak - cum); });
+    for (var i = st.length - 1; i >= 0 && st[i].result.outcome === 'lost'; i--) streak++;
+    var stake = Math.min(proposed, bank * c.maxStakePct);
+    if (stake < proposed) flags.push('Mise plafonnée à ' + (c.maxStakePct * 100).toFixed(0) + ' % de la bankroll');
+    var room = Math.max(0, bank * c.maxExposurePct - exposure);
+    if (stake > room) { stake = room; flags.push('Exposition totale plafonnée à ' + (c.maxExposurePct * 100).toFixed(0) + ' % (' + exposure.toFixed(2) + ' déjà engagés)'); }
+    if (dd / bank >= c.ddReducePct) { stake *= c.ddReduceFactor; flags.push('Drawdown ≥ ' + (c.ddReducePct * 100).toFixed(0) + ' % : mise réduite de moitié'); }
+    if (streak >= c.streakReduce) { stake *= c.ddReduceFactor; flags.push('Série de ' + streak + ' pertes : mise réduite (aucun rattrapage)'); }
+    var last = st.length ? st[st.length - 1] : null;
+    if (last && last.result.outcome === 'lost' && stake > last.result.stake) { stake = last.result.stake; flags.push('Pas d\'augmentation de mise après une perte (anti-martingale)'); }
+    stake = Math.max(0, Math.floor(stake * 100) / 100);
+    return { stake: stake, proposed: proposed, exposure: exposure, drawdown: dd, drawdownPct: dd / bank, lossStreak: streak, flags: flags, level: stake <= 0 ? 'BLOQUÉ' : flags.length ? 'RÉDUIT' : 'NORMAL' };
+  }
+
+  // Backtest des règles V3 : séparation temporelle 60/20/20, aucune règle ajustée sur la période de test.
+  function seg(rs) {
+    var n = rs.length, u = rs.filter(function (r) { return r.result.profitUnits != null; }), won = rs.filter(function (r) { return r.result.outcome === 'won'; }).length, cum = 0, peak = 0, dd = 0, gp = 0, gl = 0;
+    u.forEach(function (r) { var x = r.result.profitUnits; cum += x; peak = Math.max(peak, cum); dd = Math.max(dd, peak - cum); if (x > 0) gp += x; else gl -= x; });
+    var clv = rs.map(function (r) { return EA.memory.clv(r.odds, r.closingOdds); }).filter(Boolean);
+    return { n: n, hit: n ? won / n : null, roi: u.length ? cum / u.length : null, profit: cum, meanEV: n ? rs.reduce(function (s, r) { return s + (r.ev || 0); }, 0) / n : null, maxDD: dd, profitFactor: gl > 0 ? gp / gl : null, clv: clv.length ? clv.reduce(function (s, x) { return s + x.clvProbPts; }, 0) / clv.length : null, small: n < 30 };
+  }
+  function rulesBacktest(records, rules) {
+    var R = Object.assign({ minEV: 0.05, minDQ: 60 }, rules || {}), all = (records || []).filter(function (r) { return r.result && r.result.outcome !== 'void' && C.num(r.odds) > 1; }).sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+    var n = all.length, a = Math.floor(n * 0.6), b = Math.floor(n * 0.8), parts = { training: all.slice(0, a), validation: all.slice(a, b), test: all.slice(b) };
+    var sel = function (r) { return r.decision === 'BET' && (r.ev || 0) >= R.minEV && r.dataQuality && C.num(r.dataQuality.score) != null && r.dataQuality.score >= R.minDQ; };
+    var out = { rules: R, total: n, parts: {}, note: 'Règles fixées a priori (non optimisées sur ces données) ; la période de test n\'influence aucune règle.' };
+    Object.keys(parts).forEach(function (k) { out.parts[k] = { all: seg(parts[k]), v3: seg(parts[k].filter(sel)), singles: seg(parts[k].filter(function (r) { return r.type !== 'combo'; })), combos: seg(parts[k].filter(function (r) { return r.type === 'combo'; })) }; });
+    out.insufficient = n < 60;
+    return out;
+  }
+  EA.risk = { assess: assess, rulesBacktest: rulesBacktest, CFG: CFG };
+  if (typeof module === 'object' && module.exports) module.exports = EA.risk;
 })(typeof window !== 'undefined' ? window : global);
 
 /* ===== js/ea-engine.js ===== */
@@ -2608,7 +2950,7 @@ try {
   function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function cfg() { var o = S.settings.configOverride; return o ? C.merge(C.DEFAULT_CONFIG, o) : C.DEFAULT_CONFIG; }
   function save() { EA.storage.saveSettings(LS, S.settings); }
-  function records() { return S.memory.all(); }
+  function records() { return S.memory.all().filter(function (r) { return r.type !== 'combo'; }); }
   function chip(txt, cls) { return '<span class="pro-chip ' + (cls || '') + '">' + esc(txt) + '</span>'; }
   function qcls(v) { return !C.isNum(v) ? 'grey' : v >= 75 ? 'green' : v >= 55 ? 'yellow' : 'red'; }
   function decCls(d) { return d === 'NO BET' ? 'NOBET' : d; }
@@ -2789,7 +3131,7 @@ try {
       return '<div class="pro-card"><div class="pro-row" style="justify-content:space-between"><b>' + esc(r.home) + ' – ' + esc(r.away) + '</b>' + chip(r.decision, r.decision === 'BET' ? 'green' : r.decision === 'CHECK' ? 'yellow' : 'red') + '</div><p class="pro-dim">' + esc(r.competition || '—') + ' · ' + esc(r.matchDate) + ' · ' + esc(r.modelVersion) + '</p>' +
         '<div class="pro-kv"><span>' + esc(mLabel(r, rr)) + '</span><span>P ' + pc(r.pModel) + '</span><span>Cote d\'analyse</span><span>' + od(r.odds) + '</span><span>Cote juste</span><span>' + od(r.fairOdds) + '</span><span>Cote de clôture</span><span>' + (r.closingOdds ? od(r.closingOdds) : 'CLV UNAVAILABLE') + '</span>' + (cl ? '<span>CLV</span><span>' + (cl.clvProbPts > 0 ? '+' : '') + cl.clvProbPts.toFixed(2) + ' pts</span>' : '') + '</div>' +
         (res ? '<p><b>' + (res.outcome === 'won' ? 'Gagné' : res.outcome === 'lost' ? 'Perdu' : 'Annulé') + '</b> · profit ' + (res.profit != null ? res.profit.toFixed(2) + (res.stake ? '' : ' u') : '—') + ' · erreur ' + (res.error != null ? res.error.toFixed(2) : '—') + '</p>' :
-          '<div class="pro-fields"><div class="pro-field"><label for="cl_' + r.id + '">Cote de clôture</label><input class="pro-in" id="cl_' + r.id + '" inputmode="decimal"></div><div class="pro-field"><label for="sk_' + r.id + '">Mise (optionnel)</label><input class="pro-in" id="sk_' + r.id + '" inputmode="decimal"></div></div><div class="pro-row"><button class="pro-btn small" data-settle="won" data-id="' + r.id + '" type="button">Gagné</button><button class="pro-btn small" data-settle="lost" data-id="' + r.id + '" type="button">Perdu</button><button class="pro-btn small" data-settle="void" data-id="' + r.id + '" type="button">Annulé</button></div>') +
+          '<div class="pro-fields"><div class="pro-field"><label for="cl_' + r.id + '">Cote de clôture</label><input class="pro-in" id="cl_' + r.id + '" inputmode="decimal"></div><div class="pro-field"><label for="sk_' + r.id + '">Mise (optionnel)</label><input class="pro-in" id="sk_' + r.id + '" inputmode="decimal"></div><div class="pro-field"><label for="sa_' + r.id + '">Score dom. (optionnel)</label><input class="pro-in" id="sa_' + r.id + '" inputmode="numeric"></div><div class="pro-field"><label for="sb_' + r.id + '">Score ext. (optionnel)</label><input class="pro-in" id="sb_' + r.id + '" inputmode="numeric"></div></div><div class="pro-row"><button class="pro-btn small" data-settle="won" data-id="' + r.id + '" type="button">Gagné</button><button class="pro-btn small" data-settle="lost" data-id="' + r.id + '" type="button">Perdu</button><button class="pro-btn small" data-settle="void" data-id="' + r.id + '" type="button">Annulé</button></div>') +
         '<button class="pro-btn small" data-del="' + r.id + '" type="button">Supprimer</button></div>';
     }).join('');
     el.innerHTML = html;
@@ -2838,7 +3180,7 @@ try {
       var key = [res.sport, res.competition || '', res.home, res.away, res.matchDate].join('|'), prev = S.memory.previous(key, res.pick.market, res.pick.selection), cur = EA.engine.toMemoryRecord(res);
       if (prev) { var cause = EA.value.diffContext(Object.assign({}, prev.contextSnapshot, { odds: prev.odds }), Object.assign({}, cur.contextSnapshot, { odds: cur.odds })); S.shock = EA.value.informationShock(prev.pModel, res.pick.p, cause.length ? cause.join(' ; ') : 'nouvelles données saisies', cfg()); }
     }
-    S.last = res; S.msg = ''; renderSummary(); renderValue(); renderDecision(); if (S.tab === 'analyse') { var m = $('proRunMsg'); if (m) m.textContent = 'Analyse terminée : ' + res.decision.decision + '.'; }
+    S.last = res; poolAdd(res); S.msg = ''; renderSummary(); renderValue(); renderDecision(); if (S.tab === 'analyse') { var m = $('proRunMsg'); if (m) m.textContent = 'Analyse terminée : ' + res.decision.decision + '.'; }
     if (S.tab === 'analyse' || S.tab === 'marches') tab('decision');
   }
   function tab(t) {
@@ -2854,7 +3196,8 @@ try {
   function setMode(m) { S.mode = m; S.settings.mode = m; save(); Array.prototype.forEach.call($('proMode').children, function (b) { b.classList.toggle('on', b.dataset.v === m); }); if (S.last && S.lastInput) run(); }
   function applyFast() { g.EA_FAST = !!S.settings.fast; doc.body.classList.toggle('ea-fast', !!S.settings.fast); $('proFast').classList.toggle('on', !!S.settings.fast); }
   function saveRecord(idx) {
-    var r = S.last; if (!r || !r.markets[idx]) return; var rec = EA.engine.toMemoryRecord(r, r.markets[idx]);
+    var r = S.last; if (!r || !r.markets[idx]) return; var rec = EA.engine.toMemoryRecord(r, r.markets[idx]); var pk = r.markets[idx]; if (pk && pk.odds && S.settings.bankroll) { var sg = EA.bankroll.suggestStake({ bankroll: S.settings.bankroll, p: pk.p, odds: pk.odds, minStake: S.settings.minStake }, cfg()); if (sg && sg.available) rec.plannedStake = sg.stake; }
+    if (EA.snapshot) rec.snapshot = EA.snapshot.build(r, idx, S.lastInput, EA.parlay ? EA.parlay.optimize(S.pool, S.settings && S.settings.config) : null);
     try { S.memory.add(rec); S.msg = 'Analyse enregistrée (prédiction figée, non modifiable).'; } catch (e) { S.msg = 'Enregistrement impossible : stockage plein ou indisponible.'; }
     var m = $('proSaveMsg'); if (m) m.textContent = S.msg;
   }
@@ -2879,7 +3222,7 @@ try {
     $('eaProRoot').addEventListener('click', function (e) {
       var t = e.target.closest('button'); if (!t) return;
       if (t.dataset.save != null) { saveRecord(parseInt(t.dataset.save, 10)); return; }
-      if (t.dataset.settle) { var id = t.dataset.id; S.memory.settle(id, t.dataset.settle, { closingOdds: nv('cl_' + id), stake: nv('sk_' + id) }); renderHistorique(); return; }
+      if (t.dataset.settle) { var id = t.dataset.id; S.memory.settle(id, t.dataset.settle, { closingOdds: nv('cl_' + id), stake: nv('sk_' + id), score: { a: nv('sa_' + id), b: nv('sb_' + id) } }); renderHistorique(); return; }
       if (t.dataset.del) { if (g.confirm('Supprimer cette analyse de la mémoire ?')) { S.memory.remove(t.dataset.del); renderHistorique(); } return; }
       if (t.id === 'bkSave') { S.settings.bankroll = nv('bkBank'); S.settings.minStake = nv('bkMin'); save(); renderBankroll(); return; }
       if (t.id === 'smRun') {
@@ -2903,7 +3246,142 @@ try {
     if (!mig.ok) { var m = $('proRunMsg'); if (m) m.textContent = 'Migration du stockage non appliquée (' + mig.error + ')' + (mig.restored ? ' — sauvegarde restaurée.' : '.'); }
     var vl = doc.getElementById('eaVersionLine'); if (vl) vl.textContent = 'EA Value Pro ' + C.VERSION;
   }
-  EA.ui = { init: init, _state: S, _collect: collect, _run: run };
+
+  // ---------- COMBINÉ RENTABLE (bloc unique) ----------
+  S.pool = [];
+  function poolAdd(res) {
+    if (!res || !res.markets || !EA.parlay) return;
+    var key = [res.home, res.away, res.matchDate].join('|'), label = (res.home || '?') + ' – ' + (res.away || '?');
+    S.pool = S.pool.filter(function (l) { return l.matchKey !== key; }); var wm = EA.market ? EA.market.weightMap(records()) : {};
+    res.markets.forEach(function (m) { S.pool.push({ matchKey: key, label: label, market: m.market, selection: m.selection, p: m.p, odds: m.odds, value: m.value, uncertaintyHalfPts: m.uncertaintyHalfPts, decision: m.decision && m.decision.decision, dataQuality: res.dataQuality && res.dataQuality.score, weightsLabel: m.weightsLabel, weight: wm[(S.sport || '?') + '/' + m.market] }); });
+  }
+  function parlayHtml() {
+    if (!EA.parlay) return '';
+    var r = EA.parlay.optimize(S.pool, S.settings && S.settings.config), h = '<div class="pro-card pro-parlay"><h3>🔥 COMBINÉ RENTABLE</h3>';
+    h += '<p class="pro-dim">Pool : ' + new Set(S.pool.map(function (l) { return l.matchKey; })).size + ' match(s) analysé(s) avec cotes · ' + r.tested + ' combinaison(s) testée(s) en arrière-plan.</p>';
+    if (r.status !== 'BET') {
+      h += '<div class="pro-dec NOBET">🛑 PAS DE COMBINÉ RENTABLE</div><p>' + esc(r.message) + '</p>';
+    } else {
+      h += r.legs.map(function (l, i) { return '<div class="pro-kv"><span>Sélection ' + (i + 1) + ' · ' + esc(l.label) + '</span><span>' + esc(l.market + ' ' + l.selection) + ' @ ' + l.odds.toFixed(2) + '</span></div>'; }).join('') +
+        '<hr><div class="pro-kv"><span>Cote totale</span><span>' + r.odds.toFixed(2) + '</span></div>' +
+        '<div class="pro-kv"><span>Probabilité jointe (corrélation incluse)</span><span>' + (r.pJoint * 100).toFixed(1) + ' %</span></div>' +
+        '<div class="pro-kv"><span>Probabilité marché (1/cote)</span><span>' + (r.pMarket * 100).toFixed(1) + ' %</span></div>' +
+        '<div class="pro-kv"><span>Edge</span><span>' + (r.edgePts >= 0 ? '+' : '') + r.edgePts.toFixed(1) + ' pts</span></div>' +
+        '<div class="pro-kv"><span>EV (EV pessimiste)</span><span>' + (r.ev >= 0 ? '+' : '') + (r.ev * 100).toFixed(1) + ' % (' + (r.evLow * 100).toFixed(1) + ' %)</span></div>' +
+        '<div class="pro-kv"><span>Qualité données (min.)</span><span>' + r.dataQuality + '/100</span></div>' +
+        '<div class="pro-kv"><span>Incertitude jointe</span><span>±' + r.uncertaintyHalfPts.toFixed(1) + ' pts</span></div>' +
+        '<div class="pro-kv"><span>Calibration</span><span>' + esc(r.calibration) + '</span></div>' +
+        '<div class="pro-kv"><span>Risque de modèle</span><span>' + esc(r.risk) + '</span></div>' +
+        '<div class="pro-kv"><span>Seuil minimum de cote</span><span>' + r.minOdds.toFixed(2) + '</span></div>' +
+        (r.preferSingle ? '<p class="pro-warn">🎯 ' + esc(r.preferMessage) + ' (' + esc(r.bestSingle.leg.label + ' · ' + r.bestSingle.leg.market + ' ' + r.bestSingle.leg.selection) + ')</p>' : '') +
+        (r.sameMatchWarning ? '<p class="pro-warn">' + esc(r.sameMatchWarning) + '</p>' : '') +
+        '<div class="pro-dec BET">🔥 DÉCISION : BET</div><button class="pro-btn small" onclick="EA.ui._saveCombo()">Enregistrer ce combiné</button><p class="pro-dim">« Rentable » = favorable selon le modèle et ses hypothèses actuelles, pas un gain garanti.</p>' +
+        '<details><summary>Pourquoi ?</summary><ul class="pro-list"><li>EV ≥ seuil et EV pessimiste positive (' + (r.evLow * 100).toFixed(1) + ' %)</li><li>Chaque jambe est BET, cote ≥ cote minimale, données ≥ 60/100</li><li>' + r.legs.length + ' sélection(s) : le nombre est choisi par le moteur, sans quota</li><li>' + (r.correlationNotes.length ? esc(r.correlationNotes.join(' ; ')) : 'Jambes de matchs différents : indépendance supposée') + '</li></ul></details>';
+    }
+    if (r.rejected.length) h += '<details><summary>Pourquoi pas ? (' + r.rejected.length + ' marché(s) écarté(s))</summary><ul class="pro-list">' + r.rejected.slice(0, 12).map(function (x) { return '<li>' + esc(x.leg) + ' : ' + esc(x.why) + '</li>'; }).join('') + '</ul></details>';
+    if (r.invalidCombos) h += '<p class="pro-dim">' + r.invalidCombos + ' combinaison(s) rejetée(s) pour corrélation excessive ou dépendance inconnue.</p>';
+    h += '<button class="pro-btn" onclick="EA.ui._clearPool()">Vider le pool</button></div>';
+    return h;
+  }
+  var _renderDecision = renderDecision;
+  renderDecision = function () { _renderDecision(); var el = $('pane-decision'); if (el) el.insertAdjacentHTML('beforeend', parlayHtml()); };
+
+  // ---------- POST-MATCH ANALYSIS + ERROR MEMORY ----------
+  function postmortemHtml() {
+    if (!EA.postmortem) return '';
+    var recs = records(), em = EA.postmortem.errorMemory(recs), ks = Object.keys(em.groups), h = '';
+    var done = recs.filter(function (r) { return r.result && r.result.outcome !== 'void'; }).slice(-10).reverse();
+    if (done.length) h += '<div class="pro-card"><h3>🧠 POST-MATCH ANALYSIS</h3>' + done.map(function (r) {
+      var a = EA.postmortem.analyze(r);
+      return '<div class="pro-kv"><span>' + esc(r.home) + ' – ' + esc(r.away) + ' · ' + esc(r.market + ' ' + r.selection) + '</span><span>' + (a.outcome === 'won' ? 'Gagné' : 'Perdu') + ' · ' + esc(a.category) + '</span></div><p class="pro-dim">' + esc(a.why) + (a.scoreNote ? ' ' + esc(a.scoreNote) : '') + '</p>';
+    }).join('') + '<p class="pro-dim">Hypothèses automatiques à confirmer. La prédiction d\'origine n\'est jamais modifiée.</p></div>';
+    if (ks.length) h += '<div class="pro-card"><h3>Error Memory</h3>' + ks.map(function (k) { var x = em.groups[k]; return '<div class="pro-kv"><span>' + esc(k) + '</span><span>' + x.won + 'G / ' + x.lost + 'P (N=' + x.n + ')</span></div><p class="pro-dim">' + esc(x.caution) + (x.frequentError ? ' · erreur la plus fréquente : ' + esc(x.frequentError) : '') + '</p>'; }).join('') + '<p class="pro-dim">Aucun paramètre du modèle n\'est modifié automatiquement ; la prudence n\'est signalée qu\'à partir de ' + em.config.minN + ' observations.</p></div>';
+    return h;
+  }
+  var _renderHistorique = renderHistorique;
+  renderHistorique = function () { _renderHistorique(); var el = $('pane-historique'); if (el) el.insertAdjacentHTML('beforeend', postmortemHtml()); };
+
+  // ---------- CALIBRATION PAR TRANCHES + LEAGUE PROFILE (Model Lab) ----------
+  function calibrationHtml() {
+    if (!EA.calibration) return '';
+    var recs = records(), lv = cfg().sampleLevels, cb = EA.calibration.buckets(recs, lv), lp = EA.calibration.leagueProfiles(recs, cfg(), lv), h = '';
+    var pct = function (v) { return v == null ? '—' : (v * 100).toFixed(0) + ' %'; };
+    h += '<div class="pro-card"><h3>Calibration par tranches</h3>';
+    if (!cb.n) h += '<p class="pro-dim">Aucun résultat saisi : calibration non mesurable.</p>';
+    else {
+      h += '<p class="pro-dim">' + cb.n + ' résultat(s) · échantillon ' + esc(cb.level) + (cb.insufficient ? ' · ⚠️ Échantillon insuffisant' : '') + ' · Brier ' + cb.brier.toFixed(3) + ' · Log loss ' + cb.logLoss.toFixed(3) + ' · ECE ' + (cb.ece * 100).toFixed(1) + ' pts</p>';
+      h += cb.buckets.filter(function (b) { return b.n; }).map(function (b) { return '<div class="pro-kv"><span>' + esc(b.name) + ' · annoncé ' + pct(b.meanP) + '</span><span>réel ' + pct(b.freq) + ' (' + (b.error >= 0 ? '+' : '') + (b.error * 100).toFixed(0) + ' pts)</span></div><p class="pro-dim">' + esc(b.text) + (b.reliable ? '' : ' · aucune recalibration appliquée') + '</p>'; }).join('');
+    }
+    h += '</div>';
+    var ks = Object.keys(lp);
+    if (ks.length) h += '<div class="pro-card"><h3>League Profile</h3>' + ks.map(function (k) {
+      var p = lp[k], l = '<div class="pro-kv"><span>' + esc(k) + '</span><span>' + p.settled + ' résultat(s) · ' + esc(p.level) + '</span></div><p class="pro-dim">' + esc(p.note) + '</p>';
+      if (p.enough) {
+        l += '<p class="pro-dim">ROI ' + (p.roi == null ? '—' : (p.roi * 100).toFixed(1) + ' %') + ' · CLV ' + (p.clvAvg == null ? '—' : p.clvAvg.toFixed(2)) + ' · Brier ' + (p.brier == null ? '—' : p.brier.toFixed(3)) + '</p>';
+        if (p.avgTotal != null) l += '<p class="pro-dim">Total moyen ' + p.avgTotal.toFixed(2) + ' (variance ' + p.variance.toFixed(2) + ') · victoire domicile ' + pct(p.homeWinPct) + (p.bttsPct != null ? ' · BTTS ' + pct(p.bttsPct) + ' · Over 2.5 ' + pct(p.over25Pct) : '') + ' <i>(' + p.scores + ' scores saisis)</i></p>';
+        l += Object.keys(p.markets).map(function (m) { var x = p.markets[m]; return '<div class="pro-kv"><span>' + esc(m) + ' (N=' + x.n + ')</span><span>' + pct(x.hit) + ' vs ' + pct(x.meanP) + ' annoncé · ' + esc(x.level) + '</span></div>'; }).join('');
+      }
+      return l;
+    }).join('') + '<p class="pro-dim">Profils informatifs : aucune pondération par compétition n\'est appliquée automatiquement.</p></div>';
+    return h;
+  }
+  var _renderLab = renderLab;
+  renderLab = function () { _renderLab(); var el = $('pane-lab'); if (el) el.insertAdjacentHTML('beforeend', calibrationHtml()); };
+
+  // ---------- SNAPSHOT / COMBINÉS ENREGISTRÉS / SIMPLES vs COMBINÉS ----------
+  function comboRecords() { return S.memory.all().filter(function (r) { return r.type === 'combo'; }); }
+  function saveCombo() {
+    if (!EA.parlay || !EA.snapshot) return;
+    var r = EA.parlay.optimize(S.pool, S.settings && S.settings.config); if (r.status !== 'BET') return;
+    try { S.memory.add(EA.snapshot.toRecord(r)); S.msg = 'Combiné enregistré (figé, non modifiable).'; } catch (e) { S.msg = 'Enregistrement impossible : stockage plein ou indisponible.'; }
+    renderDecision();
+  }
+  function settleCombo(id, outcome) { S.memory.settle(id, outcome, { stake: 1 }); renderHistorique(); }
+  function snapshotHtml() {
+    if (!EA.snapshot) return '';
+    var all = S.memory.all(), cmp = EA.snapshot.simplesVsCombos(all), combos = comboRecords(), h = '', f1 = function (v) { return v == null ? '—' : (v * 100).toFixed(1) + ' %'; };
+    h += '<div class="pro-card"><h3>Simples vs Combinés</h3>';
+    ['simples', 'combos'].forEach(function (k) { var x = cmp[k]; h += '<div class="pro-kv"><span>' + (k === 'simples' ? 'Simples' : 'Combinés') + ' (N=' + x.n + ' · ' + esc(x.level) + ')</span><span>' + x.won + 'G / ' + x.lost + 'P · ROI ' + f1(x.roi) + '</span></div><p class="pro-dim">Cote moyenne ' + (x.avgOdds ? x.avgOdds.toFixed(2) : '—') + ' · EV annoncé moyen ' + f1(x.meanEV) + (x.avgLegs ? ' · ' + x.avgLegs.toFixed(1) + ' sélections en moyenne' : '') + '</p>'; });
+    h += '<p>' + (cmp.code === 'COMBINES_MOINS_BONS' ? '⚠️ ' : '') + esc(cmp.verdict) + '</p></div>';
+    var open = combos.filter(function (r) { return !r.result; });
+    if (open.length) h += '<div class="pro-card"><h3>Combinés à régler</h3>' + open.map(function (r) { return '<div class="pro-kv"><span>' + r.legCount + ' sél. @ ' + r.odds.toFixed(2) + '</span><span><button class="pro-btn small" onclick="EA.ui._settleCombo(\'' + r.id + '\',\'won\')">Gagné</button> <button class="pro-btn small" onclick="EA.ui._settleCombo(\'' + r.id + '\',\'lost\')">Perdu</button></span></div><p class="pro-dim">' + esc(r.selection) + '</p>'; }).join('') + '</div>';
+    var snaps = all.filter(function (r) { return r.snapshot; }).slice(-5).reverse();
+    if (snaps.length) h += '<div class="pro-card"><h3>Snapshots pré-match</h3>' + snaps.map(function (r) { var okv = S.memory.verify(r); return '<div class="pro-kv"><span>' + esc(r.type === 'combo' ? 'Combiné' : (r.home + ' – ' + r.away + ' · ' + r.market + ' ' + r.selection)) + '</span><span>v' + (r.version || 1) + ' · ' + (okv ? '✅ intact' : '⚠️ altéré') + '</span></div><p class="pro-dim">' + esc((r.snapshot.savedAt || '').replace('T', ' ').slice(0, 16)) + ' · moteur ' + esc(r.snapshot.engineVersion || '?') + (r.supersedes ? ' · remplace une version antérieure (conservée)' : '') + '</p>'; }).join('') + '</div>';
+    return h;
+  }
+  var _renderHistorique2 = renderHistorique;
+  renderHistorique = function () { _renderHistorique2(); var el = $('pane-historique'); if (el) el.insertAdjacentHTML('beforeend', snapshotHtml()); };
+
+  // ---------- MARKET PERFORMANCE + BACKTEST V3 (Model Lab) / RISK ENGINE (Bankroll) ----------
+  function marketLabHtml() {
+    if (!EA.market || !EA.risk) return '';
+    var recs = records(), pf = EA.market.perf(recs), ks = Object.keys(pf), doc = ks.filter(function (k) { return pf[k].documented; }), small = ks.length - doc.length, h = '';
+    var f1 = function (v) { return v == null ? '—' : (v * 100).toFixed(1) + ' %'; };
+    h += '<div class="pro-card"><h3>Market Performance</h3>';
+    if (!doc.length) h += '<p class="pro-dim">⚠️ Échantillon insuffisant : aucun marché n\'a encore 30 résultats réglés.</p>';
+    h += doc.map(function (k) { var x = pf[k]; return '<div class="pro-kv"><span>' + esc(k) + ' (N=' + x.n + ' · ' + esc(x.level) + ')</span><span>' + x.won + 'G / ' + x.lost + 'P · ' + f1(x.hit) + '</span></div><p class="pro-dim">ROI ' + f1(x.roi) + ' · EV annoncé ' + f1(x.meanEV) + ' · CLV ' + (x.clv == null ? '—' : x.clv.toFixed(2) + ' pts') + ' · annoncé ' + f1(x.meanP) + ' vs réel ' + f1(x.hit) + ' · poids ' + x.weight.toFixed(2) + ' (' + esc(x.reason) + ')</p>'; }).join('');
+    if (small) h += '<p class="pro-dim">' + small + ' marché(s) non affiché(s) : échantillon insuffisant.</p>';
+    h += '<p class="pro-dim">Le poids n\'agit que sur l\'exigence d\'EV des combinés, entre 0,70 et 1,05, à partir de 100 observations ; aucun marché n\'est supprimé.</p></div>';
+    var bt = EA.risk.rulesBacktest(recs);
+    h += '<div class="pro-card"><h3>Backtest des règles V3</h3>';
+    if (bt.insufficient) h += '<p class="pro-dim">⚠️ Échantillon insuffisant (' + bt.total + ' paris réglés avec cote ; minimum 60) : aucune conclusion.</p>';
+    else h += ['training', 'validation', 'test'].map(function (k) { var p = bt.parts[k], a = p.all, v = p.v3; return '<div class="pro-kv"><span>' + (k === 'training' ? 'Apprentissage' : k === 'validation' ? 'Validation' : 'Test') + '</span><span>tous N=' + a.n + ' · ROI ' + f1(a.roi) + '</span></div><p class="pro-dim">Règles V3 : N=' + v.n + (v.small ? ' (petit échantillon)' : '') + ' · ROI ' + f1(v.roi) + ' · hit ' + f1(v.hit) + ' · drawdown max ' + v.maxDD.toFixed(2) + ' u · profit factor ' + (v.profitFactor == null ? '—' : v.profitFactor.toFixed(2)) + ' · CLV ' + (v.clv == null ? '—' : v.clv.toFixed(2)) + '</p>'; }).join('');
+    return h + '<p class="pro-dim">' + esc(bt.note) + '</p></div>';
+  }
+  var _renderLab2 = renderLab;
+  renderLab = function () { _renderLab2(); var el = $('pane-lab'); if (el) el.insertAdjacentHTML('beforeend', marketLabHtml()); };
+  function riskHtml() {
+    if (!EA.risk) return '';
+    var pick = S.last && S.last.pick, st = pick && pick.odds ? EA.bankroll.suggestStake({ bankroll: S.settings.bankroll, p: pick.p, odds: pick.odds, minStake: S.settings.minStake }, cfg()) : null;
+    var a = EA.risk.assess({ bankroll: S.settings.bankroll, proposed: st && st.available ? st.stake : null, records: records() });
+    var h = '<div class="pro-card"><h3>Risk Engine</h3><div class="pro-kv"><span>Niveau</span><span>' + esc(a.level) + '</span></div>';
+    if (a.stake == null) return h + '<p class="pro-dim">' + esc(a.flags.join(' · ')) + ' Analysez un match avec cote et renseignez la bankroll.</p></div>';
+    h += '<div class="pro-kv"><span>Mise après contrôle du risque</span><span>' + a.stake.toFixed(2) + '</span></div><p class="pro-dim">Exposition ouverte ' + a.exposure.toFixed(2) + ' · drawdown ' + a.drawdown.toFixed(2) + ' (' + (a.drawdownPct * 100).toFixed(1) + ' %) · série de pertes ' + a.lossStreak + '</p>';
+    return h + (a.flags.length ? '<ul class="pro-list">' + a.flags.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') + '<p class="pro-dim">Le Risk Engine ne peut que plafonner ou réduire une mise : jamais de martingale ni d\'augmentation après une perte.</p></div>';
+  }
+  var _renderBankroll = renderBankroll;
+  renderBankroll = function () { _renderBankroll(); var el = $('pane-bankroll'); if (el) el.insertAdjacentHTML('beforeend', riskHtml()); };
+  EA.ui = { init: init, _saveCombo: saveCombo, _settleCombo: settleCombo, _clearPool: function () { S.pool = []; renderDecision(); }, _poolAdd: poolAdd, _pool: function () { return S.pool; }, _state: S, _collect: collect, _run: run };
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init); else init();
 })(typeof window !== 'undefined' ? window : global);
 
@@ -8073,7 +8551,7 @@ function renderBets(sport){
     const emptyMsg = comboSelectedDay==='today'
       ? `<div class="glass empty-state"><div class="glyph">Ø</div><p>Pas assez d'analyses aujourd'hui pour former un combiné (il faut au moins 2 matchs analysés, publiés ou non, par niveau de risque). Analysez d'autres matchs et revenez ici.</p></div>`
       : `<div class="glass empty-state"><div class="glyph">Ø</div><p>Aucun combiné reconstitué pour ce jour (pas assez de paris vérifiés ce jour-là pour ce sport).</p></div>`;
-    panel.innerHTML = scrollerHtml + (combos.length ? combos.map(renderPrivateComboCard).join('') : emptyMsg);
+    panel.innerHTML = `<div class="glass empty-state"><div class="glyph">🔥</div><p><b>Combiné rentable</b> : les anciens combinés par niveau de risque sont retirés. Un seul combiné, choisi par le moteur selon l'EV, la corrélation, l'incertitude et la qualité des données, est affiché dans <b>Pro 3.0 › DÉCISION</b> — ou « PAS DE COMBINÉ RENTABLE » s'il n'y en a aucun.</p></div>`;
     return;
   }
 
