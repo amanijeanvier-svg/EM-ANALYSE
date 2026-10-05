@@ -6,7 +6,7 @@
   var EA = g.EA, C = EA.core;
   var KEY = 'ea_pro_memory', SCHEMA = 1;
 
-  function frozenPart(r) { return { sport: r.sport, competition: r.competition, matchKey: r.matchKey, matchDate: r.matchDate, market: r.market, selection: r.selection, odds: r.odds, pModel: r.pModel, fairOdds: r.fairOdds, ev: r.ev, decision: r.decision, modelVersion: r.modelVersion, modelProbs: r.modelProbs, dataQuality: r.dataQuality, stability: r.stability, createdAt: r.createdAt }; }
+  function frozenPart(r) { return { sport: r.sport, competition: r.competition, matchKey: r.matchKey, matchDate: r.matchDate, market: r.market, selection: r.selection, odds: r.odds, pModel: r.pModel, fairOdds: r.fairOdds, ev: r.ev, decision: r.decision, modelVersion: r.modelVersion, modelProbs: r.modelProbs, dataQuality: r.dataQuality, stability: r.stability, createdAt: r.createdAt, type: r.type, legs: r.legs, snapshot: r.snapshot }; }
   function hashOf(r) { return C.hashSeed(JSON.stringify(frozenPart(r))); }
 
   function clv(entry, closing) {
@@ -24,6 +24,8 @@
         var o = load(), t = C.isNum(now) ? now : Date.now();
         var r = Object.assign({}, rec, { id: rec.id || ('a' + t.toString(36) + Math.random().toString(36).slice(2, 7)), createdAt: t, result: null });
         if (!r.matchKey) r.matchKey = [r.sport, r.competition, r.home, r.away, r.matchDate].join('|');
+        var prev = null; o.analyses.forEach(function (x) { if (x.matchKey === r.matchKey && x.market === r.market && x.selection === r.selection) prev = x; });
+        r.version = prev ? (prev.version || 1) + 1 : 1; if (prev) r.supersedes = prev.id;
         r.modelVersion = r.modelVersion || C.VERSION; r.predictionHash = hashOf(r);
         o.analyses.push(r); save(o); return r;
       },
@@ -35,7 +37,7 @@
         var profit = outcome === 'void' ? 0 : (odds == null ? null : outcome === 'won' ? unit * (odds - 1) : -unit);
         if (C.num(o2.closingOdds) != null && r.closingOdds == null && o2.closingOdds > 1) r.closingOdds = C.num(o2.closingOdds);
         r.result = { outcome: outcome, settledAt: C.isNum(o2.now) ? o2.now : Date.now(), stake: stake, profit: profit, profitUnits: profit == null ? null : (stake == null ? profit : profit / stake),
-          error: outcome === 'void' ? null : (outcome === 'won' ? 1 : 0) - r.pModel };
+          score: (C.num(o2.score && o2.score.a) != null && C.num(o2.score && o2.score.b) != null) ? { a: C.num(o2.score.a), b: C.num(o2.score.b) } : null, error: outcome === 'void' ? null : (outcome === 'won' ? 1 : 0) - r.pModel };
         save(o); return r;
       },
       remove: function (id) { var o = load(); o.analyses = o.analyses.filter(function (x) { return x.id !== id; }); save(o); },

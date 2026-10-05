@@ -15,7 +15,7 @@
   function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function cfg() { var o = S.settings.configOverride; return o ? C.merge(C.DEFAULT_CONFIG, o) : C.DEFAULT_CONFIG; }
   function save() { EA.storage.saveSettings(LS, S.settings); }
-  function records() { return S.memory.all(); }
+  function records() { return S.memory.all().filter(function (r) { return r.type !== 'combo'; }); }
   function chip(txt, cls) { return '<span class="pro-chip ' + (cls || '') + '">' + esc(txt) + '</span>'; }
   function qcls(v) { return !C.isNum(v) ? 'grey' : v >= 75 ? 'green' : v >= 55 ? 'yellow' : 'red'; }
   function decCls(d) { return d === 'NO BET' ? 'NOBET' : d; }
@@ -196,7 +196,7 @@
       return '<div class="pro-card"><div class="pro-row" style="justify-content:space-between"><b>' + esc(r.home) + ' – ' + esc(r.away) + '</b>' + chip(r.decision, r.decision === 'BET' ? 'green' : r.decision === 'CHECK' ? 'yellow' : 'red') + '</div><p class="pro-dim">' + esc(r.competition || '—') + ' · ' + esc(r.matchDate) + ' · ' + esc(r.modelVersion) + '</p>' +
         '<div class="pro-kv"><span>' + esc(mLabel(r, rr)) + '</span><span>P ' + pc(r.pModel) + '</span><span>Cote d\'analyse</span><span>' + od(r.odds) + '</span><span>Cote juste</span><span>' + od(r.fairOdds) + '</span><span>Cote de clôture</span><span>' + (r.closingOdds ? od(r.closingOdds) : 'CLV UNAVAILABLE') + '</span>' + (cl ? '<span>CLV</span><span>' + (cl.clvProbPts > 0 ? '+' : '') + cl.clvProbPts.toFixed(2) + ' pts</span>' : '') + '</div>' +
         (res ? '<p><b>' + (res.outcome === 'won' ? 'Gagné' : res.outcome === 'lost' ? 'Perdu' : 'Annulé') + '</b> · profit ' + (res.profit != null ? res.profit.toFixed(2) + (res.stake ? '' : ' u') : '—') + ' · erreur ' + (res.error != null ? res.error.toFixed(2) : '—') + '</p>' :
-          '<div class="pro-fields"><div class="pro-field"><label for="cl_' + r.id + '">Cote de clôture</label><input class="pro-in" id="cl_' + r.id + '" inputmode="decimal"></div><div class="pro-field"><label for="sk_' + r.id + '">Mise (optionnel)</label><input class="pro-in" id="sk_' + r.id + '" inputmode="decimal"></div></div><div class="pro-row"><button class="pro-btn small" data-settle="won" data-id="' + r.id + '" type="button">Gagné</button><button class="pro-btn small" data-settle="lost" data-id="' + r.id + '" type="button">Perdu</button><button class="pro-btn small" data-settle="void" data-id="' + r.id + '" type="button">Annulé</button></div>') +
+          '<div class="pro-fields"><div class="pro-field"><label for="cl_' + r.id + '">Cote de clôture</label><input class="pro-in" id="cl_' + r.id + '" inputmode="decimal"></div><div class="pro-field"><label for="sk_' + r.id + '">Mise (optionnel)</label><input class="pro-in" id="sk_' + r.id + '" inputmode="decimal"></div><div class="pro-field"><label for="sa_' + r.id + '">Score dom. (optionnel)</label><input class="pro-in" id="sa_' + r.id + '" inputmode="numeric"></div><div class="pro-field"><label for="sb_' + r.id + '">Score ext. (optionnel)</label><input class="pro-in" id="sb_' + r.id + '" inputmode="numeric"></div></div><div class="pro-row"><button class="pro-btn small" data-settle="won" data-id="' + r.id + '" type="button">Gagné</button><button class="pro-btn small" data-settle="lost" data-id="' + r.id + '" type="button">Perdu</button><button class="pro-btn small" data-settle="void" data-id="' + r.id + '" type="button">Annulé</button></div>') +
         '<button class="pro-btn small" data-del="' + r.id + '" type="button">Supprimer</button></div>';
     }).join('');
     el.innerHTML = html;
@@ -245,7 +245,7 @@
       var key = [res.sport, res.competition || '', res.home, res.away, res.matchDate].join('|'), prev = S.memory.previous(key, res.pick.market, res.pick.selection), cur = EA.engine.toMemoryRecord(res);
       if (prev) { var cause = EA.value.diffContext(Object.assign({}, prev.contextSnapshot, { odds: prev.odds }), Object.assign({}, cur.contextSnapshot, { odds: cur.odds })); S.shock = EA.value.informationShock(prev.pModel, res.pick.p, cause.length ? cause.join(' ; ') : 'nouvelles données saisies', cfg()); }
     }
-    S.last = res; S.msg = ''; renderSummary(); renderValue(); renderDecision(); if (S.tab === 'analyse') { var m = $('proRunMsg'); if (m) m.textContent = 'Analyse terminée : ' + res.decision.decision + '.'; }
+    S.last = res; poolAdd(res); S.msg = ''; renderSummary(); renderValue(); renderDecision(); if (S.tab === 'analyse') { var m = $('proRunMsg'); if (m) m.textContent = 'Analyse terminée : ' + res.decision.decision + '.'; }
     if (S.tab === 'analyse' || S.tab === 'marches') tab('decision');
   }
   function tab(t) {
@@ -261,7 +261,8 @@
   function setMode(m) { S.mode = m; S.settings.mode = m; save(); Array.prototype.forEach.call($('proMode').children, function (b) { b.classList.toggle('on', b.dataset.v === m); }); if (S.last && S.lastInput) run(); }
   function applyFast() { g.EA_FAST = !!S.settings.fast; doc.body.classList.toggle('ea-fast', !!S.settings.fast); $('proFast').classList.toggle('on', !!S.settings.fast); }
   function saveRecord(idx) {
-    var r = S.last; if (!r || !r.markets[idx]) return; var rec = EA.engine.toMemoryRecord(r, r.markets[idx]);
+    var r = S.last; if (!r || !r.markets[idx]) return; var rec = EA.engine.toMemoryRecord(r, r.markets[idx]); var pk = r.markets[idx]; if (pk && pk.odds && S.settings.bankroll) { var sg = EA.bankroll.suggestStake({ bankroll: S.settings.bankroll, p: pk.p, odds: pk.odds, minStake: S.settings.minStake }, cfg()); if (sg && sg.available) rec.plannedStake = sg.stake; }
+    if (EA.snapshot) rec.snapshot = EA.snapshot.build(r, idx, S.lastInput, EA.parlay ? EA.parlay.optimize(S.pool, S.settings && S.settings.config) : null);
     try { S.memory.add(rec); S.msg = 'Analyse enregistrée (prédiction figée, non modifiable).'; } catch (e) { S.msg = 'Enregistrement impossible : stockage plein ou indisponible.'; }
     var m = $('proSaveMsg'); if (m) m.textContent = S.msg;
   }
@@ -286,7 +287,7 @@
     $('eaProRoot').addEventListener('click', function (e) {
       var t = e.target.closest('button'); if (!t) return;
       if (t.dataset.save != null) { saveRecord(parseInt(t.dataset.save, 10)); return; }
-      if (t.dataset.settle) { var id = t.dataset.id; S.memory.settle(id, t.dataset.settle, { closingOdds: nv('cl_' + id), stake: nv('sk_' + id) }); renderHistorique(); return; }
+      if (t.dataset.settle) { var id = t.dataset.id; S.memory.settle(id, t.dataset.settle, { closingOdds: nv('cl_' + id), stake: nv('sk_' + id), score: { a: nv('sa_' + id), b: nv('sb_' + id) } }); renderHistorique(); return; }
       if (t.dataset.del) { if (g.confirm('Supprimer cette analyse de la mémoire ?')) { S.memory.remove(t.dataset.del); renderHistorique(); } return; }
       if (t.id === 'bkSave') { S.settings.bankroll = nv('bkBank'); S.settings.minStake = nv('bkMin'); save(); renderBankroll(); return; }
       if (t.id === 'smRun') {
@@ -310,6 +311,141 @@
     if (!mig.ok) { var m = $('proRunMsg'); if (m) m.textContent = 'Migration du stockage non appliquée (' + mig.error + ')' + (mig.restored ? ' — sauvegarde restaurée.' : '.'); }
     var vl = doc.getElementById('eaVersionLine'); if (vl) vl.textContent = 'EA Value Pro ' + C.VERSION;
   }
-  EA.ui = { init: init, _state: S, _collect: collect, _run: run };
+
+  // ---------- COMBINÉ RENTABLE (bloc unique) ----------
+  S.pool = [];
+  function poolAdd(res) {
+    if (!res || !res.markets || !EA.parlay) return;
+    var key = [res.home, res.away, res.matchDate].join('|'), label = (res.home || '?') + ' – ' + (res.away || '?');
+    S.pool = S.pool.filter(function (l) { return l.matchKey !== key; }); var wm = EA.market ? EA.market.weightMap(records()) : {};
+    res.markets.forEach(function (m) { S.pool.push({ matchKey: key, label: label, market: m.market, selection: m.selection, p: m.p, odds: m.odds, value: m.value, uncertaintyHalfPts: m.uncertaintyHalfPts, decision: m.decision && m.decision.decision, dataQuality: res.dataQuality && res.dataQuality.score, weightsLabel: m.weightsLabel, weight: wm[(S.sport || '?') + '/' + m.market] }); });
+  }
+  function parlayHtml() {
+    if (!EA.parlay) return '';
+    var r = EA.parlay.optimize(S.pool, S.settings && S.settings.config), h = '<div class="pro-card pro-parlay"><h3>🔥 COMBINÉ RENTABLE</h3>';
+    h += '<p class="pro-dim">Pool : ' + new Set(S.pool.map(function (l) { return l.matchKey; })).size + ' match(s) analysé(s) avec cotes · ' + r.tested + ' combinaison(s) testée(s) en arrière-plan.</p>';
+    if (r.status !== 'BET') {
+      h += '<div class="pro-dec NOBET">🛑 PAS DE COMBINÉ RENTABLE</div><p>' + esc(r.message) + '</p>';
+    } else {
+      h += r.legs.map(function (l, i) { return '<div class="pro-kv"><span>Sélection ' + (i + 1) + ' · ' + esc(l.label) + '</span><span>' + esc(l.market + ' ' + l.selection) + ' @ ' + l.odds.toFixed(2) + '</span></div>'; }).join('') +
+        '<hr><div class="pro-kv"><span>Cote totale</span><span>' + r.odds.toFixed(2) + '</span></div>' +
+        '<div class="pro-kv"><span>Probabilité jointe (corrélation incluse)</span><span>' + (r.pJoint * 100).toFixed(1) + ' %</span></div>' +
+        '<div class="pro-kv"><span>Probabilité marché (1/cote)</span><span>' + (r.pMarket * 100).toFixed(1) + ' %</span></div>' +
+        '<div class="pro-kv"><span>Edge</span><span>' + (r.edgePts >= 0 ? '+' : '') + r.edgePts.toFixed(1) + ' pts</span></div>' +
+        '<div class="pro-kv"><span>EV (EV pessimiste)</span><span>' + (r.ev >= 0 ? '+' : '') + (r.ev * 100).toFixed(1) + ' % (' + (r.evLow * 100).toFixed(1) + ' %)</span></div>' +
+        '<div class="pro-kv"><span>Qualité données (min.)</span><span>' + r.dataQuality + '/100</span></div>' +
+        '<div class="pro-kv"><span>Incertitude jointe</span><span>±' + r.uncertaintyHalfPts.toFixed(1) + ' pts</span></div>' +
+        '<div class="pro-kv"><span>Calibration</span><span>' + esc(r.calibration) + '</span></div>' +
+        '<div class="pro-kv"><span>Risque de modèle</span><span>' + esc(r.risk) + '</span></div>' +
+        '<div class="pro-kv"><span>Seuil minimum de cote</span><span>' + r.minOdds.toFixed(2) + '</span></div>' +
+        (r.preferSingle ? '<p class="pro-warn">🎯 ' + esc(r.preferMessage) + ' (' + esc(r.bestSingle.leg.label + ' · ' + r.bestSingle.leg.market + ' ' + r.bestSingle.leg.selection) + ')</p>' : '') +
+        (r.sameMatchWarning ? '<p class="pro-warn">' + esc(r.sameMatchWarning) + '</p>' : '') +
+        '<div class="pro-dec BET">🔥 DÉCISION : BET</div><button class="pro-btn small" onclick="EA.ui._saveCombo()">Enregistrer ce combiné</button><p class="pro-dim">« Rentable » = favorable selon le modèle et ses hypothèses actuelles, pas un gain garanti.</p>' +
+        '<details><summary>Pourquoi ?</summary><ul class="pro-list"><li>EV ≥ seuil et EV pessimiste positive (' + (r.evLow * 100).toFixed(1) + ' %)</li><li>Chaque jambe est BET, cote ≥ cote minimale, données ≥ 60/100</li><li>' + r.legs.length + ' sélection(s) : le nombre est choisi par le moteur, sans quota</li><li>' + (r.correlationNotes.length ? esc(r.correlationNotes.join(' ; ')) : 'Jambes de matchs différents : indépendance supposée') + '</li></ul></details>';
+    }
+    if (r.rejected.length) h += '<details><summary>Pourquoi pas ? (' + r.rejected.length + ' marché(s) écarté(s))</summary><ul class="pro-list">' + r.rejected.slice(0, 12).map(function (x) { return '<li>' + esc(x.leg) + ' : ' + esc(x.why) + '</li>'; }).join('') + '</ul></details>';
+    if (r.invalidCombos) h += '<p class="pro-dim">' + r.invalidCombos + ' combinaison(s) rejetée(s) pour corrélation excessive ou dépendance inconnue.</p>';
+    h += '<button class="pro-btn" onclick="EA.ui._clearPool()">Vider le pool</button></div>';
+    return h;
+  }
+  var _renderDecision = renderDecision;
+  renderDecision = function () { _renderDecision(); var el = $('pane-decision'); if (el) el.insertAdjacentHTML('beforeend', parlayHtml()); };
+
+  // ---------- POST-MATCH ANALYSIS + ERROR MEMORY ----------
+  function postmortemHtml() {
+    if (!EA.postmortem) return '';
+    var recs = records(), em = EA.postmortem.errorMemory(recs), ks = Object.keys(em.groups), h = '';
+    var done = recs.filter(function (r) { return r.result && r.result.outcome !== 'void'; }).slice(-10).reverse();
+    if (done.length) h += '<div class="pro-card"><h3>🧠 POST-MATCH ANALYSIS</h3>' + done.map(function (r) {
+      var a = EA.postmortem.analyze(r);
+      return '<div class="pro-kv"><span>' + esc(r.home) + ' – ' + esc(r.away) + ' · ' + esc(r.market + ' ' + r.selection) + '</span><span>' + (a.outcome === 'won' ? 'Gagné' : 'Perdu') + ' · ' + esc(a.category) + '</span></div><p class="pro-dim">' + esc(a.why) + (a.scoreNote ? ' ' + esc(a.scoreNote) : '') + '</p>';
+    }).join('') + '<p class="pro-dim">Hypothèses automatiques à confirmer. La prédiction d\'origine n\'est jamais modifiée.</p></div>';
+    if (ks.length) h += '<div class="pro-card"><h3>Error Memory</h3>' + ks.map(function (k) { var x = em.groups[k]; return '<div class="pro-kv"><span>' + esc(k) + '</span><span>' + x.won + 'G / ' + x.lost + 'P (N=' + x.n + ')</span></div><p class="pro-dim">' + esc(x.caution) + (x.frequentError ? ' · erreur la plus fréquente : ' + esc(x.frequentError) : '') + '</p>'; }).join('') + '<p class="pro-dim">Aucun paramètre du modèle n\'est modifié automatiquement ; la prudence n\'est signalée qu\'à partir de ' + em.config.minN + ' observations.</p></div>';
+    return h;
+  }
+  var _renderHistorique = renderHistorique;
+  renderHistorique = function () { _renderHistorique(); var el = $('pane-historique'); if (el) el.insertAdjacentHTML('beforeend', postmortemHtml()); };
+
+  // ---------- CALIBRATION PAR TRANCHES + LEAGUE PROFILE (Model Lab) ----------
+  function calibrationHtml() {
+    if (!EA.calibration) return '';
+    var recs = records(), lv = cfg().sampleLevels, cb = EA.calibration.buckets(recs, lv), lp = EA.calibration.leagueProfiles(recs, cfg(), lv), h = '';
+    var pct = function (v) { return v == null ? '—' : (v * 100).toFixed(0) + ' %'; };
+    h += '<div class="pro-card"><h3>Calibration par tranches</h3>';
+    if (!cb.n) h += '<p class="pro-dim">Aucun résultat saisi : calibration non mesurable.</p>';
+    else {
+      h += '<p class="pro-dim">' + cb.n + ' résultat(s) · échantillon ' + esc(cb.level) + (cb.insufficient ? ' · ⚠️ Échantillon insuffisant' : '') + ' · Brier ' + cb.brier.toFixed(3) + ' · Log loss ' + cb.logLoss.toFixed(3) + ' · ECE ' + (cb.ece * 100).toFixed(1) + ' pts</p>';
+      h += cb.buckets.filter(function (b) { return b.n; }).map(function (b) { return '<div class="pro-kv"><span>' + esc(b.name) + ' · annoncé ' + pct(b.meanP) + '</span><span>réel ' + pct(b.freq) + ' (' + (b.error >= 0 ? '+' : '') + (b.error * 100).toFixed(0) + ' pts)</span></div><p class="pro-dim">' + esc(b.text) + (b.reliable ? '' : ' · aucune recalibration appliquée') + '</p>'; }).join('');
+    }
+    h += '</div>';
+    var ks = Object.keys(lp);
+    if (ks.length) h += '<div class="pro-card"><h3>League Profile</h3>' + ks.map(function (k) {
+      var p = lp[k], l = '<div class="pro-kv"><span>' + esc(k) + '</span><span>' + p.settled + ' résultat(s) · ' + esc(p.level) + '</span></div><p class="pro-dim">' + esc(p.note) + '</p>';
+      if (p.enough) {
+        l += '<p class="pro-dim">ROI ' + (p.roi == null ? '—' : (p.roi * 100).toFixed(1) + ' %') + ' · CLV ' + (p.clvAvg == null ? '—' : p.clvAvg.toFixed(2)) + ' · Brier ' + (p.brier == null ? '—' : p.brier.toFixed(3)) + '</p>';
+        if (p.avgTotal != null) l += '<p class="pro-dim">Total moyen ' + p.avgTotal.toFixed(2) + ' (variance ' + p.variance.toFixed(2) + ') · victoire domicile ' + pct(p.homeWinPct) + (p.bttsPct != null ? ' · BTTS ' + pct(p.bttsPct) + ' · Over 2.5 ' + pct(p.over25Pct) : '') + ' <i>(' + p.scores + ' scores saisis)</i></p>';
+        l += Object.keys(p.markets).map(function (m) { var x = p.markets[m]; return '<div class="pro-kv"><span>' + esc(m) + ' (N=' + x.n + ')</span><span>' + pct(x.hit) + ' vs ' + pct(x.meanP) + ' annoncé · ' + esc(x.level) + '</span></div>'; }).join('');
+      }
+      return l;
+    }).join('') + '<p class="pro-dim">Profils informatifs : aucune pondération par compétition n\'est appliquée automatiquement.</p></div>';
+    return h;
+  }
+  var _renderLab = renderLab;
+  renderLab = function () { _renderLab(); var el = $('pane-lab'); if (el) el.insertAdjacentHTML('beforeend', calibrationHtml()); };
+
+  // ---------- SNAPSHOT / COMBINÉS ENREGISTRÉS / SIMPLES vs COMBINÉS ----------
+  function comboRecords() { return S.memory.all().filter(function (r) { return r.type === 'combo'; }); }
+  function saveCombo() {
+    if (!EA.parlay || !EA.snapshot) return;
+    var r = EA.parlay.optimize(S.pool, S.settings && S.settings.config); if (r.status !== 'BET') return;
+    try { S.memory.add(EA.snapshot.toRecord(r)); S.msg = 'Combiné enregistré (figé, non modifiable).'; } catch (e) { S.msg = 'Enregistrement impossible : stockage plein ou indisponible.'; }
+    renderDecision();
+  }
+  function settleCombo(id, outcome) { S.memory.settle(id, outcome, { stake: 1 }); renderHistorique(); }
+  function snapshotHtml() {
+    if (!EA.snapshot) return '';
+    var all = S.memory.all(), cmp = EA.snapshot.simplesVsCombos(all), combos = comboRecords(), h = '', f1 = function (v) { return v == null ? '—' : (v * 100).toFixed(1) + ' %'; };
+    h += '<div class="pro-card"><h3>Simples vs Combinés</h3>';
+    ['simples', 'combos'].forEach(function (k) { var x = cmp[k]; h += '<div class="pro-kv"><span>' + (k === 'simples' ? 'Simples' : 'Combinés') + ' (N=' + x.n + ' · ' + esc(x.level) + ')</span><span>' + x.won + 'G / ' + x.lost + 'P · ROI ' + f1(x.roi) + '</span></div><p class="pro-dim">Cote moyenne ' + (x.avgOdds ? x.avgOdds.toFixed(2) : '—') + ' · EV annoncé moyen ' + f1(x.meanEV) + (x.avgLegs ? ' · ' + x.avgLegs.toFixed(1) + ' sélections en moyenne' : '') + '</p>'; });
+    h += '<p>' + (cmp.code === 'COMBINES_MOINS_BONS' ? '⚠️ ' : '') + esc(cmp.verdict) + '</p></div>';
+    var open = combos.filter(function (r) { return !r.result; });
+    if (open.length) h += '<div class="pro-card"><h3>Combinés à régler</h3>' + open.map(function (r) { return '<div class="pro-kv"><span>' + r.legCount + ' sél. @ ' + r.odds.toFixed(2) + '</span><span><button class="pro-btn small" onclick="EA.ui._settleCombo(\'' + r.id + '\',\'won\')">Gagné</button> <button class="pro-btn small" onclick="EA.ui._settleCombo(\'' + r.id + '\',\'lost\')">Perdu</button></span></div><p class="pro-dim">' + esc(r.selection) + '</p>'; }).join('') + '</div>';
+    var snaps = all.filter(function (r) { return r.snapshot; }).slice(-5).reverse();
+    if (snaps.length) h += '<div class="pro-card"><h3>Snapshots pré-match</h3>' + snaps.map(function (r) { var okv = S.memory.verify(r); return '<div class="pro-kv"><span>' + esc(r.type === 'combo' ? 'Combiné' : (r.home + ' – ' + r.away + ' · ' + r.market + ' ' + r.selection)) + '</span><span>v' + (r.version || 1) + ' · ' + (okv ? '✅ intact' : '⚠️ altéré') + '</span></div><p class="pro-dim">' + esc((r.snapshot.savedAt || '').replace('T', ' ').slice(0, 16)) + ' · moteur ' + esc(r.snapshot.engineVersion || '?') + (r.supersedes ? ' · remplace une version antérieure (conservée)' : '') + '</p>'; }).join('') + '</div>';
+    return h;
+  }
+  var _renderHistorique2 = renderHistorique;
+  renderHistorique = function () { _renderHistorique2(); var el = $('pane-historique'); if (el) el.insertAdjacentHTML('beforeend', snapshotHtml()); };
+
+  // ---------- MARKET PERFORMANCE + BACKTEST V3 (Model Lab) / RISK ENGINE (Bankroll) ----------
+  function marketLabHtml() {
+    if (!EA.market || !EA.risk) return '';
+    var recs = records(), pf = EA.market.perf(recs), ks = Object.keys(pf), doc = ks.filter(function (k) { return pf[k].documented; }), small = ks.length - doc.length, h = '';
+    var f1 = function (v) { return v == null ? '—' : (v * 100).toFixed(1) + ' %'; };
+    h += '<div class="pro-card"><h3>Market Performance</h3>';
+    if (!doc.length) h += '<p class="pro-dim">⚠️ Échantillon insuffisant : aucun marché n\'a encore 30 résultats réglés.</p>';
+    h += doc.map(function (k) { var x = pf[k]; return '<div class="pro-kv"><span>' + esc(k) + ' (N=' + x.n + ' · ' + esc(x.level) + ')</span><span>' + x.won + 'G / ' + x.lost + 'P · ' + f1(x.hit) + '</span></div><p class="pro-dim">ROI ' + f1(x.roi) + ' · EV annoncé ' + f1(x.meanEV) + ' · CLV ' + (x.clv == null ? '—' : x.clv.toFixed(2) + ' pts') + ' · annoncé ' + f1(x.meanP) + ' vs réel ' + f1(x.hit) + ' · poids ' + x.weight.toFixed(2) + ' (' + esc(x.reason) + ')</p>'; }).join('');
+    if (small) h += '<p class="pro-dim">' + small + ' marché(s) non affiché(s) : échantillon insuffisant.</p>';
+    h += '<p class="pro-dim">Le poids n\'agit que sur l\'exigence d\'EV des combinés, entre 0,70 et 1,05, à partir de 100 observations ; aucun marché n\'est supprimé.</p></div>';
+    var bt = EA.risk.rulesBacktest(recs);
+    h += '<div class="pro-card"><h3>Backtest des règles V3</h3>';
+    if (bt.insufficient) h += '<p class="pro-dim">⚠️ Échantillon insuffisant (' + bt.total + ' paris réglés avec cote ; minimum 60) : aucune conclusion.</p>';
+    else h += ['training', 'validation', 'test'].map(function (k) { var p = bt.parts[k], a = p.all, v = p.v3; return '<div class="pro-kv"><span>' + (k === 'training' ? 'Apprentissage' : k === 'validation' ? 'Validation' : 'Test') + '</span><span>tous N=' + a.n + ' · ROI ' + f1(a.roi) + '</span></div><p class="pro-dim">Règles V3 : N=' + v.n + (v.small ? ' (petit échantillon)' : '') + ' · ROI ' + f1(v.roi) + ' · hit ' + f1(v.hit) + ' · drawdown max ' + v.maxDD.toFixed(2) + ' u · profit factor ' + (v.profitFactor == null ? '—' : v.profitFactor.toFixed(2)) + ' · CLV ' + (v.clv == null ? '—' : v.clv.toFixed(2)) + '</p>'; }).join('');
+    return h + '<p class="pro-dim">' + esc(bt.note) + '</p></div>';
+  }
+  var _renderLab2 = renderLab;
+  renderLab = function () { _renderLab2(); var el = $('pane-lab'); if (el) el.insertAdjacentHTML('beforeend', marketLabHtml()); };
+  function riskHtml() {
+    if (!EA.risk) return '';
+    var pick = S.last && S.last.pick, st = pick && pick.odds ? EA.bankroll.suggestStake({ bankroll: S.settings.bankroll, p: pick.p, odds: pick.odds, minStake: S.settings.minStake }, cfg()) : null;
+    var a = EA.risk.assess({ bankroll: S.settings.bankroll, proposed: st && st.available ? st.stake : null, records: records() });
+    var h = '<div class="pro-card"><h3>Risk Engine</h3><div class="pro-kv"><span>Niveau</span><span>' + esc(a.level) + '</span></div>';
+    if (a.stake == null) return h + '<p class="pro-dim">' + esc(a.flags.join(' · ')) + ' Analysez un match avec cote et renseignez la bankroll.</p></div>';
+    h += '<div class="pro-kv"><span>Mise après contrôle du risque</span><span>' + a.stake.toFixed(2) + '</span></div><p class="pro-dim">Exposition ouverte ' + a.exposure.toFixed(2) + ' · drawdown ' + a.drawdown.toFixed(2) + ' (' + (a.drawdownPct * 100).toFixed(1) + ' %) · série de pertes ' + a.lossStreak + '</p>';
+    return h + (a.flags.length ? '<ul class="pro-list">' + a.flags.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') + '<p class="pro-dim">Le Risk Engine ne peut que plafonner ou réduire une mise : jamais de martingale ni d\'augmentation après une perte.</p></div>';
+  }
+  var _renderBankroll = renderBankroll;
+  renderBankroll = function () { _renderBankroll(); var el = $('pane-bankroll'); if (el) el.insertAdjacentHTML('beforeend', riskHtml()); };
+  EA.ui = { init: init, _saveCombo: saveCombo, _settleCombo: settleCombo, _clearPool: function () { S.pool = []; renderDecision(); }, _poolAdd: poolAdd, _pool: function () { return S.pool; }, _state: S, _collect: collect, _run: run };
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init); else init();
 })(typeof window !== 'undefined' ? window : global);
