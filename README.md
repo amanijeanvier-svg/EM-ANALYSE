@@ -27,4 +27,7 @@ PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-mobile.js   # navigateur, 360/
 ```
 
 ## Déploiement
-Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v19`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
+Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v21`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
+
+## Basketball V2
+Basket Analyse affiche maintenant le panneau « Analyse V2 — distribution unique » (voir CHANGELOG, EA-BK2). Tests : `node tests/run-bk2.js` ; navigateur : `PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-bk2.js`.
