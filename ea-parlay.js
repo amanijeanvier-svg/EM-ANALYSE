@@ -52,6 +52,7 @@
   function legOk(l, cfg) {
     if (!l || !(l.odds > 1) || !(l.p > 0 && l.p < 1) || !l.value || l.value.status !== 'OK') return 'cote ou prix insuffisant';
     if (l.decision !== 'BET') return 'décision individuelle ≠ BET';
+    if (l.dbConflict) return 'conflit statistique (EA DATABASE ≠ modèle) : signal insuffisamment cohérent';
     if (l.weight != null && l.weight < 1 && l.value.ev < cfg.minEV / l.weight) return 'marché historiquement peu fiable (poids ' + l.weight.toFixed(2) + ') : EV exigé ' + (cfg.minEV / l.weight * 100).toFixed(1) + ' %';
     if ((l.dataQuality == null) || l.dataQuality < cfg.minDataQuality) return 'données insuffisantes ou inconnues';
     if ((l.uncertaintyHalfPts || 0) > cfg.maxLegHalfPts) return 'incertitude trop élevée';
@@ -84,7 +85,8 @@
       if (cur.length >= cfg.maxLegs) return;
       for (var i = start; i < elig.length; i++) { cur.push(elig[i]); rec(i + 1, cur); cur.pop(); }
     })(0, []);
-    var out = { status: 'NO_BET', tested: tested, invalidCombos: invalid, eligible: elig.length, rejected: rejected, bestSingle: bestSingle,
+    var ranked = elig.map(function (l) { var pl = Math.max(0.001, l.p - (l.uncertaintyHalfPts || 0) / 100); return { leg: l, evLow: pl * l.odds - 1 }; }).filter(function (x) { return x.evLow > 0; }).sort(function (a, b) { return b.evLow - a.evLow; }).slice(0, 3);
+    var out = { status: 'NO_BET', tested: tested, ranked: ranked, invalidCombos: invalid, eligible: elig.length, rejected: rejected, bestSingle: bestSingle,
       message: 'Aucune combinaison ne présente actuellement un avantage statistique suffisant compte tenu des probabilités calibrées, du prix, de l\'incertitude et de la corrélation.' };
     if (!best) return out;
     var dq = Math.min.apply(null, best.legs.map(function (l) { return l.dataQuality; }));

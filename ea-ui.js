@@ -314,11 +314,17 @@
 
   // ---------- COMBINÉ RENTABLE (bloc unique) ----------
   S.pool = [];
+  function dbMarket(m) { var s = m.selection, x = String(m.market || '');
+    if (x === 'btts' && s === 'yes') return 'btts_yes'; var o = /^ou:([\d.]+)$/.exec(x); if (o && s === 'over') return 'over:' + o[1];
+    if ((x === '1X2' || x === 'ml') && (s === 'home' || s === 'away')) return s + '_win'; return x === '1X2' && s === 'draw' ? 'draw' : null; }
+  function dbConflict(res, m) {   // EA DATABASE : conflit entre sources internes et modèle ⇒ jambe écartée du combiné
+    try { var mk = dbMarket(m); if (!mk || !EA.dbui || !EA.database) return false; var st = EA.dbui.store(); if (st.meta().state !== 'READY') return false;
+      var c = st.consensus({ sport: S.sport || 'football', competition: res.competition || res.league, home: res.home, away: res.away, market: mk, modelP: m.p, before: res.matchDate }); return !!(c.available && c.conflict); } catch (e) { return false; } }
   function poolAdd(res) {
     if (!res || !res.markets || !EA.parlay) return;
     var key = [res.home, res.away, res.matchDate].join('|'), label = (res.home || '?') + ' – ' + (res.away || '?');
     S.pool = S.pool.filter(function (l) { return l.matchKey !== key; }); var wm = EA.market ? EA.market.weightMap(records()) : {};
-    res.markets.forEach(function (m) { S.pool.push({ matchKey: key, label: label, market: m.market, selection: m.selection, p: m.p, odds: m.odds, value: m.value, uncertaintyHalfPts: m.uncertaintyHalfPts, decision: m.decision && m.decision.decision, dataQuality: res.dataQuality && res.dataQuality.score, weightsLabel: m.weightsLabel, weight: wm[(S.sport || '?') + '/' + m.market] }); });
+    res.markets.forEach(function (m) { S.pool.push({ matchKey: key, label: label, market: m.market, selection: m.selection, p: m.p, odds: m.odds, value: m.value, uncertaintyHalfPts: m.uncertaintyHalfPts, decision: m.decision && m.decision.decision, dataQuality: res.dataQuality && res.dataQuality.score, weightsLabel: m.weightsLabel, weight: wm[(S.sport || '?') + '/' + m.market], dbConflict: dbConflict(res, m) }); });
   }
   function parlayHtml() {
     if (!EA.parlay) return '';
@@ -346,6 +352,7 @@
     if (r.rejected.length) h += '<details><summary>Pourquoi pas ? (' + r.rejected.length + ' marché(s) écarté(s))</summary><ul class="pro-list">' + r.rejected.slice(0, 12).map(function (x) { return '<li>' + esc(x.leg) + ' : ' + esc(x.why) + '</li>'; }).join('') + '</ul></details>';
     if (r.invalidCombos) h += '<p class="pro-dim">' + r.invalidCombos + ' combinaison(s) rejetée(s) pour corrélation excessive ou dépendance inconnue.</p>';
     h += '<button class="pro-btn" onclick="EA.ui._clearPool()">Vider le pool</button></div>';
+    if (r.ranked && r.ranked.length) h += '<div class="pro-card"><h3>Priorité des paris</h3>' + r.ranked.map(function (x, i) { return '<div class="pro-kv"><span>' + ['🥇 PRIORITÉ 1', '🥈 PRIORITÉ 2', '🥉 PRIORITÉ 3'][i] + ' · ' + esc(x.leg.label) + '</span><span>' + esc(x.leg.market + ' ' + x.leg.selection) + ' @ ' + x.leg.odds.toFixed(2) + ' · EV pess. ' + (x.evLow * 100).toFixed(1) + ' %</span></div>'; }).join('') + '<p class="pro-dim">Uniquement des paris individuels BET dont l\'EV reste positive après incertitude ; aucun Top 3 artificiel.</p></div>';
     return h;
   }
   var _renderDecision = renderDecision;
