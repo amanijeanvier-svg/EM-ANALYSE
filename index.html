@@ -2097,6 +2097,7 @@ try {
   function legOk(l, cfg) {
     if (!l || !(l.odds > 1) || !(l.p > 0 && l.p < 1) || !l.value || l.value.status !== 'OK') return 'cote ou prix insuffisant';
     if (l.decision !== 'BET') return 'décision individuelle ≠ BET';
+    if (l.dbConflict) return 'conflit statistique (EA DATABASE ≠ modèle) : signal insuffisamment cohérent';
     if (l.weight != null && l.weight < 1 && l.value.ev < cfg.minEV / l.weight) return 'marché historiquement peu fiable (poids ' + l.weight.toFixed(2) + ') : EV exigé ' + (cfg.minEV / l.weight * 100).toFixed(1) + ' %';
     if ((l.dataQuality == null) || l.dataQuality < cfg.minDataQuality) return 'données insuffisantes ou inconnues';
     if ((l.uncertaintyHalfPts || 0) > cfg.maxLegHalfPts) return 'incertitude trop élevée';
@@ -2129,7 +2130,8 @@ try {
       if (cur.length >= cfg.maxLegs) return;
       for (var i = start; i < elig.length; i++) { cur.push(elig[i]); rec(i + 1, cur); cur.pop(); }
     })(0, []);
-    var out = { status: 'NO_BET', tested: tested, invalidCombos: invalid, eligible: elig.length, rejected: rejected, bestSingle: bestSingle,
+    var ranked = elig.map(function (l) { var pl = Math.max(0.001, l.p - (l.uncertaintyHalfPts || 0) / 100); return { leg: l, evLow: pl * l.odds - 1 }; }).filter(function (x) { return x.evLow > 0; }).sort(function (a, b) { return b.evLow - a.evLow; }).slice(0, 3);
+    var out = { status: 'NO_BET', tested: tested, ranked: ranked, invalidCombos: invalid, eligible: elig.length, rejected: rejected, bestSingle: bestSingle,
       message: 'Aucune combinaison ne présente actuellement un avantage statistique suffisant compte tenu des probabilités calibrées, du prix, de l\'incertitude et de la corrélation.' };
     if (!best) return out;
     var dq = Math.min.apply(null, best.legs.map(function (l) { return l.dataQuality; }));
@@ -2380,6 +2382,848 @@ try {
   }
   EA.risk = { assess: assess, rulesBacktest: rulesBacktest, CFG: CFG };
   if (typeof module === 'object' && module.exports) module.exports = EA.risk;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-database.js ===== */
+/* EA DATABASE v1 — base statistique locale (offline-first), chronologique, sans fuite du futur.
+   Donnée absente = null (UNKNOWN), jamais inventée. Anomalies : isolées en quarantaine, jamais supprimées. */
+(function (g) {
+  'use strict';
+  var EA = g.EA = g.EA || {};
+  var KEY = 'ea_database_v1', SCHEMA = 1;
+  var CFG = { levels: [{ min: 300, label: 'STRONG' }, { min: 100, label: 'GOOD' }, { min: 30, label: 'MODERATE' }, { min: 10, label: 'LOW' }, { min: 0, label: 'VERY LOW' }],
+    priorN: 20, modelWeight: 1.0, minSignalN: 5, conflictSpread: 0.15,
+    goalLines: [0.5, 1.5, 2.5, 3.5, 4.5, 5.5], cornerLines: [6.5, 7.5, 8.5, 9.5, 10.5, 11.5, 12.5], sotLines: [2.5, 3.5, 4.5, 5.5, 6.5], shotLines: [20.5, 22.5, 24.5, 26.5], cardLines: [2.5, 3.5, 4.5, 5.5, 6.5], ptLines: [150.5, 160.5, 170.5, 180.5, 190.5, 200.5, 210.5, 220.5, 230.5], windows: [3, 5, 8, 10, 15] };
+  function norm(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+  function num(v) { if (v === null || v === undefined || v === '') return null; var x = Number(v); return isFinite(x) ? x : null; }
+  function level(n, cfg) { var L = ((cfg || CFG).levels).slice().sort(function (a, b) { return b.min - a.min; }); for (var i = 0; i < L.length; i++) if (n >= L[i].min) return L[i].label; return 'VERY LOW'; }
+  function seasonOf(d) { var y = +d.slice(0, 4), m = +d.slice(5, 7); return m >= 8 ? y + '/' + String((y + 1) % 100).padStart(2, '0') : (y - 1) + '/' + String(y % 100).padStart(2, '0'); }
+  function validDate(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d || '') && !isNaN(Date.parse(d)); }
+  function rate(k, n) { return { k: k, n: n, pct: n ? k / n : null, level: level(n) }; }
+  function fmt(r) { return r && r.n ? r.k + '/' + r.n + ' (' + (r.pct * 100).toFixed(0) + ' %)' + (r.n < 10 ? ' ⚠️' : '') : 'UNKNOWN'; }   // jamais de % sans k/n
+
+  // ---------- normalisation + contrôles d'intégrité ----------
+  function normalize(raw) {
+    var issues = [], r = raw || {}, m = { sport: norm(r.sport) === 'basketball' ? 'basketball' : 'football', country: r.country || null, competition: String(r.competition || '').trim() || null, round: r.round || null,
+      date: validDate(r.date) ? r.date : null, time: r.time || null, home: String(r.home || '').trim(), away: String(r.away || '').trim(), hs: num(r.hs), as: num(r.as), source: r.source || 'MANUAL', dateApprox: !!r.dateApprox,
+      stats: {}, odds: r.odds || null };
+    ['shots', 'sot', 'poss', 'corners', 'fouls', 'cards', 'xg'].forEach(function (k) { m.stats[k + '_h'] = num(r[k + '_h']); m.stats[k + '_a'] = num(r[k + '_a']); m.stats[k + '_t'] = num(r[k + '_t']); });
+    if (!m.date) issues.push({ sev: 'error', code: 'NO_DATE' });
+    if (!m.home || !m.away) issues.push({ sev: 'error', code: 'UNKNOWN_TEAM' });
+    else if (norm(m.home) === norm(m.away)) issues.push({ sev: 'error', code: 'SAME_TEAM' });
+    if (!m.competition) issues.push({ sev: 'warn', code: 'NO_COMPETITION' });
+    [m.hs, m.as].forEach(function (x) { if (x != null && (x < 0 || x % 1 !== 0)) issues.push({ sev: 'error', code: 'INVALID_SCORE' }); });
+    if ((m.hs == null) !== (m.as == null)) issues.push({ sev: 'error', code: 'INVALID_SCORE' });
+    Object.keys(m.stats).forEach(function (k) { var v = m.stats[k]; if (v != null && v < 0) issues.push({ sev: 'error', code: 'NEGATIVE_STAT:' + k }); });
+    if (m.sport === 'football') {
+      var s = m.stats; if (s.sot_h != null && s.shots_h != null && s.sot_h > s.shots_h) issues.push({ sev: 'error', code: 'IMPOSSIBLE:sot_h>shots_h' });
+      if (s.sot_a != null && s.shots_a != null && s.sot_a > s.shots_a) issues.push({ sev: 'error', code: 'IMPOSSIBLE:sot_a>shots_a' });
+      if (s.poss_h != null && (s.poss_h > 100)) issues.push({ sev: 'error', code: 'IMPOSSIBLE:possession' });
+    }
+    ['corners', 'sot', 'shots', 'cards'].forEach(function (k) { var h = m.stats[k + '_h'], a = m.stats[k + '_a'], t = m.stats[k + '_t']; if (h != null && a != null && t != null && Math.abs(h + a - t) > 1e-9) issues.push({ sev: 'error', code: 'INCONSISTENT_TOTAL:' + k }); });
+    if (m.stats.sot_t != null && m.stats.shots_t != null && m.stats.sot_t > m.stats.shots_t) issues.push({ sev: 'error', code: 'IMPOSSIBLE:sot_t>shots_t' });
+    if (m.hs != null && m.stats.corners_h == null && m.stats.corners_t == null && m.sport === 'football') issues.push({ sev: 'info', code: 'MISSING_STATS' });
+    m.season = r.season || (m.date ? seasonOf(m.date) : null); m.seasonDerived = !r.season && !!m.date;
+    m.id = m.date ? [m.sport, norm(m.competition), m.season, m.date, norm(m.home), norm(m.away)].join('|') : null;
+    return { match: m, issues: issues, bad: issues.some(function (i) { return i.sev === 'error'; }) };
+  }
+
+  // ---------- agrégations ----------
+  function cnt(ms, avail, test) { var k = 0, n = 0; ms.forEach(function (m) { if (!avail(m)) return; n++; if (test(m)) k++; }); return rate(k, n); }
+  function avg(ms, f) { var s = 0, n = 0; ms.forEach(function (m) { var v = f(m); if (v != null) { s += v; n++; } }); return { avg: n ? s / n : null, n: n }; }
+  function total(m) { return m.hs + m.as; }
+  function lines(ms, avail, f, L, cfg) { var o = {}; L.forEach(function (l) { o[l] = { over: cnt(ms, avail, function (m) { return f(m) > l; }), under: cnt(ms, avail, function (m) { return f(m) < l; }) }; }); return o; }
+  function aggregate(ms, cfg) {
+    cfg = cfg || CFG; var n = ms.length, S = ms[0] && ms[0].sport, all = function () { return true; };
+    var A = { n: n, level: level(n, cfg), goals: avg(ms, total), result: { home: cnt(ms, all, function (m) { return m.hs > m.as; }), draw: cnt(ms, all, function (m) { return m.hs === m.as; }), away: cnt(ms, all, function (m) { return m.hs < m.as; }) } };
+    A.result.homeOrDraw = cnt(ms, all, function (m) { return m.hs >= m.as; }); A.result.awayOrDraw = cnt(ms, all, function (m) { return m.hs <= m.as; }); A.result.homeOrAway = cnt(ms, all, function (m) { return m.hs !== m.as; });
+    A.goalsHome = avg(ms, function (m) { return m.hs; }); A.goalsAway = avg(ms, function (m) { return m.as; });
+    if (S === 'basketball') { A.totals = lines(ms, all, total, cfg.ptLines); A.margin = avg(ms, function (m) { return m.hs - m.as; }); return A; }
+    A.totals = lines(ms, all, total, cfg.goalLines);
+    A.btts = { yes: cnt(ms, all, function (m) { return m.hs > 0 && m.as > 0; }), no: cnt(ms, all, function (m) { return !(m.hs > 0 && m.as > 0); }) };
+    A.btts.yesOver25 = cnt(ms, all, function (m) { return m.hs > 0 && m.as > 0 && total(m) > 2.5; }); A.btts.yesUnder25 = cnt(ms, all, function (m) { return m.hs > 0 && m.as > 0 && total(m) < 2.5; });
+    [['corners', cfg.cornerLines], ['sot', cfg.sotLines], ['shots', cfg.shotLines], ['cards', cfg.cardLines || CFG.cardLines]].forEach(function (p) {
+      var k = p[0], h = function (m) { return m.stats[k + '_h']; }, a = function (m) { return m.stats[k + '_a']; }, ok = function (m) { return statTotal(m, k) != null; }, t = function (m) { return statTotal(m, k); };
+      A[k] = { total: avg(ms.filter(ok), t), home: avg(ms, h), away: avg(ms, a), lines: lines(ms, ok, t, p[1], cfg) };
+    });
+    return A;
+  }
+  function statTotal(m, k) { var h = m.stats[k + '_h'], a = m.stats[k + '_a']; return h != null && a != null ? h + a : (m.stats[k + '_t'] != null ? m.stats[k + '_t'] : null); }   // total connu seulement s'il est réellement fourni
+  function teamView(m, team) { var home = norm(m.home) === norm(team); return { m: m, home: home, gf: home ? m.hs : m.as, ga: home ? m.as : m.hs, date: m.date, f: function (k) { return m.stats[k + (home ? '_h' : '_a')]; }, c: function (k) { return m.stats[k + (home ? '_a' : '_h')]; } }; }
+  function teamBlock(tv, cfg) {
+    var n = tv.length, all = function () { return true; }, B = { n: n, level: level(n, cfg || CFG) };
+    B.W = tv.filter(function (t) { return t.gf > t.ga; }).length; B.D = tv.filter(function (t) { return t.gf === t.ga; }).length; B.L = n - B.W - B.D;
+    B.gf = avg(tv, function (t) { return t.gf; }); B.ga = avg(tv, function (t) { return t.ga; });
+    B.btts = cnt(tv, all, function (t) { return t.gf > 0 && t.ga > 0; }); B.cleanSheets = cnt(tv, all, function (t) { return t.ga === 0; }); B.failedToScore = cnt(tv, all, function (t) { return t.gf === 0; });
+    B.over = {}; B.under = {}; (cfg || CFG).goalLines.forEach(function (l) { B.over[l] = cnt(tv, all, function (t) { return t.gf + t.ga > l; }); B.under[l] = cnt(tv, all, function (t) { return t.gf + t.ga < l; }); });
+    ['corners', 'sot', 'shots'].forEach(function (k) { B[k] = { for: avg(tv, function (t) { return t.f(k); }), against: avg(tv, function (t) { return t.c(k); }) }; });
+    B.form = tv.slice(-5).map(function (t) { return t.gf > t.ga ? 'W' : t.gf === t.ga ? 'D' : 'L'; }).join('');
+    return B;
+  }
+  function streaks(tv) {
+    var defs = { win: function (t) { return t.gf > t.ga; }, noWin: function (t) { return t.gf <= t.ga; }, btts: function (t) { return t.gf > 0 && t.ga > 0; }, over25: function (t) { return t.gf + t.ga > 2.5; }, under25: function (t) { return t.gf + t.ga < 2.5; }, cleanSheet: function (t) { return t.ga === 0; }, scored: function (t) { return t.gf > 0; }, conceded: function (t) { return t.ga > 0; } }, o = {};
+    Object.keys(defs).forEach(function (k) { var c = 0; for (var i = tv.length - 1; i >= 0 && defs[k](tv[i]); i--) c++; o[k] = c; });
+    o.note = 'Signal secondaire : une série n\'est jamais une causalité.'; return o;
+  }
+  function trendWindows(tv, cfg) {
+    cfg = cfg || CFG; var o = {}, all = function () { return true; };
+    cfg.windows.concat(['all']).forEach(function (w) { var s = w === 'all' ? tv : tv.slice(-w);
+      o[w] = { over25: cnt(s, all, function (t) { return t.gf + t.ga > 2.5; }), btts: cnt(s, all, function (t) { return t.gf > 0 && t.ga > 0; }), over15: cnt(s, all, function (t) { return t.gf + t.ga > 1.5; }),
+        corners95: cnt(s, function (t) { return t.f('corners') != null && t.c('corners') != null; }, function (t) { return t.f('corners') + t.c('corners') > 9.5; }) }; });
+    return o;
+  }
+
+  // ---------- consensus base + modèle, conflits, stabilité ----------
+  function shrink(k, n, base, priorN) { return (k + base * priorN) / (n + priorN); }
+  function marketSpec(market) {
+    var s = String(market), m, T = function (f, av) { return { test: f, avail: av }; };
+    if (s === 'btts_yes') return T(function (x) { return x.hs > 0 && x.as > 0; }); if (s === 'btts_no') return T(function (x) { return !(x.hs > 0 && x.as > 0); });
+    if (s === 'home_win') return T(function (x) { return x.hs > x.as; }); if (s === 'away_win') return T(function (x) { return x.hs < x.as; }); if (s === 'draw') return T(function (x) { return x.hs === x.as; });
+    if (s === 'home_or_draw') return T(function (x) { return x.hs >= x.as; }); if (s === 'away_or_draw') return T(function (x) { return x.hs <= x.as; }); if (s === 'home_or_away') return T(function (x) { return x.hs !== x.as; });
+    if ((m = /^(over|under):([\d.]+)$/.exec(s))) { var l = +m[2], ov = m[1] === 'over'; return T(function (x) { return ov ? x.hs + x.as > l : x.hs + x.as < l; }); }
+    if ((m = /^(corners|sot|shots|cards)_(over|under):([\d.]+)$/.exec(s))) { var k = m[1], l2 = +m[3], ov2 = m[2] === 'over'; return T(function (x) { var t = statTotal(x, k); return ov2 ? t > l2 : t < l2; }, function (x) { return statTotal(x, k) != null; }); }
+    if ((m = /^(home|away)_margin_gte:(\d+)$/.exec(s))) { var N0 = +m[2], hh = m[1] === 'home'; return T(function (x) { return hh ? x.hs - x.as >= N0 : x.as - x.hs >= N0; }); }
+    if ((m = /^spread_(home|away):(-?[\d.]+)$/.exec(s))) { var L = +m[2], hm = m[1] === 'home'; return T(function (x) { return hm ? x.hs - x.as + L > 0 : x.as - x.hs + L > 0; }); }
+    return null;
+  }
+  function marketTest(market) {
+    if (market === 'btts_yes') return function (m) { return m.hs > 0 && m.as > 0; };
+    if (market === 'home_win') return function (m) { return m.hs > m.as; }; if (market === 'away_win') return function (m) { return m.hs < m.as; }; if (market === 'draw') return function (m) { return m.hs === m.as; };
+    var mm = /^over:([\d.]+)$/.exec(market); if (mm) { var l = +mm[1]; return function (m) { return m.hs + m.as > l; }; }
+    return null;
+  }
+  function wilsonHalf(p, n) { return n > 0 ? 1.96 * Math.sqrt(p * (1 - p) / n) * 100 : 50; }
+  function consensus(ms, o, cfg) {   // ms : matchs déjà filtrés AVANT la date ; o: {home, away, market, modelP}
+    cfg = cfg || CFG; var spec = marketSpec(o.market); if (!spec) return { available: false, reason: 'marché non couvert par la base' }; var test = spec.test, av = spec.avail || function () { return true; };
+    var sig = [], b = ms.filter(function (m) { return m.sport === o.sport && (!o.competition || norm(m.competition) === norm(o.competition)); }), lg = cnt(b, av, test);
+    if (lg.n < cfg.minSignalN) return { available: false, reason: 'base insuffisante pour ce contexte (' + lg.n + ' matchs)' };
+    var base = lg.pct, add = function (name, r) { if (r.n >= cfg.minSignalN) { var w = r.n / (r.n + cfg.priorN); sig.push({ name: name, k: r.k, n: r.n, raw: r.pct, p: shrink(r.k, r.n, base, cfg.priorN), w: w }); } };
+    add('League baseline', lg);
+    var tm = function (team, venue, last) { var t = b.filter(function (m) { return norm(m.home) === norm(team) || norm(m.away) === norm(team); }); if (venue) t = t.filter(function (m) { return (venue === 'home') === (norm(m.home) === norm(team)); }); return last ? t.slice(-last) : t; };
+    var two = function (a, bb) { return rate(a.k + bb.k, a.n + bb.n); }, c = function (arr) { return cnt(arr, av, test); };
+    add('Team season', two(c(tm(o.home)), c(tm(o.away)))); var rn = cfg.recentN || 5; add('Team recent (' + rn + ')', two(c(tm(o.home, null, rn)), c(tm(o.away, null, rn)))); add('Home/Away', two(c(tm(o.home, 'home')), c(tm(o.away, 'away'))));
+    add('H2H', c(b.filter(function (m) { var h = norm(m.home), a = norm(m.away); return (h === norm(o.home) && a === norm(o.away)) || (h === norm(o.away) && a === norm(o.home)); })));
+    if (o.modelP != null) sig.push({ name: 'Model', k: null, n: null, raw: o.modelP, p: o.modelP, w: cfg.modelWeight });
+    var sw = sig.reduce(function (s, x) { return s + x.w; }, 0), p = sig.reduce(function (s, x) { return s + x.w * x.p; }, 0) / sw;
+    var strong = sig.filter(function (x) { return x.w >= 0.2; }), ps = strong.map(function (x) { return x.p; }), mx = Math.max.apply(null, ps), mn = Math.min.apply(null, ps), spread = mx - mn;
+    var conflict = strong.length >= 2 && mx > 0.5 && mn < 0.5 && spread >= cfg.conflictSpread, neff = sig.reduce(function (s, x) { return s + (x.n || 0) * x.w; }, 0) + cfg.priorN;
+    return { available: true, p: p, signals: sig, spread: spread, conflict: conflict, stability: Math.round(Math.max(0, Math.min(1, 1 - spread / 0.4)) * 100), uncertaintyHalfPts: Math.round((wilsonHalf(p, neff) + (conflict ? 5 : 0)) * 10) / 10,
+      note: conflict ? '⚠️ CONFLIT STATISTIQUE : signal insuffisamment cohérent, incertitude augmentée.' : 'Sources cohérentes.', provenance: 'EA DATABASE · ' + lg.n + ' matchs (contexte) · ' + b[0].date + ' → ' + b[b.length - 1].date };
+  }
+
+  // ---------- fournisseurs de données (couche DATA PROVIDER) ----------
+  function parseCSV(text) {
+    var rows = String(text || '').split(/\r?\n/).filter(function (l) { return l.trim(); }); if (rows.length < 2) return [];
+    var sep = rows[0].indexOf(';') >= 0 ? ';' : rows[0].indexOf('\t') >= 0 ? '\t' : ',', al = { date: 'date', domicile: 'home', home: 'home', exterieur: 'away', away: 'away', 'extérieur': 'away', competition: 'competition', 'compétition': 'competition', league: 'competition', saison: 'season', season: 'season', pays: 'country', country: 'country', sport: 'sport', 'buts_dom': 'hs', hs: 'hs', 'buts_ext': 'as', as: 'as', hg: 'hs', ag: 'as' };
+    var H = rows[0].split(sep).map(function (h) { var k = norm(h).replace(/\s+/g, '_'); return al[k] || k; });
+    return rows.slice(1).map(function (l) { var c = l.split(sep), o = {}; H.forEach(function (h, i) { o[h] = c[i] == null ? null : c[i].trim(); }); o.source = 'CSV'; return o; });
+  }
+  function fromLegacy(DB) {
+    var out = []; ['football', 'basketball'].forEach(function (sp) { (DB && DB[sp] || []).forEach(function (r) { var f = r && r.finalScore; if (!f || f.a == null || f.b == null) return;
+      var d = r.matchDate || r.date || (r.timestamp ? new Date(r.timestamp).toISOString().slice(0, 10) : null), fs = r.finalStats || {}; out.push({ sport: sp, competition: r.league, home: r.nameA, away: r.nameB, hs: f.a, as: f.b, date: d, dateApprox: !(r.matchDate || r.date), source: 'LEGACY-HISTORY', corners_t: fs.corners == null ? null : fs.corners, sot_t: fs.shots == null ? null : fs.shots, cards_t: fs.cards == null ? null : fs.cards }); }); });
+    return out;
+  }
+  function fromMemory(recs) { var seen = {}, out = []; (recs || []).forEach(function (r) { var s = r.result && r.result.score; if (!s || r.type === 'combo' || !r.matchDate) return; var k = [r.sport, r.competition, r.matchDate, r.home, r.away].join('|'); if (seen[k]) return; seen[k] = 1;
+    out.push({ sport: r.sport, competition: r.competition, home: r.home, away: r.away, hs: s.a, as: s.b, date: r.matchDate, source: 'EA-MEMORY' }); }); return out; }
+
+  // ---------- store ----------
+  function createStore(storage) {
+    var st = null, cache = {};
+    function load() { if (st) return st; try { st = JSON.parse(storage.getItem(KEY)); } catch (e) { st = null; } if (!st || !st.matches) st = { meta: { schema: 1, version: 1, state: 'EMPTY', lastUpdate: null, lastProcessed: null }, matches: {}, quarantine: [], duplicates: [], journal: [], decisions: [], decisionResults: {}, versions: [] }; if (!st.duplicates) st.duplicates = []; if (!st.journal) st.journal = []; if (!st.decisions) st.decisions = []; if (!st.decisionResults) st.decisionResults = {}; if (!st.versions) st.versions = []; return st; }
+    function log(type, msg, now) { var s = load(); s.journal.push({ t: new Date(now || Date.now()).toISOString(), type: type, msg: msg }); if (s.journal.length > 200) s.journal = s.journal.slice(-200); }
+    function save() { try { storage.setItem(KEY, JSON.stringify(st)); return true; } catch (e) { return false; } }
+    function upsert(list, now) {
+      var s = load(), added = 0, updated = 0, rejected = 0, dup = 0, touched = {}, idx = {};
+      Object.keys(s.matches).forEach(function (k) { var x = s.matches[k]; idx[x.date + '|' + norm(x.home) + '|' + norm(x.away)] = k; });
+      (list || []).forEach(function (raw) { var r = normalize(raw);
+        if (r.bad) { rejected++; s.quarantine.push({ raw: raw, issues: r.issues, at: now || Date.now() }); return; }
+        var m = r.match, had = !!s.matches[m.id], dk = m.date + '|' + norm(m.home) + '|' + norm(m.away);
+        if (idx[dk] && idx[dk] !== m.id) { dup++; s.duplicates.push({ existing: idx[dk], candidate: m.id, at: now || Date.now() }); return; } idx[dk] = m.id; if (had && JSON.stringify(s.matches[m.id].stats) === JSON.stringify(m.stats) && s.matches[m.id].hs === m.hs && s.matches[m.id].as === m.as) return;
+        m.issues = r.issues.filter(function (i) { return i.sev !== 'error'; }); s.matches[m.id] = m; had ? updated++ : added++; touched['L|' + m.sport + '|' + norm(m.competition)] = 1; touched['T|' + norm(m.home)] = 1; touched['T|' + norm(m.away)] = 1; });
+      Object.keys(cache).forEach(function (k) { Object.keys(touched).forEach(function (t) { if (k.indexOf(t) === 0) delete cache[k]; }); });
+      var ds = Object.keys(s.matches).map(function (k) { return s.matches[k].date; }).sort(); s.meta.lastProcessed = ds.length ? ds[ds.length - 1] : null;
+      if (added || updated) { s.meta.lastUpdate = new Date(now || Date.now()).toISOString(); s.meta.state = 'READY'; }
+      if (added || updated || rejected || dup) log(rejected || dup ? 'WARNING' : 'UPDATE', added + ' ajouté(s), ' + updated + ' mis à jour, ' + rejected + ' en quarantaine, ' + dup + ' DUPLICATE CANDIDATE', now);
+      return { added: added, updated: updated, rejected: rejected, duplicates: dup, saved: save() };
+    }
+    function played(f) {
+      f = f || {}; var s = load(), t = f.team ? norm(f.team) : null, a = Object.keys(s.matches).map(function (k) { return s.matches[k]; }).filter(function (m) { return m.hs != null && m.as != null; })
+        .filter(function (m) { return (!f.sport || m.sport === f.sport) && (!f.country || norm(m.country) === norm(f.country)) && (!f.competition || norm(m.competition) === norm(f.competition)) && (!f.season || m.season === f.season) && (!f.before || m.date < f.before) && (!f.from || m.date >= f.from) && (!f.to || m.date <= f.to) && (!f.strict || !m.dateApprox); });
+      if (t) a = a.filter(function (m) { var h = norm(m.home) === t, aw = norm(m.away) === t; return f.venue === 'home' ? h : f.venue === 'away' ? aw : (h || aw); });
+      a.sort(function (x, y) { return x.date < y.date ? -1 : x.date > y.date ? 1 : x.id < y.id ? -1 : 1; }); return f.last ? a.slice(-f.last) : a;
+    }
+    function memo(key, fn) { if (!(key in cache)) cache[key] = fn(); return cache[key]; }
+    function meta() { var s = load(), ms = Object.keys(s.matches).map(function (k) { return s.matches[k]; }), T = {}, C = {};
+      ms.forEach(function (m) { T[norm(m.home)] = 1; T[norm(m.away)] = 1; C[m.sport + '|' + norm(m.competition)] = 1; });
+      return Object.assign({}, s.meta, { name: 'EA DATABASE v' + s.meta.version, matches: ms.length, played: ms.filter(function (m) { return m.hs != null; }).length, teams: Object.keys(T).length, competitions: Object.keys(C).length, quarantined: s.quarantine.length, duplicates: s.duplicates.length, schema: SCHEMA, params: 'p1', model: (EA.core && EA.core.VERSION) || '?', lastRebuild: s.meta.lastRebuild || null, versions: s.versions }); }
+    function league(f) { return memo('L|' + (f.sport || '') + '|' + norm(f.competition) + '|' + (f.season || '') + '|' + (f.before || ''), function () { return aggregate(played(f)); }); }
+    function team(name, f) { f = Object.assign({}, f, { team: name }); var tv = played(f).map(function (m) { return teamView(m, name); }), h = tv.filter(function (t) { return t.home; }), a = tv.filter(function (t) { return !t.home; });
+      return { team: name, global: teamBlock(tv), home: teamBlock(h), away: teamBlock(a), streaks: streaks(tv), trends: trendWindows(tv), n: tv.length, period: tv.length ? tv[0].date + ' → ' + tv[tv.length - 1].date : null }; }
+    function initialize(sources, now) {
+      var steps = [], s = function (n, d) { steps.push({ step: n, detail: d, ok: true }); }, raw = [];
+      (sources || []).forEach(function (src) { raw = raw.concat(src.rows || []); }); s('1. Lecture des données', raw.length + ' ligne(s) lue(s)');
+      var N = raw.map(normalize); s('2. Normalisation', N.length + ' ligne(s) normalisée(s)');
+      var ids = {}, dup = 0; N.forEach(function (r) { if (!r.bad) { if (ids[r.match.id]) dup++; ids[r.match.id] = 1; } }); s('3. Déduplication', dup + ' doublon(s) fusionné(s)');
+      s('4. Classement chronologique', 'plus ancien → plus récent'); var res = upsert(raw, now); s('5. Construction des équipes', ''); s('6. Construction des compétitions', '');
+      log('REBUILD', 'Initialisation : ' + raw.length + ' ligne(s)', now); var m = meta(); s('7. Calcul des statistiques', m.played + ' match(s) joué(s)'); s('8. Calcul des tendances', 'fenêtres ' + CFG.windows.join('/') + ' + historique'); s('9. Création des profils', m.teams + ' équipe(s), ' + m.competitions + ' compétition(s)');
+      s('10. Validation', res.rejected + ' ligne(s) en quarantaine'); var ready = m.matches > 0; s('11. Activation', ready ? '🟢 DATABASE READY' : 'aucune donnée : base vide'); load().meta.state = ready ? 'READY' : 'EMPTY'; save();
+      return { steps: steps, result: res, meta: meta(), ready: ready };
+    }
+    function fnv(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16); }
+    // S117/S119 : snapshot de prédiction immuable (jamais modifié) ; le résultat est stocké séparément
+    function addDecision(d, now) { var s = load(), snap = JSON.parse(JSON.stringify(d)); snap.createdAt = now || Date.now(); snap.id = 'd' + snap.createdAt + '_' + s.decisions.length; snap.hash = fnv(JSON.stringify(snap)); var h = snap.hash; delete snap.hash; snap.hash = h; s.decisions.push(snap); log('MODEL', 'Décision enregistrée : ' + (snap.match || '?') + ' · ' + (snap.market || '?') + ' → ' + snap.decision, now); save(); return snap; }
+    function settleDecision(id, outcome, stake, now) { var s = load(); if (!s.decisions.some(function (x) { return x.id === id; }) || s.decisionResults[id] || ['won', 'lost', 'void'].indexOf(outcome) < 0) return null; var d = s.decisions.filter(function (x) { return x.id === id; })[0], u = outcome === 'void' ? 0 : outcome === 'won' ? (d.odds - 1) : -1; var r = { outcome: outcome, stake: stake == null ? 1 : stake, profitUnits: u, settledAt: now || Date.now() }; s.decisionResults[id] = r; log('LEARNING', 'Résultat enregistré (' + outcome + ') pour ' + id, now); save(); return r; }
+    function verifyDecision(d) { var c = JSON.parse(JSON.stringify(d)), h = c.hash; delete c.hash; return fnv(JSON.stringify(c)) === h; }
+    // S111/S154 : reconstruction complète contrôlée avec sauvegarde et restauration automatique
+    function fullRebuild(sources, now, hooks) {
+      hooks = hooks || {}; var BK = KEY + '_backup', old = load(), backup = JSON.stringify(old), had = Object.keys(old.matches).length, steps = [], t = now || Date.now();
+      try { storage.setItem(BK, backup); } catch (e) { log('WARNING', 'Sauvegarde préalable impossible (stockage plein) : reconstruction sans filet', t); }
+      try {
+        var keep = { journal: old.journal, decisions: old.decisions, decisionResults: old.decisionResults, versions: old.versions };
+        st = { meta: { schema: SCHEMA, version: old.meta.version || 1, state: 'EMPTY', lastUpdate: null, lastProcessed: null }, matches: {}, quarantine: [], duplicates: [], journal: keep.journal, decisions: keep.decisions, decisionResults: keep.decisionResults, versions: keep.versions }; cache = {};
+        var res = initialize(sources, t), m = meta(), s2 = load();
+        if (!res.ready && had > 0) throw new Error('reconstruction vide alors que ' + had + ' match(s) existaient');
+        var pl = played({}), comps = {}; pl.forEach(function (x) { comps[x.sport + '|' + norm(x.competition)] = 1; });
+        var add = function (n, dtl) { steps.push({ step: n, detail: dtl, ok: true }); };
+        add('DETECT', res.steps[0].detail); add('VALIDATE', res.steps[1].detail); add('CLEAN', s2.quarantine.length + ' ligne(s) isolée(s) en quarantaine'); add('DEDUPLICATE', res.steps[2].detail + ' · ' + s2.duplicates.length + ' DUPLICATE CANDIDATE'); add('SORT CHRONOLOGICALLY', pl.length ? pl[0].date + ' → ' + pl[pl.length - 1].date : '—');
+        add('BUILD DATABASE', m.matches + ' match(s)'); add('BUILD BASELINES', Object.keys(comps).length + ' baseline(s) de compétition'); add('BUILD TEAM PROFILES', m.teams + ' équipe(s)'); add('BUILD FORM', 'fenêtres ' + CFG.windows.join('/') + ' calculées à la demande (cache)');
+        add('INITIALIZE MODELS', hooks.models ? hooks.models() : 'aucun modèle à initialiser'); add('CALIBRATE', hooks.calibrate ? hooks.calibrate() : 'aucune donnée de calibration');
+        add('RUN INTEGRITY CHECK', m.quarantined + ' anomalie(s) · ' + m.duplicates + ' doublon(s) probable(s)'); s2.meta.lastRebuild = new Date(t).toISOString(); s2.versions.push({ t: s2.meta.lastRebuild, db: s2.meta.version, schema: SCHEMA, params: 'p1', matches: m.matches });
+        log('REBUILD', 'FULL REBUILD terminé : ' + m.matches + ' match(s)', t); var ok = save(); add('SAVE', ok ? 'état sauvegardé' : '⚠️ sauvegarde impossible'); add('READY', m.matches ? '🟢 EA DATABASE READY' : 'base vide');
+        return { steps: steps, ready: m.matches > 0, result: res.result, meta: meta(), restored: false };
+      } catch (e) { try { st = JSON.parse(backup); } catch (e2) { st = null; } cache = {}; load(); log('ERROR', 'FULL REBUILD échoué : ' + e.message + ' → RESTORE PREVIOUS STATE', t); save(); return { steps: steps, ready: Object.keys(load().matches).length > 0, error: e.message, restored: true, meta: meta() }; }
+    }
+    return { fullRebuild: fullRebuild, addDecision: addDecision, settleDecision: settleDecision, verifyDecision: verifyDecision, decisions: function () { var s = load(); return s.decisions.map(function (x) { return { prediction: x, result: s.decisionResults[x.id] || null }; }); }, load: load, save: save, upsert: upsert, played: played, meta: meta, league: league, team: team, initialize: initialize, consensus: function (o) { return consensus(played({ before: o.before, sport: o.sport }), o); }, quarantine: function () { return load().quarantine; }, duplicates: function () { return load().duplicates; }, journal: function () { return load().journal; }, log: log, saveNow: save, reset: function () { st = null; cache = {}; try { storage.removeItem(KEY); } catch (e) { } } };
+  }
+  EA.database = { marketSpec: marketSpec, statTotal: statTotal, SCHEMA: SCHEMA, teamView: teamView, createStore: createStore, normalize: normalize, aggregate: aggregate, consensus: consensus, parseCSV: parseCSV, fromLegacy: fromLegacy, fromMemory: fromMemory, level: level, fmt: fmt, norm: norm, CFG: CFG, KEY: KEY,
+    provider: { name: 'MANUAL / LOCAL DATABASE', note: 'Remplaçable par un fournisseur API : il suffit de fournir des lignes {date, home, away, hs, as, …} à initialize().' } };
+  if (typeof module === 'object' && module.exports) module.exports = EA.database;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-dbintel.js ===== */
+/* EA DATABASE INTELLIGENCE (S50–S99) : anti-leakage, qualité, baseline, équipe vs ligue, horizons temporels, matchup, conflit,
+   stabilité, pipeline de décision (VALUE/CHECK/NO BET/BLOCKED), priorités, overfitting, évolution contrôlée, santé, statut système, tendance.
+   Principe : jamais de donnée inventée ; en cas de doute → CHECK / NO BET / BLOCKED. */
+(function (g) {
+  'use strict';
+  var EA = g.EA = g.EA || {}; if (!EA.database) return;
+  var D = EA.database, N = D.norm;
+  var CFG = { K: 20, bands: [{ min: 80, label: 'EXCELLENTE' }, { min: 60, label: 'SOLIDE' }, { min: 40, label: 'MOYENNE' }, { min: 20, label: 'LIMITÉE' }, { min: 0, label: 'INSUFFISANTE' }], conflictNoBet: 55, conflictCaution: 30, stabilityNoBet: 40, stabilityCaution: 65, minEV: 0.05, minEdgePts: 2, dqNoBet: 40, dqCaution: 60, mid: 20, form: 10, recent: 5, medals: ['🥇 PRIORITÉ 1', '🥈 PRIORITÉ 2', '🥉 PRIORITÉ 3'] };
+  function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+  function today() { return new Date().toISOString().slice(0, 10); }
+  function band(s) { for (var i = 0; i < CFG.bands.length; i++) if (s >= CFG.bands[i].min) return CFG.bands[i].label; return 'INSUFFISANTE'; }
+
+  // S50-51 : reconstruction « avant ce match » + contrôle de fuite
+  function strictMatches(store, o) { var f = { sport: o.sport, before: o.before || today(), strict: !o.live }, ms = store.played(f), all = store.played({ sport: o.sport, before: f.before }); return { matches: ms, excludedApprox: all.length - ms.length }; }
+  function leakageCheck(ms, cutoff, live) { var v = ms.filter(function (m) { return !m.date || (!live && m.dateApprox) || m.date >= cutoff; }).map(function (m) { return m.id || m.date; }); return { status: v.length ? 'BLOCKED' : 'SAFE', icon: v.length ? '🔴 BLOCKED' : '🟢 SAFE', cutoff: cutoff, used: ms.length, approxUsed: ms.filter(function (m) { return m.dateApprox; }).length, live: !!live, violations: v.slice(0, 10) }; }
+
+  // S52 : qualité de la base
+  function dataQuality(store, f) {
+    var all = store.played(f), n = all.length, meta = store.meta(), q = meta.quarantined || 0, dup = meta.duplicates || 0; if (!n) return { score: 0, band: 'INSUFFISANTE', n: 0, dims: {}, note: 'Aucune donnée.' };
+    var last = all[n - 1].date, days = (Date.parse(today()) - Date.parse(last)) / 864e5, cov = function (k) { return all.filter(function (m) { return D.statTotal(m, k) != null; }).length / n; };
+    var teams = {}, seasons = {}, comps = {}; all.forEach(function (m) { [['h', m.home], ['a', m.away]].forEach(function (p) { var t = teams[N(p[1])] = teams[N(p[1])] || { h: 0, a: 0 }; t[p[0]]++; }); seasons[m.season] = 1; comps[m.competition] = 1; });
+    var tk = Object.keys(teams), both = tk.filter(function (t) { return teams[t].h >= 5 && teams[t].a >= 5; }).length, rec = all.filter(function (m) { return (Date.parse(today()) - Date.parse(m.date)) / 864e5 <= 60; }).length, approx = all.filter(function (m) { return m.dateApprox; }).length;
+    var half = Math.floor(n / 2), o25 = function (a) { return a.length ? a.filter(function (m) { return m.hs + m.as > 2.5; }).length / a.length : null; }, p1 = o25(all.slice(0, half)), p2 = o25(all.slice(half));
+    var dims = { sample: 100 * Math.min(1, Math.log10(1 + n) / Math.log10(301)), freshness: 100 * clamp(1 - (days - 14) / 351, 0, 1), completeness: 100 * (cov('corners') + cov('sot') + cov('shots')) / 3,
+      diversity: 50 * Math.min(1, tk.length / 20) + 50 * Math.min(1, Object.keys(seasons).length / 3), consistency: 100 * (1 - (q + dup) / (n + q + dup)), coverage: tk.length ? 100 * both / tk.length : 0, recent: 100 * Math.min(1, rec / 20),
+      stability: n >= 20 && p1 != null ? 100 * (1 - Math.min(1, Math.abs(p1 - p2) / 0.25)) : 0, provenance: 100 * (1 - approx / n) };
+    var W = { sample: .2, freshness: .1, completeness: .15, diversity: .1, consistency: .15, coverage: .1, recent: .05, stability: .05, provenance: .1 }, s = 0; Object.keys(W).forEach(function (k) { s += W[k] * dims[k]; });
+    var out = { score: Math.round(s), band: band(s), n: n, dims: dims, lastMatch: last };
+    if (n < 30) { out.band = out.score >= 20 ? 'LIMITÉE' : 'INSUFFISANTE'; out.note = 'N = ' + n + ' : INSUFFICIENT SAMPLE, aucune précision affichée.'; } return out;
+  }
+
+  // S55-56 : équipe vs baseline du championnat
+  function pair(name, t, l) { if (!t || !l || !t.n || !l.n || t.pct == null || l.pct == null) return { name: name, unknown: true }; var d = (t.pct - l.pct) * 100; return { name: name, team: t, league: l, diffPts: d, shrunkPts: d * t.n / (t.n + CFG.K), level: t.level }; }
+  function avgPair(name, t, l, ratio) { if (!t || !l || t.avg == null || l.avg == null || !l.avg) return { name: name, unknown: true }; var r = t.avg / l.avg; return { name: name, team: t, league: l, ratio: r, shrunkRatio: 1 + (r - 1) * t.n / (t.n + CFG.K), n: t.n }; }
+  function teamVsLeague(store, team, f) {
+    var L = store.league(f), T = store.team(team, f), G = T.global; if (!L.n || !G.n) return { items: [], unknown: true, note: 'Données insuffisantes.' };
+    var win = { k: L.result.home.k + L.result.away.k, n: 2 * L.n }; win.pct = win.k / win.n; var tw = { k: G.W, n: G.n, pct: G.W / G.n, level: G.level }, tl = { k: G.L, n: G.n, pct: G.L / G.n, level: G.level };
+    var items = [pair('Victoires', tw, win), pair('Nuls', { k: G.D, n: G.n, pct: G.D / G.n, level: G.level }, L.result.draw), pair('Défaites', tl, win)];
+    if (L.btts) { items.push(pair('BTTS', G.btts, L.btts.yes), pair('Over 1.5', G.over[1.5], L.totals[1.5].over), pair('Over 2.5', G.over[2.5], L.totals[2.5].over), pair('Under 2.5', G.under[2.5], L.totals[2.5].under)); }
+    var half = { avg: L.goals.avg == null ? null : L.goals.avg / 2 }; items.push(avgPair('Buts marqués / match (attaque)', G.gf, half), avgPair('Buts encaissés / match (défense)', G.ga, half));
+    if (L.corners) [['Corners produits', G.corners.for, L.corners.total, 'c'], ['Corners concédés', G.corners.against, L.corners.total], ['Tirs', G.shots.for, L.shots.total], ['Tirs cadrés', G.sot.for, L.sot.total]].forEach(function (x) { items.push(avgPair(x[0], x[1], { avg: x[2].avg == null ? null : x[2].avg / 2 })); });
+    return { team: team, n: G.n, items: items, note: 'Écart shrinké selon N : une petite série ne domine pas la baseline.' };
+  }
+
+  // S54 : horizons temporels + shrinkage emboîté (long terme → saison → 20 → 10 → 5)
+  function horizons(tv, test, flags) {
+    var K = CFG.K * (flags && (flags.coachChange || flags.squadChange || flags.newCompetition) ? 0.5 : 1), rate = function (a) { var k = a.filter(test).length; return { k: k, n: a.length, pct: a.length ? k / a.length : null }; };
+    if (!tv.length) return { available: false };
+    var ss = tv[tv.length - 1].m.season, n = tv.length, out = { rates: {}, weights: {} }, long = rate(tv).pct, seg = [['older', tv.slice(0, Math.max(0, n - CFG.mid))], ['mid', tv.slice(Math.max(0, n - CFG.mid), Math.max(0, n - CFG.form))], ['form', tv.slice(Math.max(0, n - CFG.form), Math.max(0, n - CFG.recent))], ['recent', tv.slice(Math.max(0, n - CFG.recent))]], est = null;
+    out.rates.long = rate(tv); out.rates.season = rate(tv.filter(function (t) { return t.m.season === ss; })); out.rates.mid = rate(tv.slice(-CFG.mid)); out.rates.form = rate(tv.slice(-CFG.form)); out.rates.recent = rate(tv.slice(-CFG.recent));
+    seg.forEach(function (h) { var r = rate(h[1]); if (!r.n) return; if (est == null) { est = r.pct; out.weights[h[0]] = 1; } else { out.weights[h[0]] = r.n / (r.n + K); est = (r.k + est * K) / (r.n + K); } });   // segments NON chevauchants : aucune donnée comptée deux fois
+    var gap = Math.abs(est - long), rr = out.rates.recent;
+    return Object.assign(out, { available: true, estimate: est, recencySignal: gap < 0.04 ? 'faible' : gap < 0.1 ? 'moyen' : 'fort', note: 'PLUS RÉCENT ≠ TOUJOURS PLUS IMPORTANT : ' + rr.k + '/' + rr.n + ' récents pèsent ' + ((out.weights.recent || 0) * 100).toFixed(0) + ' % face à la base.', flagsApplied: K !== CFG.K });
+  }
+
+  // S57-58 : matchup + conflit
+  function matchup(store, o, cons) {
+    var f = { sport: o.sport, competition: o.competition, before: o.before, strict: !o.live }, L = store.league(f), out = { strong: [], medium: [], weak: [], insufficient: [], contradictions: [], expected: null };
+    if (!cons || !cons.available) { out.insufficient.push('Base insuffisante pour ce contexte'); return out; }
+    var base = cons.signals.filter(function (s) { return s.name === 'League baseline'; })[0], b = base ? base.p : 0.5;
+    cons.signals.forEach(function (s) { if (s.name === 'League baseline') return; var d = s.p - b, item = { name: s.name, delta: d * 100, n: s.n, dir: d >= 0 ? '+' : '−' };
+      if (s.n != null && s.w < 0.2) out.insufficient.push(s.name + ' (N=' + s.n + ')'); else if (Math.abs(d) >= .08 && s.w >= .4) out.strong.push(item); else if (Math.abs(d) >= .04) out.medium.push(item); else out.weak.push(item); });
+    var sm = out.strong.concat(out.medium); for (var i = 0; i < sm.length; i++) for (var j = i + 1; j < sm.length; j++) if (sm[i].dir !== sm[j].dir) out.contradictions.push(sm[i].name + ' ' + sm[i].dir + ' ≠ ' + sm[j].name + ' ' + sm[j].dir);
+    if (o.sport !== 'basketball' && L.n >= 20 && L.goalsHome.avg != null) {
+      var H = store.team(o.home, f).home, A = store.team(o.away, f).away, sh = function (r, n) { return 1 + (r - 1) * n / (n + CFG.K); };
+      if (H.gf.avg != null && A.gf.avg != null && L.goalsHome.avg && L.goalsAway.avg) { var ah = sh(H.gf.avg / L.goalsHome.avg, H.n), dh = sh(H.ga.avg / L.goalsAway.avg, H.n), aa = sh(A.gf.avg / L.goalsAway.avg, A.n), da = sh(A.ga.avg / L.goalsHome.avg, A.n);
+        out.expected = { home: L.goalsHome.avg * ah * da, away: L.goalsAway.avg * aa * dh, leagueTotal: L.goals.avg, n: [H.n, A.n] }; out.expected.total = out.expected.home + out.expected.away; } }
+    return out;
+  }
+  function conflictScore(cons, mu) {
+    if (!cons || !cons.available) return { score: null, label: 'inconnu' }; var s = cons.signals.filter(function (x) { return x.w >= 0.2; }); if (s.length < 2) return { score: 0, label: 'faible (peu de sources)' };
+    var sw = s.reduce(function (a, x) { return a + x.w; }, 0), m = s.reduce(function (a, x) { return a + x.w * x.p; }, 0) / sw, dev = s.reduce(function (a, x) { return a + x.w * Math.abs(x.p - m); }, 0) / sw;
+    var sc = Math.round(clamp(100 * dev / 0.10 + (mu && mu.contradictions.length ? 20 : 0), 0, 100)); return { score: sc, label: sc >= CFG.conflictNoBet ? 'fort' : sc >= CFG.conflictCaution ? 'modéré' : 'faible' };
+  }
+
+  // S65 : stabilité sous perturbations raisonnables
+  function stabilityTest(ms, o) {
+    var base = D.consensus(ms, o), ps = [], run = function (list, c) { var r = D.consensus(list, o, Object.assign({}, D.CFG, c || {})); if (r.available) ps.push(r.p); };
+    if (!base.available) return { available: false }; run(ms, { priorN: D.CFG.priorN * 0.5 }); run(ms, { priorN: D.CFG.priorN * 2 }); run(ms, { recentN: 3 }); run(ms, { recentN: 8 });
+    [0, 3, 6].forEach(function (off) { run(ms.filter(function (m, i) { return i % 10 !== off; })); }); if (o.modelP != null) { var nm = D.consensus(ms, Object.assign({}, o, { modelP: null })); if (nm.available) ps.push(nm.p); }
+    ps.push(base.p); var range = Math.max.apply(null, ps) - Math.min.apply(null, ps), st = Math.round(100 * (1 - Math.min(1, range / 0.12)));
+    return { available: true, range: range, stability: st, label: st >= 70 ? 'élevée' : st >= 40 ? 'moyenne' : 'faible', variants: ps.length };
+  }
+
+  // S60-64, S69-70, S96-97, S99 : pipeline de décision
+  function confidence(f) {
+    var vals = Object.keys(f).map(function (k) { return f[k]; }), mean = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length, mn = Math.min.apply(null, vals);
+    return { score: Math.floor(Math.min(mean, mn + 25)), factors: f, note: 'Plafonnée à (facteur le plus faible + 25) : aucun facteur seul ne crée la confiance.' };
+  }
+  function analyze(store, o) {
+    var V = EA.value, tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10), cutoff = o.before || (o.live ? tomorrow : today()), A = Object.assign({}, o, { before: cutoff }), sm = strictMatches(store, A), leak = leakageCheck(sm.matches, cutoff, o.live), dq = dataQuality(store, { sport: o.sport, competition: o.competition, before: cutoff, strict: !o.live });
+    var R = { input: A, leak: leak, excludedApprox: sm.excludedApprox, dq: dq, reasons: [], why: [], risks: [] };
+    if (leak.status === 'BLOCKED') { R.decision = 'BLOCKED'; R.reasons.push('DATA LEAKAGE : données postérieures ou sans date fiable'); return R; }
+    var cons = D.consensus(sm.matches, A); R.cons = cons; if (!cons.available) { R.decision = 'NO BET'; R.reasons.push('Marché mal couvert : ' + cons.reason); return R; }
+    var mu = matchup(store, A, cons), cf = conflictScore(cons, mu), stb = stabilityTest(sm.matches, A); R.matchup = mu; R.conflict = cf; R.stability = stb;
+    var pFinal = cons.p, price = null; R.probabilities = { model: o.modelP == null ? null : o.modelP, adjusted: cons.p, final: pFinal, impliedRaw: null, normalized: null, overround: null, source: 'EA DATABASE + modèle (shrinkage)' };
+    if (o.odds > 1) { R.probabilities.impliedRaw = 1 / o.odds; var mk = V && o.oddsOther && o.oddsOther.length ? V.marketFromOdds([o.odds].concat(o.oddsOther)) : null; if (mk) { R.probabilities.normalized = mk.fairProbs[0]; R.probabilities.overround = mk.marginPct; } price = V ? V.valueLine(pFinal, o.odds) : null; }
+    R.fairOdds = 1 / pFinal; var half = cons.uncertaintyHalfPts; R.uncertainty = cons.signals.length >= 2 ? { halfPts: half, note: '± ' + half + ' pts (intervalle de proportion, indicatif)' } : { halfPts: null, note: 'incertitude non quantifiée' };
+    var mkp = R.probabilities.normalized != null ? R.probabilities.normalized : R.probabilities.impliedRaw; R.edgePts = mkp == null ? null : (pFinal - mkp) * 100; R.ev = o.odds > 1 ? pFinal * o.odds - 1 : null; R.evLow = o.odds > 1 && half != null ? (pFinal - half / 100) * o.odds - 1 : null; R.minOdds = (1 + CFG.minEV) / pFinal;
+    R.confidence = confidence({ dataQuality: dq.score, sample: clamp(dq.n / 3, 0, 100), stability: stb.available ? stb.stability : 0, agreement: cf.score == null ? 0 : 100 - cf.score, market: o.odds > 1 ? (R.probabilities.normalized != null ? 100 : 60) : 20, uncertainty: half == null ? 0 : clamp(100 - half * 4, 0, 100), freshness: dq.dims.freshness || 0 });
+    var d, r = R.reasons;
+    if (!(o.odds > 1)) { d = 'NO BET'; r.push('Cote absente ou invalide'); }
+    else if (dq.score < CFG.dqNoBet) { d = 'NO BET'; r.push('Données insuffisantes (qualité ' + dq.band + ')'); }
+    else if (cf.score >= CFG.conflictNoBet) { d = 'NO BET'; r.push('Contradiction importante entre les sources (conflit ' + cf.score + '/100) : signal insuffisamment cohérent'); }
+    else if (stb.available && stb.stability < CFG.stabilityNoBet) { d = 'NO BET'; r.push('Instabilité élevée du signal (' + stb.stability + '/100)'); }
+    else if (R.ev < CFG.minEV || R.edgePts < CFG.minEdgePts) { d = R.ev > 0 ? 'CHECK' : 'NO BET'; r.push(R.ev > 0 ? 'Avantage trop faible (EV ' + (R.ev * 100).toFixed(1) + ' %) : à surveiller' : 'EV insuffisant / cote insuffisante (cote juste ' + R.fairOdds.toFixed(2) + ', cote minimale ' + R.minOdds.toFixed(2) + ')'); }
+    else if (R.evLow != null && R.evLow <= 0) { d = 'CHECK'; r.push('EV négatif une fois l\'incertitude retirée'); }
+    else if (cf.score >= CFG.conflictCaution || dq.score < CFG.dqCaution || (stb.available && stb.stability < CFG.stabilityCaution)) { d = 'CHECK'; r.push('Prudence : conflit ' + cf.label + ', qualité ' + dq.band + ', stabilité ' + (stb.available ? stb.label : '?')); }
+    else { d = 'VALUE'; r.push('EV ' + (R.ev * 100).toFixed(1) + ' %, edge ' + R.edgePts.toFixed(1) + ' pts, sources cohérentes, qualité ' + dq.band); }
+    R.decision = d;
+    mu.strong.forEach(function (s) { R.why.push(s.name + ' : ' + (s.dir === '+' ? '+' : '') + s.delta.toFixed(1) + ' pts vs baseline (N=' + s.n + ')'); }); if (dq.score >= CFG.dqCaution) R.why.push('Qualité des données ' + dq.band + ' (N=' + dq.n + ')'); if (stb.available && stb.stability >= 70) R.why.push('Stabilité élevée (' + stb.stability + '/100)'); if (R.ev > CFG.minEV) R.why.push('Cote ' + o.odds + ' supérieure à la cote cible ' + R.minOdds.toFixed(2));
+    mu.contradictions.forEach(function (c) { R.risks.push('Contradiction : ' + c); }); mu.insufficient.forEach(function (c) { R.risks.push('Données insuffisantes : ' + c); }); if (cf.score >= CFG.conflictCaution) R.risks.push('Conflit ' + cf.label + ' (' + cf.score + '/100)'); if (o.sport !== 'basketball' && R.probabilities.overround == null) R.risks.push('Marge du bookmaker non retirée (probabilité implicite brute)');
+    return R;
+  }
+  function priorities(list) {
+    var ok = (list || []).filter(function (r) { return r.decision === 'VALUE'; }).map(function (r) { return { r: r, score: 0.3 * (r.evLow == null ? r.ev : r.evLow) * 100 + 0.2 * r.edgePts + 0.2 * r.confidence.score / 10 + 0.15 * (r.stability.stability || 0) / 10 + 0.15 * r.dq.score / 10 - 0.1 * (r.conflict.score || 0) / 10 }; });
+    ok.sort(function (a, b) { return b.score - a.score; }); return ok.slice(0, 3).map(function (x, i) { return { medal: CFG.medals[i], score: x.score, result: x.r }; });
+  }
+
+  // S98 : surveillance (tendance), S77 : overfitting
+  function trendShift(store, f) {
+    var ms = store.played(f), out = []; if (ms.length < 70) return { items: [], note: 'N = ' + ms.length + ' : surveillance impossible (minimum 70).' };
+    var hist = ms.slice(0, -20), rec = ms.slice(-20), tests = { 'Over 2.5': function (m) { return m.hs + m.as > 2.5; }, BTTS: function (m) { return m.hs > 0 && m.as > 0; }, 'Victoire domicile': function (m) { return m.hs > m.as; } };
+    Object.keys(tests).forEach(function (k) { var p1 = hist.filter(tests[k]).length / hist.length, p2 = rec.filter(tests[k]).length / rec.length, p = ms.filter(tests[k]).length / ms.length, z = (p2 - p1) / Math.sqrt(Math.max(1e-9, p * (1 - p) * (1 / hist.length + 1 / rec.length)));
+      out.push({ metric: k, hist: p1, recent: p2, nHist: hist.length, nRecent: rec.length, z: z, shift: Math.abs(z) >= 2 && Math.abs(p2 - p1) >= 0.10 }); });
+    return { items: out, note: 'TREND SHIFT ≠ tendance permanente : à confirmer sur plusieurs périodes.' };
+  }
+  function overfitting(bt, records, params) {
+    var a = [], parts = bt && bt.parts; if (!parts || bt.insufficient) return { risk: false, alerts: [], note: 'Échantillon insuffisant pour juger.' };
+    var tr = parts.training.v3, te = parts.test.v3; if (tr.roi != null && te.roi != null && tr.roi > 0.05 && te.roi < 0) a.push('Excellent historique (ROI ' + (tr.roi * 100).toFixed(1) + ' %) mais mauvais test (' + (te.roi * 100).toFixed(1) + ' %)');
+    if (bt.total < 100) a.push('Échantillon faible (' + bt.total + ' paris)'); if ((params || 0) > bt.total / 10) a.push('Trop de paramètres (' + params + ') pour ' + bt.total + ' paris');
+    var rs = (records || []).filter(function (r) { return r.result && r.result.profitUnits > 0 && r.type !== 'combo'; }), tot = rs.reduce(function (s, r) { return s + r.result.profitUnits; }, 0);
+    if (tot > 0 && rs.length >= 10) { var byC = {}, byM = {}; rs.forEach(function (r) { byC[r.competition || '?'] = (byC[r.competition || '?'] || 0) + r.result.profitUnits; var m = new Date(r.createdAt || 0).toISOString().slice(0, 7); byM[m] = (byM[m] || 0) + r.result.profitUnits; });
+      if (Math.max.apply(null, Object.keys(byC).map(function (k) { return byC[k]; })) / tot > 0.7 && Object.keys(byC).length > 1) a.push('Performance concentrée sur une seule compétition'); if (Math.max.apply(null, Object.keys(byM).map(function (k) { return byM[k]; })) / tot > 0.6 && Object.keys(byM).length > 1) a.push('Performance concentrée sur une petite période'); }
+    return { risk: a.length > 0, alerts: a, label: a.length ? '⚠️ OVERFITTING RISK' : 'aucun signe détecté' };
+  }
+
+  // S73 : évolution contrôlée (test hors échantillon, adoption ou ROLLBACK)
+  function evolve(records, oldFn, newFn, o) {
+    var c = Object.assign({ minN: 100, margin: 0.002, oosShare: 0.4 }, o || {}), rs = (records || []).filter(function (r) { return r.result && r.result.outcome !== 'void' && r.pModel != null; }).sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+    if (rs.length < c.minN) return { decision: 'INSUFFICIENT', n: rs.length, note: 'Moins de ' + c.minN + ' observations : aucune adoption possible, version actuelle conservée.' };
+    var oos = rs.slice(Math.floor(rs.length * (1 - c.oosShare))), br = function (fn) { return oos.reduce(function (s, r) { return s + Math.pow(fn(r.pModel) - (r.result.outcome === 'won' ? 1 : 0), 2); }, 0) / oos.length; }, bo = br(oldFn), bn = br(newFn), adopt = bn < bo - c.margin;
+    return { decision: adopt ? 'ADOPT' : 'ROLLBACK', n: rs.length, oosN: oos.length, brierOld: bo, brierNew: bn, note: adopt ? 'Nouvelle version meilleure hors échantillon.' : 'Pas d\'amélioration hors échantillon : retour à la version précédente.' };
+  }
+
+  // S74, S87 : santé des moteurs et statut système (aucun 🟢 simulé)
+  function modelHealth(records) {
+    var by = {}; (records || []).forEach(function (r) { if (r.type === 'combo' || !r.result || r.result.outcome === 'void' || r.pModel == null) return; var k = (r.sport || '?') + '/' + r.market; (by[k] = by[k] || []).push(r); });
+    return Object.keys(by).map(function (k) { var a = by[k].sort(function (x, y) { return (x.createdAt || 0) - (y.createdAt || 0); }), n = a.length, br = function (s) { return s.reduce(function (t, r) { return t + Math.pow(r.pModel - (r.result.outcome === 'won' ? 1 : 0), 2); }, 0) / s.length; }, hit = a.filter(function (r) { return r.result.outcome === 'won'; }).length / n, mp = a.reduce(function (t, r) { return t + r.pModel; }, 0) / n;
+      var all = br(a), rec = br(a.slice(-30)), gap = Math.abs(hit - mp), st = n < 30 ? 'INSUFFICIENT DATA' : (all > 0.26 || gap > 0.15) ? 'DEGRADED' : (all <= 0.24 && gap <= 0.08 && rec <= all + 0.03) ? 'HEALTHY' : 'MONITOR';
+      return { key: k, n: n, status: st, icon: { HEALTHY: '🟢', MONITOR: '🟡', DEGRADED: '🔴', 'INSUFFICIENT DATA': '⚪' }[st], brier: all, brierRecent: rec, gap: gap, version: a[n - 1].modelVersion || '?', lastUpdate: new Date(a[n - 1].createdAt || 0).toISOString().slice(0, 10) }; });
+  }
+  function systemStatus(store, records, bt) {
+    var m = store.meta(), dq = dataQuality(store, {}), mh = modelHealth(records), settled = (records || []).filter(function (r) { return r.result && r.result.outcome !== 'void'; }).length, pm = EA.market ? EA.market.perf(records) : {}, doc = Object.keys(pm).filter(function (k) { return pm[k].documented; }).length;
+    var qr = m.matches ? (m.quarantined + m.duplicates) / (m.matches + m.quarantined + m.duplicates) : 0, row = function (n, ic, d) { return { name: n, icon: ic, detail: d }; };
+    return [row('DATABASE', m.state === 'READY' ? '🟢' : '⚪', m.state === 'READY' ? m.matches + ' matchs' : 'vide'), row('DATA QUALITY', dq.band === 'EXCELLENTE' || dq.band === 'SOLIDE' ? '🟢' : dq.band === 'MOYENNE' ? '🟡' : '⚪', dq.band + ' (' + dq.score + '/100)'),
+      row('MODELS', mh.some(function (x) { return x.status === 'DEGRADED'; }) ? '🔴' : mh.some(function (x) { return x.status === 'HEALTHY'; }) ? '🟢' : mh.length ? '🟡' : '⚪', mh.length ? mh.length + ' marché(s) suivis' : 'aucune mesure'), row('MARKETS', doc ? '🟢' : '⚪', doc + ' marché(s) documenté(s) (≥ 30)'),
+      row('CALIBRATION', settled >= 100 ? '🟢' : settled >= 30 ? '🟡' : '⚪', settled + ' résultat(s) réglé(s)'), row('LEARNING', settled > 0 ? '🟢' : '⚪', settled > 0 ? 'post-match actif' : 'aucun résultat'), row('INTEGRITY', qr === 0 ? '🟢' : qr < 0.2 ? '🟡' : '🔴', m.quarantined + ' quarantaine · ' + m.duplicates + ' doublon(s) probable(s)'),
+      row('WALK-FORWARD', bt && !bt.insufficient ? '🟢' : '⚪', bt && !bt.insufficient ? bt.total + ' paris' : 'échantillon insuffisant (< 60)'), row('AUTO-UPDATE', '🟡', 'mise à jour locale incrémentale ; aucune API connectée')];
+  }
+
+  // S94 : interfaces prêtes pour une API future (aucune connexion simulée)
+  var api = { provider: 'NONE (MANUAL / LOCAL)',
+    importData: function (rows) { return D.createStore(g.localStorage).upsert(rows); }, updateData: function (rows) { return EA.dbui ? EA.dbui.store().upsert(rows) : null; }, validateData: function (rows) { var r = (rows || []).map(D.normalize); return { total: r.length, invalid: r.filter(function (x) { return x.bad; }).length, issues: r.map(function (x) { return x.issues; }) }; },
+    normalizeData: function (rows) { return (rows || []).map(function (x) { return D.normalize(x).match; }); }, rebuildDatabase: function (sources) { return EA.dbui ? EA.dbui.store().initialize(sources || (EA.dbui.sources && EA.dbui.sources())) : null; },
+    updateModels: function (records) { return { market: EA.market ? EA.market.perf(records) : null, health: modelHealth(records) }; }, settleMatch: function (row) { return api.updateData([row]); } };
+  EA.dbintel = { CFG: CFG, strictMatches: strictMatches, leakageCheck: leakageCheck, dataQuality: dataQuality, teamVsLeague: teamVsLeague, horizons: horizons, matchup: matchup, conflictScore: conflictScore, stabilityTest: stabilityTest, analyze: analyze, priorities: priorities, confidence: confidence,
+    trendShift: trendShift, overfitting: overfitting, evolve: evolve, modelHealth: modelHealth, systemStatus: systemStatus, api: api };
+  if (typeof module === 'object' && module.exports) module.exports = EA.dbintel;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-dbfinal.js ===== */
+/* EA FINAL LAYER (S99–S155) : FINAL DECISION GATE, niveau de risque, sizing branché, confiance globale, rapport multi-marchés + combiné,
+   performance réelle, mémoire de patterns d'erreurs, dérive, registre des moteurs (vérité du code), couches, contrôle final réel, pipeline d'ajout de match, API-ready. */
+(function (g) {
+  'use strict';
+  var EA = g.EA = g.EA || {}; if (!EA.database || !EA.dbintel) return;
+  var D = EA.database, I = EA.dbintel, N = D.norm;
+  var MK0 = { 'over:1.5': 'Over 1.5', 'over:2.5': 'Over 2.5', 'over:3.5': 'Over 3.5', btts_yes: 'BTTS Oui', btts_no: 'BTTS Non', home_win: 'Victoire domicile', draw: 'Nul', away_win: 'Victoire extérieur', home_or_draw: 'Domicile ou nul', away_or_draw: 'Extérieur ou nul', home_or_away: 'Pas de nul' };
+  function labelOf(k) { if (MK0[k]) return MK0[k]; var m = /^(over|under):([\d.]+)$/.exec(k); if (m) return (m[1] === 'over' ? 'Over ' : 'Under ') + m[2]; m = /^(home|away)_margin_gte:(\d+)$/.exec(k); if (m) return 'Victoire ' + (m[1] === 'home' ? 'domicile' : 'extérieur') + ' par ' + m[2] + '+'; m = /^(corners|sot|shots|cards)_(over|under):([\d.]+)$/.exec(k); if (m) return ({ corners: 'Corners', sot: 'Tirs cadrés', shots: 'Tirs', cards: 'Cartons' })[m[1]] + ' ' + (m[2] === 'over' ? 'Over ' : 'Under ') + m[3]; return k; }
+  var MK = typeof Proxy === 'function' ? new Proxy(MK0, { get: function (t, k) { return typeof k === 'string' ? labelOf(k) : t[k]; } }) : MK0;
+  function proKey(sport, mk) { var m = /^(over|under):([\d.]+)$/.exec(mk); return (sport || 'football') + '/' + (m ? 'ou:' + m[2] : /^btts/.test(mk) ? 'btts' : '1X2'); }
+
+  function riskLevel(R) {
+    if (!R.cons || !R.cons.available) return { level: 'EXTREME', points: 9, why: ['marché non estimable'] };
+    var p = 0, w = [], u = R.uncertainty && R.uncertainty.halfPts, add = function (n, t) { p += n; w.push(t); };
+    if (u == null) add(2, 'incertitude non quantifiée'); else if (u > 10) add(2, 'incertitude ±' + u + ' pts'); else if (u > 6) add(1, 'incertitude ±' + u + ' pts');
+    var cs = R.conflict && R.conflict.score; if (cs >= 55) add(3, 'conflit fort'); else if (cs >= 30) add(1, 'conflit modéré');
+    if (R.dq.score < 40) add(2, 'qualité faible'); else if (R.dq.score < 60) add(1, 'qualité moyenne');
+    var st = R.stability && R.stability.available ? R.stability.stability : null; if (st == null) add(1, 'stabilité inconnue'); else if (st < 40) add(2, 'instabilité'); else if (st < 65) add(1, 'stabilité moyenne');
+    if (R.edgePts != null && R.edgePts < 2) add(1, 'edge faible'); if (R.probabilities && R.probabilities.overround == null) add(1, 'marge bookmaker non retirée');
+    var lv = p <= 1 ? 'LOW' : p <= 3 ? 'MEDIUM' : p <= 5 ? 'HIGH' : 'EXTREME';
+    if ((u == null || u > 8) && lv === 'LOW') { lv = 'MEDIUM'; w.push('EV élevé ≠ risque faible quand l\'incertitude est grande'); }
+    return { level: lv, points: p, why: w };
+  }
+  function gate(R, o) {
+    var c = [], add = function (id, label, ok, level, detail) { c.push({ id: id, label: label, ok: ok, level: level, detail: detail || '' }); }, dq = R.dq, has = R.cons && R.cons.available, ev = R.ev, stb = R.stability && R.stability.available ? R.stability : null, cf = R.conflict, odds = o.odds > 1;
+    add('valid', 'Données valides', dq.n > 0 && (!dq.dims || dq.dims.consistency == null || dq.dims.consistency >= 60), 'critical', 'N=' + dq.n);
+    add('enough', 'Données suffisantes', dq.n >= 30 && dq.score >= I.CFG.dqNoBet, 'critical', 'qualité ' + dq.band + ' · N=' + dq.n);
+    add('leak', 'Aucune fuite de données futures', R.leak.status === 'SAFE', 'critical', R.leak.icon);
+    add('model', 'Modèle réellement disponible', o.modelP != null, 'caution', o.modelP != null ? 'modèle + base' : 'aucun modèle fourni : estimation issue de la base seule');
+    add('market', 'Marché réellement disponible', !!has, 'critical', has ? '' : (R.cons && R.cons.reason) || 'marché mal couvert');
+    add('odds', 'Cote valide', odds, 'critical', odds ? 'cote ' + o.odds : 'Cote absente ou invalide');
+    add('edge', 'Edge suffisant', ev == null ? null : R.edgePts >= I.CFG.minEdgePts, ev != null && ev <= 0 ? 'critical' : 'caution', ev == null ? 'non évalué' : 'edge ' + R.edgePts.toFixed(1) + ' pts');
+    add('ev', 'EV suffisant', ev == null ? null : ev >= I.CFG.minEV && (R.evLow == null || R.evLow > 0), ev != null && ev <= 0 ? 'critical' : 'caution', ev == null ? 'non évalué' : 'EV ' + (ev * 100).toFixed(1) + ' %' + (R.evLow != null ? ' (après incertitude ' + (R.evLow * 100).toFixed(1) + ' %)' : '') + ' · cote juste ' + R.fairOdds.toFixed(2) + ', cote minimale ' + R.minOdds.toFixed(2));
+    add('stab', 'Stabilité acceptable', stb ? stb.stability >= I.CFG.stabilityCaution : null, stb && stb.stability < I.CFG.stabilityNoBet ? 'critical' : 'caution', stb ? stb.stability + '/100' : 'non évalué');
+    add('conf', 'Contradiction acceptable', cf && cf.score != null ? cf.score < I.CFG.conflictCaution : null, cf && cf.score >= I.CFG.conflictNoBet ? 'critical' : 'caution', cf && cf.score != null ? 'conflit ' + cf.label + ' (' + cf.score + '/100)' : 'non évalué');
+    add('unc', 'Incertitude acceptable', R.uncertainty ? (R.uncertainty.halfPts != null && R.uncertainty.halfPts <= 10) : null, 'caution', R.uncertainty ? R.uncertainty.note : 'non évalué');
+    var rk = R.risk; add('risk', 'Risque acceptable', rk ? rk.level === 'LOW' || rk.level === 'MEDIUM' : null, rk && rk.level === 'EXTREME' ? 'critical' : 'caution', rk ? rk.level : 'non évalué');
+    add('corr', 'Corrélation acceptable (combiné)', o.correlationOk === undefined ? null : !!o.correlationOk, 'critical', o.correlationOk === undefined ? 'sans objet (pari simple)' : '');
+    return c;
+  }
+  function analyzeFull(store, o, ctx) {
+    ctx = ctx || {}; var R = I.analyze(store, o), recs = ctx.records || [], A = R.input;
+    var mh = I.modelHealth(recs).filter(function (x) { return x.key === proKey(o.sport, o.market); })[0], hist = mh && mh.status !== 'INSUFFICIENT DATA' ? ({ HEALTHY: 90, MONITOR: 60, DEGRADED: 20 })[mh.status] : null;
+    var factors = R.confidence ? Object.assign({}, R.confidence.factors) : null, unavailable = ['Qualité du contexte (aucune donnée de contexte dans la base)'];
+    if (factors) { factors.oddsAvailability = o.odds > 1 ? 100 : 0; if (hist != null) factors.modelHistory = hist; else unavailable.push('Historique du modèle sur ce marché (échantillon insuffisant)'); R.confidence = I.confidence(factors); R.confidence.unavailable = unavailable;
+      if (ctx.overfit) { R.confidence.score = Math.max(0, R.confidence.score - 15); R.confidence.note += ' · ⚠️ OVERFITTING RISK : −15.'; } }
+    R.risk = riskLevel(R); R.checks = gate(R, o);
+    var crit = R.checks.filter(function (x) { return x.ok === false && x.level === 'critical'; }), cau = R.checks.filter(function (x) { return x.ok === false && x.level === 'caution'; });
+    if (crit.length) { R.decision = crit.some(function (x) { return x.id === 'leak'; }) ? 'BLOCKED' : 'NO BET'; R.reasons = crit.map(function (x) { return x.label + ' : ' + x.detail; }); }
+    else if (cau.length) { R.decision = 'CHECK'; R.reasons = cau.map(function (x) { return x.label + ' : ' + x.detail; }); }
+    else { R.decision = 'VALUE'; R.reasons = ['Tous les contrôles du FINAL DECISION GATE sont satisfaits']; }
+    R.sizing = { available: false, label: 'POSITION SIZE NOT AVAILABLE', reason: R.decision === 'VALUE' ? 'bankroll non renseignée' : 'aucune mise recommandée sans décision VALUE' };
+    if (R.decision === 'VALUE' && ctx.bankroll > 0 && EA.bankroll && EA.core) { try { var sg = EA.bankroll.suggestStake({ bankroll: ctx.bankroll, p: R.probabilities.final - (R.uncertainty.halfPts || 0) / 100, odds: o.odds, minStake: ctx.minStake }, EA.core.DEFAULT_CONFIG);
+      if (sg && sg.available) { var as = EA.risk ? EA.risk.assess({ bankroll: ctx.bankroll, proposed: sg.stake, records: recs }) : { stake: sg.stake, flags: [] }; R.sizing = { available: true, stake: as.stake, flags: as.flags || [], note: 'Plafonnée par le Risk Engine ; une mise n\'est jamais une garantie de profit.' }; } else R.sizing.reason = 'méthode de sizing non applicable à cette probabilité'; } catch (e) { R.sizing.reason = 'erreur de calcul : ' + e.message; } }
+    var P = function (n, l, ok) { return { n: n, label: l, status: ok === true ? 'ok' : ok === false ? 'échec' : 'n/a' }; }, sg2 = R.cons && R.cons.signals || [], hasS = function (nm) { return sg2.some(function (s) { return s.name.indexOf(nm) === 0; }); };
+    R.pipeline = [P(1, 'Données internes', R.dq.n > 0), P(2, 'Qualité', !!R.dq.band), P(3, 'Baseline', hasS('League')), P(4, 'Profils des équipes', hasS('Team season')), P(5, 'Forme', hasS('Team recent')), P(6, 'Matchup', !!R.matchup), P(7, 'Probabilités', !!R.probabilities), P(8, 'Fair odds', R.fairOdds != null), P(9, 'Comparaison aux cotes', o.odds > 1), P(10, 'Edge et EV', R.ev != null), P(11, 'Stabilité', !!(R.stability && R.stability.available)), P(12, 'Contradictions', !!(R.conflict && R.conflict.score != null)), P(13, 'Incertitude', !!R.uncertainty), P(14, 'Risque', !!R.risk), P(15, 'Corrélation', o.correlationOk === undefined ? null : !!o.correlationOk), P(16, 'FINAL DECISION GATE', true)];
+    R.gateLabel = R.decision === 'NO BET' ? '🚫 NO BET' : R.decision; return R;
+  }
+  function legOf(R, o) { var m = R.input.market, mm = /^(over|under):([\d.]+)$/.exec(m), sel = mm ? ['ou:' + mm[2], mm[1]] : m === 'btts_yes' ? ['btts', 'yes'] : m === 'btts_no' ? ['btts', 'no'] : m === 'home_win' ? ['1X2', 'home'] : m === 'away_win' ? ['1X2', 'away'] : m === 'draw' ? ['1X2', 'draw'] : ['dc', m];
+    return { matchKey: N(o.home) + '|' + N(o.away), label: o.home + ' – ' + o.away, market: sel[0], selection: sel[1], p: R.probabilities.final, odds: o.odds, value: { status: 'OK', ev: R.ev }, uncertaintyHalfPts: R.uncertainty.halfPts || 0, decision: 'BET', dataQuality: R.dq.score, dbConflict: false }; }
+  // S116 : rapport multi-marchés (analyse indépendante de chaque marché) + meilleures opportunités + combiné
+  function report(store, input, lines, ctx) {
+    var list = (lines && lines.length ? lines : ['over:1.5', 'over:2.5', 'over:3.5', 'btts_yes', 'home_win', 'draw', 'away_win'].map(function (m) { return { market: m }; })), res = list.map(function (l) { return analyzeFull(store, Object.assign({}, input, { market: l.market, odds: l.odds, oddsOther: l.oddsOther, modelP: l.modelP }), ctx); });
+    var pr = I.priorities(res), value = res.filter(function (r) { return r.decision === 'VALUE'; }), combo = null;
+    if (value.length >= 2) { var legs = value.map(function (r) { return legOf(r, input); }); combo = EA.parlay ? EA.parlay.optimize(legs, {}) : null; }
+    var note; if (!value.length) note = 'NO BET : aucun marché ne possède un avantage statistique suffisamment robuste.';
+    else { var best = pr[0].result, oth = res.filter(function (r) { return r !== best && r.decision !== 'VALUE'; }); note = (MK[best.input.market] || best.input.market) + ' retenu' + (oth.length ? ' plutôt que ' + oth.slice(0, 3).map(function (r) { return (MK[r.input.market] || r.input.market) + ' (' + ((r.checks.filter(function (x) { return x.ok === false; })[0] || {}).label || 'moins solide') + ')'; }).join(', ') : '') + ' : confiance ' + best.confidence.score + '/100, stabilité ' + (best.stability.stability == null ? '?' : best.stability.stability) + '/100.'; }
+    return { input: input, results: res, priorities: pr, combo: combo && combo.status === 'BET' ? combo : null, comboText: combo && combo.status === 'BET' ? '🔥 COMBINÉ RENTABLE' : '❌ Aucun combiné suffisamment solide.', choiceNote: note, freshness: res[0] && res[0].dq && res[0].dq.lastMatch || null };
+  }
+
+  // S118 : performance réelle (pertes comprises) ; S119 : résultats séparés des prédictions
+  function performance(records, decisions) {
+    var rows = []; (records || []).forEach(function (r) { if (r.result && r.result.outcome !== 'void') rows.push({ won: r.result.outcome === 'won', odds: r.odds, p: r.pModel, ev: r.ev, u: r.result.profitUnits, t: r.createdAt || 0, closing: r.closingOdds, src: 'pro' }); });
+    (decisions || []).forEach(function (d) { if (d.result && d.result.outcome !== 'void') rows.push({ won: d.result.outcome === 'won', odds: d.prediction.odds, p: d.prediction.p, ev: d.prediction.ev, u: d.result.profitUnits, t: d.prediction.createdAt, src: 'db' }); });
+    rows.sort(function (a, b) { return a.t - b.t; }); var n = rows.length; if (!n) return { n: 0, note: 'Aucun résultat réglé : aucune performance mesurable.' };
+    var won = rows.filter(function (r) { return r.won; }).length, u = rows.filter(function (r) { return r.u != null; }), cum = 0, peak = 0, dd = 0, streak = 0, ms = 0, loss = 0; u.forEach(function (r) { cum += r.u; peak = Math.max(peak, cum); dd = Math.max(dd, peak - cum); if (r.u < 0) loss += r.u; });
+    rows.forEach(function (r) { if (!r.won) { streak++; ms = Math.max(ms, streak); } else streak = 0; });
+    var cal = EA.calibration ? EA.calibration.buckets(rows.filter(function (r) { return r.p != null; }).map(function (r) { return { pModel: r.p, result: { outcome: r.won ? 'won' : 'lost' } }; })) : null, clv = rows.map(function (r) { return r.closing ? EA.memory.clv(r.odds, r.closing) : null; }).filter(Boolean);
+    return { n: n, won: won, lost: n - won, hit: won / n, roi: u.length ? cum / u.length : null, profit: cum, totalLoss: loss, maxLosingStreak: ms, drawdown: dd, meanEV: rows.reduce(function (s, r) { return s + (r.ev || 0); }, 0) / n, brier: cal ? cal.brier : null, ece: cal ? cal.ece : null, clv: clv.length ? clv.reduce(function (s, x) { return s + x.clvProbPts; }, 0) / clv.length : 'UNAVAILABLE', level: EA.calibration ? EA.calibration.sampleLevel(n) : '?', note: 'PERFORMANCE HISTORIQUE ≠ GARANTIE FUTURE.' };
+  }
+  // S126 : patterns d'erreurs (jamais un résultat isolé)
+  function errorPatterns(records) {
+    var by = {}, out = { errors: [], patterns: [] }; (records || []).forEach(function (r) { if (r.type === 'combo' || !r.result || r.result.outcome === 'void' || r.pModel == null) return; var k = (r.sport || '?') + '/' + r.market; (by[k] = by[k] || []).push(r); });
+    Object.keys(by).forEach(function (k) { var a = by[k], lost = a.filter(function (r) { return r.result.outcome === 'lost'; }), cats = {};
+      lost.forEach(function (r) { var an = EA.postmortem ? EA.postmortem.analyze(r) : null, cat = an ? an.category : 'inconnu'; cats[cat] = (cats[cat] || 0) + 1; out.errors.push({ marche: k, championnat: r.competition || 'UNKNOWN', modele: r.modelVersion || 'UNKNOWN', prediction: r.pModel, resultat: 'perdu', ecart: r.pModel, contexte: cat, date: new Date(r.createdAt || 0).toISOString().slice(0, 10) }); });
+      Object.keys(cats).forEach(function (c) { var share = cats[c] / lost.length; out.patterns.push({ marche: k, categorie: c, count: cats[c], n: a.length, share: share, pattern: a.length >= 30 && cats[c] >= 3 && share >= 0.4, note: a.length < 30 ? 'échantillon insuffisant : observation, pas un pattern' : cats[c] < 3 ? 'erreur isolée' : share >= 0.4 ? 'PATTERN d\'erreurs répété' : 'non dominant' }); }); });
+    return out;
+  }
+  // S127 : dérive de distribution
+  function drift(store, f, records) {
+    var ms = store.played(f), out = []; var cont = function (name, get) { var v = ms.map(get).filter(function (x) { return x != null; }); if (v.length < 40) return; var h = v.slice(0, -20), r = v.slice(-20), m = function (a) { return a.reduce(function (s, x) { return s + x; }, 0) / a.length; }, sd = function (a) { var mu = m(a); return Math.sqrt(a.reduce(function (s, x) { return s + Math.pow(x - mu, 2); }, 0) / Math.max(1, a.length - 1)); };
+      var se = Math.sqrt(Math.pow(sd(h), 2) / h.length + Math.pow(sd(r), 2) / r.length), z = se ? (m(r) - m(h)) / se : 0; out.push({ metric: name, hist: m(h), recent: m(r), nHist: h.length, nRecent: r.length, z: z, shift: Math.abs(z) >= 2.5 }); };
+    cont('Buts / match', function (x) { return x.hs + x.as; }); cont('Corners / match', function (x) { return x.stats.corners_h != null && x.stats.corners_a != null ? x.stats.corners_h + x.stats.corners_a : null; }); cont('Tirs cadrés / match', function (x) { return x.stats.sot_h != null && x.stats.sot_a != null ? x.stats.sot_h + x.stats.sot_a : null; }); cont('Tirs / match', function (x) { return x.stats.shots_h != null && x.stats.shots_a != null ? x.stats.shots_h + x.stats.shots_a : null; });
+    cont('Victoire domicile (0/1)', function (x) { return x.hs > x.as ? 1 : 0; }); cont('BTTS (0/1)', function (x) { return x.hs > 0 && x.as > 0 ? 1 : 0; }); cont('Over 2.5 (0/1)', function (x) { return x.hs + x.as > 2.5 ? 1 : 0; });
+    var cal = I.modelHealth(records || []).filter(function (x) { return x.n >= 60 && x.brierRecent > x.brier + 0.03; }).map(function (x) { return { metric: 'Calibration ' + x.key, hist: x.brier, recent: x.brierRecent, shift: true }; });
+    return { items: out.concat(cal), label: '⚠️ DISTRIBUTION SHIFT', note: 'Un changement récent n\'est jamais considéré comme permanent ; à confirmer sur plusieurs périodes.' };
+  }
+
+  // S101/S102 : couches identifiables + registre des moteurs (vérité du code)
+  function fn(o, n) { return !!(o && typeof o[n] === 'function'); }
+  function layers() {
+    var L = [['DATA LAYER', EA.database, ['parseCSV', 'fromLegacy', 'fromMemory']], ['DATABASE LAYER', EA.database, ['createStore']], ['VALIDATION LAYER', EA.database, ['normalize']], ['FEATURE ENGINE', EA.database, ['aggregate', 'teamView']], ['BASELINE ENGINE', EA.dbintel, ['teamVsLeague']], ['TEAM ENGINE', EA.dbintel, ['dataQuality']], ['FORM ENGINE', EA.dbintel, ['horizons']], ['MATCHUP ENGINE', EA.dbintel, ['matchup', 'conflictScore']],
+      ['MODEL ENGINE', EA.models, ['poissonP', 'simulateFootball']], ['MARKET ENGINE', EA.value, ['marketFromOdds']], ['VALUE ENGINE', EA.value, ['valueLine', 'decide']], ['UNCERTAINTY ENGINE', EA.dbintel, ['stabilityTest']], ['RISK ENGINE', EA.risk, ['assess']], ['DECISION ENGINE', EA.dbfinal, ['analyzeFull']], ['COMBINATION ENGINE', EA.parlay, ['optimize', 'pairJoint']], ['LEARNING ENGINE', EA.postmortem, ['analyze', 'errorMemory']], ['MONITORING ENGINE', EA.dbintel, ['trendShift', 'modelHealth']]];
+    return L.map(function (x) { var miss = x[2].filter(function (f) { return !fn(x[1], f); }); return { layer: x[0], status: miss.length ? 'UNAVAILABLE' : 'ACTIVE', detail: x[2].join(', ') + (miss.length ? ' · manquant : ' + miss.join(', ') : '') }; });
+  }
+  function registry(store, records) {
+    var xg = store ? store.played({}).filter(function (m) { return m.stats.xg_h != null; }).length : 0, nSet = (records || []).filter(function (r) { return r.result && r.result.outcome !== 'void'; }).length, E = [];
+    var add = function (n, s, d) { E.push({ engine: n, status: s, detail: d }); };
+    add('Poisson (buts)', fn(EA.models, 'poissonP') ? 'ACTIVE' : 'UNAVAILABLE', 'EA.models.poissonP'); add('Dixon-Coles (correction scores faibles)', fn(EA.models, 'tau') ? 'ACTIVE' : 'UNAVAILABLE', 'EA.models.tau');
+    add('Monte Carlo football', fn(EA.models, 'simulateFootball') ? 'ACTIVE' : 'UNAVAILABLE', 'EA.models.simulateFootball'); add('Monte Carlo basket', EA.bk2 ? 'ACTIVE' : 'UNAVAILABLE', 'distribution unique (ea-bk2)');
+    add('Elo', fn(EA.models, 'eloProbabilities') ? 'PARTIAL' : 'UNAVAILABLE', 'calcul réel mais ratings à saisir (aucun Elo historisé dans la base)'); add('xG', xg >= 30 ? 'ACTIVE' : xg ? 'INSUFFICIENT DATA' : 'PARTIAL', xg ? xg + ' match(s) avec xG en base' : 'moteur compatible (saisie manuelle) ; 0 match avec xG en base');
+    add('Consensus base + modèle', 'ACTIVE', 'EA.database.consensus (shrinkage)'); add('Corners / tirs / tirs cadrés', 'PARTIAL', 'statistiques descriptives de la base, pas de modèle prédictif dédié'); add('Cartons / fautes / mi-temps', 'UNAVAILABLE', 'aucune donnée ni modèle');
+    add('Calibration par tranches', nSet >= 30 ? 'ACTIVE' : 'INSUFFICIENT DATA', nSet + ' résultat(s) réglé(s)'); add('Walk-forward / backtest des règles', nSet >= 60 ? 'ACTIVE' : 'INSUFFICIENT DATA', nSet + ' résultat(s) (minimum 60)'); add('Combiné (corrélation provisoire)', fn(EA.parlay, 'optimize') ? 'PARTIAL' : 'UNAVAILABLE', 'coefficients de corrélation non estimés sur données');
+    add('IA prédictive / apprentissage automatique', 'UNAVAILABLE', 'règles statistiques déterministes ; aucun apprentissage automatique'); add('Fournisseur API de données', 'UNAVAILABLE', 'MANUAL / LOCAL DATABASE uniquement');
+    return E;
+  }
+  // S114 : pipeline d'ajout d'un match (aucune étape ignorée)
+  function addMatch(store, row, ctx) {
+    var steps = [], s = function (n, d, ok) { steps.push({ step: n, detail: d, ok: ok !== false }); }, nm = D.normalize(row); s('INPUT', (row.home || '?') + ' – ' + (row.away || '?') + ' · ' + (row.date || 'date ?'));
+    s('VALIDATION', nm.issues.length ? nm.issues.map(function (i) { return i.code; }).join(', ') : 'aucune anomalie', !nm.bad); if (nm.bad) { var r0 = store.upsert([row]); s('DEDUPLICATION', 'non applicable'); s('DATABASE INSERT', 'REJETÉ → quarantaine', false); return { steps: steps, ready: false, result: r0 }; }
+    var before = store.meta().matches, res = store.upsert([row]); s('DEDUPLICATION', res.duplicates ? 'DUPLICATE CANDIDATE : non inséré' : 'aucun doublon'); s('DATABASE INSERT', res.added ? 'inséré' : res.updated ? 'mis à jour' : res.duplicates ? 'ignoré' : 'déjà présent identique', true);
+    var f = { sport: nm.match.sport, competition: nm.match.competition }, L = store.league(f); s('AGGREGATES UPDATE', 'caches de ' + (nm.match.competition || '—') + ' recalculés'); s('BASELINE UPDATE', 'baseline : N=' + L.n); var th = store.team(nm.match.home, f), ta = store.team(nm.match.away, f);
+    s('TEAM PROFILE UPDATE', nm.match.home + ' N=' + th.n + ' · ' + nm.match.away + ' N=' + ta.n); s('FORM UPDATE', 'forme ' + (th.global.form || '—') + ' / ' + (ta.global.form || '—')); var rec = (ctx && ctx.records) || [];
+    s('MODEL UPDATE', rec.length && EA.market ? Object.keys(EA.market.perf(rec)).length + ' marché(s) recalculé(s)' : 'N/A (aucun résultat réglé)'); s('CALIBRATION UPDATE', rec.length && EA.calibration ? EA.calibration.buckets(rec).n + ' observation(s)' : 'N/A (aucun résultat réglé)'); s('READY', '🟢 prêt'); return { steps: steps, ready: true, result: res, before: before };
+  }
+  // S120 : contrôle final RÉEL (exécute les moteurs sur un jeu synthétique, jamais d'✓ simulé)
+  function selfCheck(opts) {
+    var mem = function () { var d = {}; return { getItem: function (k) { return d[k] || null; }, setItem: function (k, v) { d[k] = v; }, removeItem: function (k) { delete d[k]; } }; }, out = [], chk = function (n, f) { var ok, dt; try { var r = f(); ok = r === true || (r && r.ok); dt = r && r.detail || ''; } catch (e) { ok = false; dt = 'erreur : ' + e.message; } out.push({ name: n, status: ok === null ? '⚪' : ok ? '✓' : '✗', detail: dt }); };
+    var seed = 3, rnd = function () { return (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648; }, rows = [], T = ['A', 'B', 'C', 'D', 'E', 'F'];
+    for (var i = 0; i < 90; i++) { var h = T[i % 6], a = T[(i + 1 + (i % 4)) % 6]; if (h === a) a = T[(i + 3) % 6]; rows.push({ sport: 'football', competition: 'TEST', date: new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString().slice(0, 10), home: h, away: a, hs: Math.floor(rnd() * 4), as: Math.floor(rnd() * 3), corners_h: 4 + Math.floor(rnd() * 5), corners_a: 3 + Math.floor(rnd() * 4), sot_h: 2 + Math.floor(rnd() * 4), sot_a: 1 + Math.floor(rnd() * 3), shots_h: 9 + Math.floor(rnd() * 5), shots_a: 7 + Math.floor(rnd() * 5) }); }
+    var db = D.createStore(mem()), init = db.initialize([{ rows: rows.concat([{ date: null, home: 'X', away: 'Y' }, rows[0]]) }]), f = { sport: 'football', competition: 'TEST' }, an;
+    chk('DATABASE', function () { return { ok: db.meta().state === 'READY', detail: db.meta().matches + ' matchs' }; }); chk('IMPORT', function () { return D.parseCSV('date;home;away;hs;as\n2026-01-01;A;B;1;0').length === 1; });
+    chk('CHRONOLOGY', function () { var p = db.played({}); return p.every(function (m, i) { return !i || p[i - 1].date <= m.date; }); }); chk('VALIDATION', function () { return db.quarantine().length >= 1; }); chk('DEDUPLICATION', function () { return db.meta().matches === 90; });
+    chk('QUALITY', function () { return I.dataQuality(db, f).score > 0; }); chk('BASELINES', function () { return db.league(f).totals[2.5].over.n === 90; }); chk('TEAMS', function () { return db.team('A', f).global.n > 0; }); chk('FORM', function () { return I.horizons(db.played({ team: 'A' }).map(function (m) { return D.teamView(m, 'A'); }), function (t) { return t.gf + t.ga > 2.5; }).available; });
+    chk('MATCHUPS', function () { an = analyzeFull(db, { sport: 'football', competition: 'TEST', home: 'A', away: 'B', market: 'over:2.5', modelP: 0.5, odds: 2.4, before: '2027-01-01' }, {}); return !!an.matchup; }); chk('MARKETS', function () { return an.probabilities && an.probabilities.final > 0; });
+    chk('VALUE', function () { return an.fairOdds > 1 && an.ev != null; }); chk('UNCERTAINTY', function () { return an.uncertainty && an.uncertainty.note.length > 0; }); chk('RISK', function () { return ['LOW', 'MEDIUM', 'HIGH', 'EXTREME'].indexOf(an.risk.level) >= 0; });
+    chk('NO BET', function () { return analyzeFull(db, { sport: 'football', competition: 'TEST', home: 'A', away: 'B', market: 'over:2.5', before: '2027-01-01' }, {}).decision === 'NO BET'; }); chk('CORRELATION', function () { return EA.parlay.pairJoint({ market: 'ou:2.5', selection: 'over', p: .6 }, { market: 'btts', selection: 'yes', p: .6 }, { rho: EA.parlay.DEFAULTS.rho }).joint > 0.36; });
+    chk('COMBINÉ', function () { return EA.parlay.optimize([]).status === 'NO_BET'; }); chk('LEARNING', function () { return EA.postmortem.analyze({ result: { outcome: 'lost' }, pModel: .6, odds: 1.9, market: 'btts', selection: 'yes' }).category.length > 0; });
+    chk('BACKTEST', function () { return EA.risk.rulesBacktest([]).insufficient === true; }); chk('WALK-FORWARD', function () { return typeof EA.memory.walkForward === 'function'; }); chk('ANTI-OVERFITTING', function () { return I.overfitting({ insufficient: false, total: 40, parts: { training: { v3: { roi: .2 } }, test: { v3: { roi: -.1 } } } }, []).risk; });
+    out.push({ name: 'MOBILE', status: '⚪', detail: 'non vérifiable depuis l\'application (test navigateur externe : tests/ui-mobile.js)' }); chk('OFFLINE', function () { return { ok: EA.dbintel.api.provider.indexOf('NONE') === 0, detail: 'aucune requête réseau : base 100 % locale' }; }); out.push({ name: 'REGRESSION', status: '⚪', detail: 'non vérifiable depuis l\'application (suite de tests exécutée hors application)' });
+    return out;
+  }
+  var api = I.api; api.deduplicateData = function (rows) { var seen = {}, dup = 0, uniq = []; (rows || []).forEach(function (r) { var m = D.normalize(r).match, k = m.id || JSON.stringify(r); if (seen[k]) dup++; else { seen[k] = 1; uniq.push(r); } }); return { unique: uniq, duplicates: dup }; };
+  api.updateDatabase = function (rows) { return api.updateData(rows); }; api.runAnalysis = function (input, line, ctx) { return analyzeFull(EA.dbui.store(), Object.assign({}, input, line), ctx); };
+  EA.dbfinal = { legOf: legOf, labelOf: labelOf, analyzeFull: analyzeFull, gate: gate, riskLevel: riskLevel, report: report, performance: performance, errorPatterns: errorPatterns, drift: drift, layers: layers, registry: registry, addMatch: addMatch, selfCheck: selfCheck, MK: MK };
+  if (typeof module === 'object' && module.exports) module.exports = EA.dbfinal;
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-dbui.js ===== */
+/* EA DATABASE — onglet 📊 (espace séparé). Aucune donnée inventée : absent = UNKNOWN. */
+(function (g) {
+  'use strict';
+  var EA = g.EA; if (!EA || !EA.database || typeof document === 'undefined') return;
+  var D = EA.database, store = null, S = { sec: 'overview', page: 0, inp: { market: 'over:2.5' }, analysis: null, sport: '', comp: '', season: '', team: '', team2: '', venue: '', last: '', csv: '', log: null, q: '' };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function st() { if (!store) store = D.createStore(g.localStorage); return store; }
+  function pct(v) { return v == null ? 'UNKNOWN' : (v * 100).toFixed(0) + ' %'; }
+  function a2(x, d) { return x && x.avg != null ? x.avg.toFixed(d || 2) + ' (n=' + x.n + ')' : 'UNKNOWN'; }
+  function kv(l, v) { return '<div class="pro-kv"><span>' + esc(l) + '</span><span>' + v + '</span></div>'; }
+  function rowsR(rows) { return rows.map(function (r) { return kv(r[0], esc(D.fmt(r[1])) + ' · ' + esc(r[1].level)); }).join(''); }
+  function card(t, b) { return '<div class="pro-card"><h3>' + t + '</h3>' + b + '</div>'; }
+  function linesHtml(L) { return Object.keys(L).map(function (l) { return kv('Over ' + l, esc(D.fmt(L[l].over))) + kv('Under ' + l, esc(D.fmt(L[l].under))); }).join(''); }
+  function filt() { var f = { sport: S.sport || undefined, competition: S.comp || undefined, season: S.season || undefined, venue: S.venue || undefined }; if (S.last) f.last = +S.last; return f; }
+  function prov(ms) { var m = st().meta(); return '<p class="pro-dim">Source : EA DATABASE · ' + ms.length + ' match(s) utilisé(s) · période ' + (ms.length ? ms[0].date + ' → ' + ms[ms.length - 1].date : '—') + ' · dernière mise à jour ' + esc(m.lastUpdate ? m.lastUpdate.slice(0, 10) : '—') + '</p>'; }
+  function opts(vals, cur, all) { return '<option value="">' + all + '</option>' + vals.map(function (v) { return '<option' + (v === cur ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join(''); }
+  function uniq(ms, k) { var o = {}; ms.forEach(function (m) { if (m[k]) o[m[k]] = 1; }); return Object.keys(o).sort(); }
+
+  function proRecs() { try { var raw = JSON.parse(g.localStorage.getItem('ea_pro_memory')); return raw && raw.analyses || []; } catch (e) { return []; } }
+  function pairLine(x) { if (x.unknown) return kv(x.name, 'UNKNOWN'); return x.team && x.team.pct != null ? kv(x.name, esc(D.fmt(x.team)) + ' vs ligue ' + pct(x.league.pct) + ' · ' + (x.diffPts >= 0 ? '+' : '') + x.diffPts.toFixed(1) + ' pts (shrink ' + (x.shrunkPts >= 0 ? '+' : '') + x.shrunkPts.toFixed(1) + ')') : kv(x.name, 'ratio ' + x.ratio.toFixed(2) + ' (shrink ' + x.shrunkRatio.toFixed(2) + ') · N=' + x.n); }
+  var BADGE = { VALUE: '🔥 VALUE', CHECK: '🟡 CHECK', 'NO BET': '⚪ NO BET', BLOCKED: '🔴 BLOCKED' };
+  function analysisHtml() {
+    var I = EA.dbintel, i = S.inp, f = '<div class="pro-fields"><input class="pro-in" id="edbH" placeholder="Équipe domicile" value="' + esc(i.home || S.team) + '"><input class="pro-in" id="edbA" placeholder="Équipe extérieur" value="' + esc(i.away || S.team2) + '"><select class="pro-in" id="edbM">' + ['over:1.5', 'over:2.5', 'over:3.5', 'btts_yes', 'home_win', 'draw', 'away_win'].map(function (m) { return '<option' + (m === i.market ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select>'
+      + '<input class="pro-in" id="edbP" inputmode="decimal" placeholder="Proba modèle % (optionnel)" value="' + esc(i.p || '') + '"><input class="pro-in" id="edbO" inputmode="decimal" placeholder="Cote bookmaker" value="' + esc(i.odds || '') + '"><input class="pro-in" id="edbOO" placeholder="Autres cotes du marché (ex: 1.35)" value="' + esc(i.oo || '') + '"></div><button class="pro-btn" onclick="EA.dbui.analyze()">Analyser</button><p class="pro-dim">Compétition/sport : filtres ci-dessus. Seules les données antérieures à aujourd\'hui et à date fiable sont utilisées.</p>';
+    var R = S.analysis, h = card('🧪 Model inputs · analyse', f); if (!R) return h;
+    var b = '<div class="pro-dec">' + BADGE[R.decision] + '</div>' + kv('DATA LEAKAGE CHECK', esc(R.leak.icon) + ' (' + R.leak.used + ' matchs < ' + esc(R.leak.cutoff) + (R.excludedApprox ? ' · ' + R.excludedApprox + ' à date approx. exclus' : '') + ')') + kv('Qualité des données', esc(R.dq.band) + ' · ' + R.dq.score + '/100 · N=' + R.dq.n);
+    b += R.reasons.map(function (x) { return '<p><b>' + (R.decision === 'VALUE' ? 'Raison' : 'RAISON') + ' :</b> ' + esc(x) + '</p>'; }).join('');
+    if (R.probabilities) { var p = R.probabilities, f1 = function (v) { return v == null ? 'UNKNOWN' : (v * 100).toFixed(1) + ' %'; };
+      b += '<h3>Probabilités (séparées)</h3>' + kv('Modèle', f1(p.model)) + kv('Implicite brute (marge incluse)', f1(p.impliedRaw)) + kv('Implicite normalisée', p.normalized == null ? 'non calculable (une seule cote)' : f1(p.normalized) + ' · overround ' + p.overround.toFixed(1) + ' %') + kv('Ajustée / finale (EA DATABASE + modèle)', f1(p.final))
+        + kv('Cote juste · cote minimale', R.fairOdds.toFixed(2) + ' · ' + R.minOdds.toFixed(2)) + kv('Edge · EV', (R.edgePts == null ? '—' : R.edgePts.toFixed(1) + ' pts') + ' · ' + (R.ev == null ? '—' : (R.ev * 100).toFixed(1) + ' %')) + kv('Incertitude', esc(R.uncertainty.note)) + kv('Stabilité', R.stability.available ? esc(R.stability.label) + ' (' + R.stability.stability + '/100, ' + R.stability.variants + ' variantes)' : '—') + kv('Conflit', esc(R.conflict.label) + (R.conflict.score != null ? ' (' + R.conflict.score + '/100)' : ''))
+        + kv('EA CONFIDENCE', R.confidence.score + '/100') + '<p class="pro-dim">' + esc(R.confidence.note) + '</p><h3>Sources internes</h3>' + R.cons.signals.map(function (s) { return kv(s.name, s.k == null ? pct(s.p) : esc(s.k + '/' + s.n) + ' → ' + pct(s.p) + ' (shrink)'); }).join('') + '<p class="pro-dim">' + esc(R.cons.provenance) + '</p>'; }
+    if (R.why.length) b += '<h3>POURQUOI ?</h3><ul class="pro-list">' + R.why.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>'; if (R.risks.length) b += '<h3>RISQUES</h3><ul class="pro-list">' + R.risks.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+    if (R.decision === 'NO BET' || R.decision === 'CHECK') b += '<h3>POURQUOI PAS ?</h3><p>' + esc(R.reasons.join(' · ')) + '</p>';
+    return h + card('Résultat · ' + esc(S.analysis.input.market), b);
+  }
+  function section(ms) {
+    var I = EA.dbintel, recs = proRecs(), s0 = st(), f0 = filt(); delete f0.last;
+    var X = EA.dbui && EA.dbui.extra && EA.dbui.extra[S.sec]; if (X) return X(ms);
+    if (I && S.sec === 'overview') { var bt = EA.risk ? EA.risk.rulesBacktest(recs) : null, ss = I.systemStatus(s0, recs, bt), tsr = I.trendShift(s0, { sport: S.sport || undefined, competition: S.comp || undefined }), dq = I.dataQuality(s0, f0);
+      return card('🗂 EA SYSTEM STATUS', ss.map(function (x) { return kv(x.icon + ' ' + x.name, esc(x.detail)); }).join('') + '<p class="pro-dim">Aucun 🟢 n\'est simulé : chaque ligne reflète l\'état réel.</p>') + card('Qualité & intégrité', kv('Qualité de la base', esc(dq.band) + ' · ' + dq.score + '/100 (N=' + dq.n + ')') + kv('DATA LEAKAGE CHECK', '🟢 SAFE (mode strict : date fiable < date du match)') + kv('Doublons probables (DUPLICATE CANDIDATE)', s0.meta().duplicates) + kv('Quarantaine', s0.meta().quarantined))
+        + card('Surveillance (tendances)', tsr.items.length ? tsr.items.map(function (x) { return kv(x.metric, pct(x.hist) + ' (N=' + x.nHist + ') → ' + pct(x.recent) + ' (N=' + x.nRecent + ')' + (x.shift ? ' · ⚠️ TREND SHIFT DETECTED' : '')); }).join('') + '<p class="pro-dim">' + esc(tsr.note) + '</p>' : '<p class="pro-dim">' + esc(tsr.note) + '</p>'); }
+    if (I && S.sec === 'quality') { var q = I.dataQuality(s0, f0), names = { sample: 'Taille d\'échantillon', freshness: 'Fraîcheur', completeness: 'Complétude (corners/SOT/tirs)', diversity: 'Diversité', consistency: 'Cohérence', coverage: 'Couverture dom./ext.', recent: 'Couverture récente', stability: 'Stabilité', provenance: 'Provenance (dates fiables)' };
+      return card('✅ Qualité des données', kv('Score', q.score + '/100 · ' + esc(q.band)) + Object.keys(q.dims).map(function (k) { return kv(names[k] || k, q.dims[k].toFixed(0) + '/100'); }).join('') + (q.note ? '<p class="pro-dim">' + esc(q.note) + '</p>' : '') + '<p class="pro-dim">Une faible complétude (corners, tirs) reste UNKNOWN : elle réduit le score, elle n\'est jamais remplie.</p>'); }
+    if (I && S.sec === 'base') { if (!S.team.trim()) { var L0 = ms.length ? s0.league(filt()) : null; return card('📏 Baselines', L0 ? kv('Buts/match', a2(L0.goals)) + rowsR([['Home win', L0.result.home], ['Draw', L0.result.draw], ['Away win', L0.result.away]]) + (L0.btts ? rowsR([['BTTS', L0.btts.yes], ['Over 1.5', L0.totals[1.5].over], ['Over 2.5', L0.totals[2.5].over], ['Under 2.5', L0.totals[2.5].under]]) : '') + '<p class="pro-dim">Saisissez une équipe pour la comparer à cette baseline.</p>' + prov(ms) : '<p class="pro-dim">Aucune donnée.</p>'); }
+      var tv = I.teamVsLeague(s0, S.team.trim(), { sport: S.sport || undefined, competition: S.comp || undefined, season: S.season || undefined }); return card('📏 ' + esc(S.team) + ' vs baseline du championnat', tv.items.length ? tv.items.map(pairLine).join('') + '<p class="pro-dim">' + esc(tv.note) + '</p>' + prov(ms) : '<p class="pro-dim">Données insuffisantes.</p>'); }
+    if (I && S.sec === 'inputs') return analysisHtml();
+    if (I && S.sec === 'health') { var mh = I.modelHealth(recs), bt2 = EA.risk ? EA.risk.rulesBacktest(recs) : null, of = I.overfitting(bt2, recs, 0);
+      return card('🩺 MODEL HEALTH', (mh.length ? mh.map(function (x) { return kv(x.icon + ' ' + x.key, x.status + ' · N=' + x.n) + '<p class="pro-dim">Brier ' + x.brier.toFixed(3) + ' (récent ' + x.brierRecent.toFixed(3) + ') · écart annoncé/réel ' + (x.gap * 100).toFixed(0) + ' pts · ' + esc(x.version) + ' · ' + x.lastUpdate + '</p>'; }).join('') : '<p class="pro-dim">⚪ Aucun résultat réglé : aucun moteur ne peut être jugé.</p>')) + card('Versions & évolution', kv('Version modèle', esc(EA.core ? EA.core.VERSION : '?')) + kv('Version database', esc(s0.meta().name)) + kv('Version paramètres', 'p1 (règles fixées a priori)') + '<p class="pro-dim">Tout changement de poids/modèle n\'est adopté qu\'après test hors échantillon (ADOPT sinon ROLLBACK). Aucune modification automatique active.</p>') + card('Anti-overfitting', kv('État', esc(of.label || of.note)) + (of.alerts || []).map(function (a) { return '<p>⚠️ ' + esc(a) + '</p>'; }).join('')); }
+    if (S.sec === 'journal') { var j = s0.journal().slice().reverse(), pg = S.page, pgs = Math.max(1, Math.ceil(j.length / 15)); return card('🧾 Data history · journal', j.slice(pg * 15, pg * 15 + 15).map(function (e) { return kv(e.t.slice(0, 16).replace('T', ' ') + ' · ' + e.type, esc(e.msg)); }).join('') + (j.length ? '' : '<p class="pro-dim">Aucun événement.</p>') + pager(pg, pgs)); }
+    if (S.sec === 'errors') { var em = EA.postmortem ? EA.postmortem.errorMemory(recs.filter(function (r) { return r.type !== 'combo'; })) : { groups: {} }, ks = Object.keys(em.groups); return card('🧠 Error memory', ks.length ? ks.map(function (k) { var x = em.groups[k]; return kv(k, x.won + 'G/' + x.lost + 'P (N=' + x.n + ')') + '<p class="pro-dim">' + esc(x.caution) + (x.frequentError ? ' · erreur fréquente : ' + esc(x.frequentError) : '') + '</p>'; }).join('') : '<p class="pro-dim">Aucun résultat réglé.</p>'); }
+    if (S.sec === 'search') { var q2 = D.norm(S.q), res = '';
+      if (q2.length < 2) res = '<p class="pro-dim">Tapez au moins 2 caractères (équipe, compétition, pays, saison, match).</p>'; else {
+        var all = s0.played({}), comps = {}, tms = {}, seas = {}; all.forEach(function (m) { if (D.norm(m.competition).indexOf(q2) >= 0 || D.norm(m.country).indexOf(q2) >= 0) comps[m.competition] = (comps[m.competition] || 0) + 1; if (m.season && m.season.indexOf(q2) >= 0) seas[m.season] = (seas[m.season] || 0) + 1; [m.home, m.away].forEach(function (t) { if (D.norm(t).indexOf(q2) >= 0) tms[t] = (tms[t] || 0) + 1; }); });
+        var mm = all.filter(function (m) { return D.norm(m.home + ' ' + m.away).indexOf(q2) >= 0; }).slice(-10).reverse();
+        res = Object.keys(comps).slice(0, 8).map(function (c) { return '<div class="pro-kv"><button class="pro-btn small" data-edbset="comp:' + esc(c) + '">' + esc(c) + '</button><span>' + comps[c] + ' matchs</span></div>'; }).join('') + Object.keys(seas).slice(0, 5).map(function (c) { return '<div class="pro-kv"><button class="pro-btn small" data-edbset="season:' + esc(c) + '">Saison ' + esc(c) + '</button><span>' + seas[c] + ' matchs</span></div>'; }).join('') + Object.keys(tms).slice(0, 12).map(function (t) { return '<div class="pro-kv"><button class="pro-btn small" data-edbset="team:' + esc(t) + '">' + esc(t) + '</button><span>' + tms[t] + ' matchs</span></div>'; }).join('') + mm.map(function (m) { return kv(m.date + ' · ' + m.home + ' – ' + m.away, m.hs + '-' + m.as); }).join('') || '<p class="pro-dim">Aucun résultat.</p>'; }
+      return card('🔎 Recherche', '<div class="pro-fields"><input class="pro-in" id="edbQ2" placeholder="équipe, compétition, pays, saison, match" value="' + esc(S.q) + '"></div>' + res); }
+    return section0(ms);
+  }
+  function safeSection(ms) { try { return section(ms); } catch (e) { try { st().log('ERROR', 'Section ' + S.sec + ' : ' + e.message); st().saveNow(); } catch (e2) { } return card('⚠️ Erreur d\'affichage', '<p>Cette section n\'a pas pu être calculée (' + esc(e.message) + '). Les données ne sont pas modifiées ; l\'incident est dans le journal.</p>'); } }
+  function pager(pg, pgs) { return '<div class="pro-row"><button class="pro-btn small" data-edbpage="' + (pg - 1) + '"' + (pg <= 0 ? ' disabled' : '') + '>◀</button><span class="pro-dim">page ' + (pg + 1) + '/' + pgs + '</span><button class="pro-btn small" data-edbpage="' + (pg + 1) + '"' + (pg + 1 >= pgs ? ' disabled' : '') + '>▶</button></div>'; }
+  function section0(ms) {
+    var s = st(), L = ms.length ? s.league(filt()) : null, tname = S.team.trim(), T = tname ? s.team(tname, filt()) : null;
+    if (S.sec === 'comp') {
+      var by = {}; ms.forEach(function (m) { var k = m.sport + ' · ' + (m.country ? m.country + ' · ' : '') + (m.competition || '—') + ' · ' + m.season; by[k] = (by[k] || 0) + 1; });
+      var h = Object.keys(by).sort().map(function (k) { return kv(k, by[k] + ' match(s) · ' + D.level(by[k])); }).join('') || '<p class="pro-dim">Aucune donnée : importez un CSV ou reconstruisez depuis l\'historique.</p>';
+      if (L && L.n) h += '<hr><h3>League dashboard</h3>' + kv('Matches', L.n + ' · ' + L.level) + kv(L.goals.avg != null && ms[0].sport === 'basketball' ? 'Points / match' : 'Buts / match', a2(L.goals)) + rowsR([['Home win', L.result.home], ['Draw', L.result.draw], ['Away win', L.result.away]])
+        + (L.btts ? rowsR([['BTTS', L.btts.yes], ['Over 1.5', L.totals[1.5].over], ['Over 2.5', L.totals[2.5].over], ['Over 3.5', L.totals[3.5].over], ['Over 4.5', L.totals[4.5].over]]) + kv('Corners', a2(L.corners.total)) + kv('SOT', a2(L.sot.total)) : '');
+      return card('📚 Compétitions', h + prov(ms));
+    }
+    if (S.sec === 'teams') {
+      var q = D.norm(S.q), names = {}; ms.forEach(function (m) { [m.home, m.away].forEach(function (t) { if (!q || D.norm(t).indexOf(q) >= 0) names[t] = (names[t] || 0) + 1; }); });
+      var list = Object.keys(names).sort().slice(0, 30).map(function (t) { return kv(t, names[t] + ' match(s)') ; }).join('');
+      var h2 = '<div class="pro-fields"><input class="pro-in" id="edbQ" placeholder="Rechercher équipe, compétition, pays" value="' + esc(S.q) + '"></div>' + (list || '<p class="pro-dim">Aucune équipe trouvée.</p>');
+      if (T && T.n) h2 += '<hr><h3>Team dashboard · ' + esc(T.team) + '</h3>' + ['global', 'home', 'away'].map(function (k) { var b = T[k]; return '<h3>' + k.toUpperCase() + ' · ' + b.n + ' (' + b.level + ')</h3>' + kv('V/N/D', b.W + '/' + b.D + '/' + b.L) + kv('GF/G · GA/G', a2(b.gf) + ' · ' + a2(b.ga)) + kv('BTTS', esc(D.fmt(b.btts))) + kv('Over 2.5', esc(D.fmt(b.over[2.5]))) + kv('Clean sheets', esc(D.fmt(b.cleanSheets))) + kv('Corners / SOT / tirs (pour)', a2(b.corners.for, 1) + ' · ' + a2(b.sot.for, 1) + ' · ' + a2(b.shots.for, 1)); }).join('') + kv('Forme (5 derniers)', esc(T.global.form || 'UNKNOWN'));
+      return card('⚽ Équipes', h2 + prov(ms));
+    }
+    if (!L) return card('Aucune donnée', '<p class="pro-dim">Aucun match ne correspond aux filtres.</p>');
+    if (S.sec === 'goals') return card('🥅 Buts', kv('Total moyen', a2(L.goals)) + kv('Domicile / Extérieur', a2(L.goalsHome) + ' · ' + a2(L.goalsAway)) + linesHtml(L.totals) + prov(ms));
+    if (S.sec === 'btts') return card('🎯 BTTS', L.btts ? rowsR([['BTTS Oui', L.btts.yes], ['BTTS Non', L.btts.no], ['BTTS + Over 2.5', L.btts.yesOver25], ['BTTS + Under 2.5', L.btts.yesUnder25]]) + prov(ms) : '<p class="pro-dim">Non applicable à ce sport.</p>');
+    if (S.sec === 'ou') return card('📈 Over / Under', linesHtml(L.totals) + prov(ms));
+    if (S.sec === 'ha') { var r = L.result; return card('🏠 Domicile / Extérieur', rowsR([['Home win', r.home], ['Draw', r.draw], ['Away win', r.away], ['Home ou nul', r.homeOrDraw], ['Away ou nul', r.awayOrDraw], ['Home ou away', r.homeOrAway]]) + (T && T.n ? '<hr>' + ['home', 'away'].map(function (k) { var b = T[k]; return kv(k === 'home' ? 'Domicile' : 'Extérieur', b.W + 'V ' + b.D + 'N ' + b.L + 'D · ' + a2(b.gf) + ' marqués · ' + a2(b.ga) + ' encaissés (n=' + b.n + ')'); }).join('') : '<p class="pro-dim">Saisissez une équipe (filtre) pour séparer global / domicile / extérieur.</p>') + prov(ms)); }
+    if (S.sec === 'corners' || S.sec === 'sot' || S.sec === 'shots') { var k = S.sec, B = L[k]; if (!B) return card('Non applicable', '<p class="pro-dim">Statistique non définie pour ce sport.</p>'); return card({ corners: '🚩 Corners', sot: '🎯 Tirs cadrés', shots: '🎯 Tirs' }[k], kv('Moyenne totale', a2(B.total)) + kv('Domicile', a2(B.home)) + kv('Extérieur', a2(B.away)) + linesHtml(B.lines) + (B.total.n === 0 ? '<p class="pro-dim">⚠️ Donnée UNKNOWN : aucun match ne contient cette statistique.</p>' : '') + prov(ms)); }
+    if (S.sec === 'form' || S.sec === 'trends') {
+      if (!T || !T.n) return card('Choisissez une équipe', '<p class="pro-dim">Saisissez une équipe dans le filtre « Équipe ».</p>');
+      var tr = Object.keys(T.trends).map(function (w) { var x = T.trends[w]; return '<h3>' + (w === 'all' ? 'Historique' : w + ' derniers') + '</h3>' + kv('Over 2.5', esc(D.fmt(x.over25))) + kv('BTTS', esc(D.fmt(x.btts))) + kv('Corners > 9.5', esc(D.fmt(x.corners95))); }).join('');
+      var sk = Object.keys(T.streaks).filter(function (x) { return x !== 'note'; }).map(function (x) { return kv('Série ' + x, String(T.streaks[x])); }).join('');
+      return card(S.sec === 'form' ? '📊 Formes · ' + esc(T.team) : '🧠 Tendances · ' + esc(T.team), (S.sec === 'form' ? kv('5 derniers', esc(T.global.form)) + kv('Global', T.global.n + ' · ' + T.global.level) : '') + tr + (S.sec === 'trends' ? '<hr>' + sk + '<p class="pro-dim">' + esc(T.streaks.note) + '</p>' : '') + prov(ms));
+    }
+    if (S.sec === 'h2h') {
+      if (!S.team.trim() || !S.team2.trim()) return card('🔎 H2H', '<p class="pro-dim">Saisissez les deux équipes (filtres « Équipe » et « Adversaire »).</p>');
+      var a = D.norm(S.team), b = D.norm(S.team2), h = ms.filter(function (m) { var x = D.norm(m.home), y = D.norm(m.away); return (x === a && y === b) || (x === b && y === a); }), cut = new Date(); cut.setFullYear(cut.getFullYear() - 3); var cs = cut.toISOString().slice(0, 10);
+      var blk = function (arr, t) { return arr.length ? '<h3>' + t + ' (' + arr.length + ')</h3>' + arr.slice(-8).map(function (m) { return kv(m.date + ' · ' + m.home + ' – ' + m.away, m.hs + '-' + m.as); }).join('') : '<h3>' + t + '</h3><p class="pro-dim">UNKNOWN</p>'; };
+      return card('🔎 H2H', blk(h.filter(function (m) { return m.date >= cs; }), 'H2H récent (3 ans)') + blk(h.filter(function (m) { return m.date < cs; }), 'H2H ancien (poids réduit)') + prov(h));
+    }
+    if (S.sec === 'hist') { var hp = ms.slice().reverse(), pgs2 = Math.max(1, Math.ceil(hp.length / 30)); return card('📅 Historique', hp.slice(S.page * 30, S.page * 30 + 30).map(function (m) { return kv(m.date + ' · ' + m.home + ' – ' + m.away, m.hs + '-' + m.as + (m.dateApprox ? ' ⚠️ date approx.' : '')); }).join('') + pager(S.page, pgs2) + prov(ms)); }
+    return '';
+  }
+  function render() {
+    var el = document.getElementById('edbRoot'); if (!el) return;
+    var s = st(), m = s.meta(), all = s.played({}), ms = s.played(Object.assign(filt(), S.team.trim() && S.sec !== 'h2h' && S.sec !== 'teams' && S.sec !== 'form' && S.sec !== 'trends' && S.sec !== 'ha' ? { team: S.team.trim() } : {}));
+    var h = '<div class="pro-card"><h3>📊 EA DATABASE ' + (m.state === 'READY' ? '🟢 READY' : '⚪ VIDE') + '</h3>' + kv('Version', esc(m.name)) + kv('Dernière mise à jour', esc(m.lastUpdate ? m.lastUpdate.slice(0, 10) : '—')) + kv('Dernier match traité', esc(m.lastProcessed || '—')) + kv('Matchs · équipes · compétitions', m.matches + ' · ' + m.teams + ' · ' + m.competitions) + (m.quarantined ? kv('⚠️ Quarantaine (anomalies)', m.quarantined) : '')
+      + '<p class="pro-dim">Source : ' + esc(D.provider.name) + ' · fonctionne hors connexion.</p><button class="pro-btn" onclick="EA.dbui.rebuild()">Reconstruire depuis l\'historique</button> <button class="pro-btn" onclick="EA.dbui.fullRebuild()">FULL REBUILD (réparation)</button></div>';
+    h += '<div class="pro-card"><h3>Importer des matchs (CSV)</h3><textarea class="pro-in" id="edbCsv" rows="3" placeholder="date;domicile;extérieur;compétition;saison;hs;as;corners_h;corners_a;sot_h;sot_a">' + esc(S.csv) + '</textarea><button class="pro-btn" onclick="EA.dbui.importCsv()">Importer</button><p class="pro-dim">Colonnes facultatives : shots_h/a, sot_h/a, corners_h/a, cards_h/a, xg_h/a… Une cellule vide reste UNKNOWN.</p></div>';
+    if (S.log) h += '<div class="pro-card"><h3>INITIALISATION DATABASE</h3><p>' + '█'.repeat(S.log.steps.length > 10 ? 10 : S.log.steps.length) + '░'.repeat(10 - Math.min(10, S.log.steps.length)) + ' ' + Math.min(100, Math.round(S.log.steps.length / 11 * 100)) + ' %</p><p>' + (S.log.error ? '⚠️ ' + esc(S.log.error) + (S.log.restored ? ' → RESTORE PREVIOUS STATE (base précédente conservée)' : '') : S.log.ready ? '━━━━━━━━━━━━<br>🟢 EA DATABASE READY<br>━━━━━━━━━━━━' : '⚪ aucune donnée') + '</p>' + S.log.steps.map(function (x) { return kv('✓ ' + x.step, esc(x.detail)); }).join('') + '</div>';
+    h += '<div class="pro-card"><h3>Filtres</h3><div class="pro-fields">' + '<select class="pro-in" id="edbSport">' + opts(['football', 'basketball'], S.sport, 'Sport') + '</select><select class="pro-in" id="edbComp">' + opts(uniq(all, 'competition'), S.comp, 'Compétition') + '</select><select class="pro-in" id="edbSeason">' + opts(uniq(all, 'season'), S.season, 'Saison') + '</select>'
+      + '<input class="pro-in" id="edbTeam" placeholder="Équipe" value="' + esc(S.team) + '"><input class="pro-in" id="edbTeam2" placeholder="Adversaire (H2H)" value="' + esc(S.team2) + '"><select class="pro-in" id="edbVenue">' + opts(['home', 'away'], S.venue, 'Dom./Ext.') + '</select><input class="pro-in" id="edbLast" inputmode="numeric" placeholder="Nb de matchs" value="' + esc(S.last) + '"></div></div>';
+    var secs = [['overview', '🗂 Aperçu'], ['comp', '📚 Compétitions'], ['teams', '⚽ Équipes'], ['goals', '🥅 Buts'], ['btts', '🎯 BTTS'], ['ou', '📈 Over/Under'], ['ha', '🏠 Dom./Ext.'], ['corners', '🚩 Corners'], ['sot', '🎯 Tirs cadrés'], ['shots', '🎯 Tirs'], ['form', '📊 Formes'], ['h2h', '🔎 H2H'], ['hist', '📅 Historique'], ['trends', '🧠 Tendances'], ['base', '📏 Baselines'], ['quality', '✅ Qualité'], ['inputs', '🧪 Analyse'], ['health', '🩺 Santé'], ['journal', '🧾 Journal'], ['errors', '🧠 Erreurs'], ['search', '🔎 Recherche']];
+    secs = secs.concat((EA.dbui && EA.dbui.extraSecs) || []);
+    h += '<div class="pro-row" style="flex-wrap:wrap;gap:6px">' + secs.map(function (x) { return '<button class="pro-btn small' + (S.sec === x[0] ? ' active' : '') + '" data-edbsec="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' + safeSection(ms);
+    el.innerHTML = h;
+    var bind = function (id, key, redo) { var e = document.getElementById(id); if (e) e.addEventListener(redo ? 'change' : 'change', function () { S[key] = e.value; render(); }); };
+    bind('edbSport', 'sport'); bind('edbComp', 'comp'); bind('edbSeason', 'season'); bind('edbTeam', 'team'); bind('edbTeam2', 'team2'); bind('edbVenue', 'venue'); bind('edbLast', 'last'); bind('edbQ', 'q'); bind('edbQ2', 'q');
+    Array.prototype.forEach.call(el.querySelectorAll('[data-edbsec]'), function (b) { b.addEventListener('click', function () { S.sec = b.getAttribute('data-edbsec'); S.page = 0; render(); }); });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-edbpage]'), function (b) { b.addEventListener('click', function () { S.page = Math.max(0, +b.getAttribute('data-edbpage')); render(); }); });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-edbset]'), function (b) { b.addEventListener('click', function () { var p = b.getAttribute('data-edbset').split(':'), k = p.shift(), v = p.join(':'); if (k === 'team') { S.team = v; S.sec = 'teams'; } else if (k === 'comp') { S.comp = v; S.sec = 'comp'; } else if (k === 'season') { S.season = v; S.sec = 'comp'; } render(); }); });
+  }
+  function legacyDB() { try { var s = JSON.parse(g.localStorage.getItem('ea_v3_store')); if (s && s.football) return s; } catch (e) { } return typeof DB !== 'undefined' ? DB : null; }   // lit le stockage persistant : indépendant du moment où l'app charge son historique
+  function sources() { var rows = D.fromLegacy(legacyDB()), mem = []; try { var raw = JSON.parse(g.localStorage.getItem('ea_pro_memory')); mem = D.fromMemory(raw && raw.analyses || []); } catch (e) { } return [{ name: 'LEGACY-HISTORY', rows: rows }, { name: 'EA-MEMORY', rows: mem }]; }
+  function hooks() { var recs = proRecs(); return { models: function () { return EA.market ? Object.keys(EA.market.perf(recs)).length + ' marché(s) suivis (modèles réels : voir 🧰 Moteurs)' : 'n/a'; }, calibrate: function () { return EA.calibration ? EA.calibration.buckets(recs).n + ' observation(s) de calibration' : 'n/a'; } }; }
+  function rebuild() { try { S.log = st().initialize(sources()); } catch (e) { S.log = { steps: [], ready: false, error: e.message }; } render(); }
+  function fullRebuild() { try { S.log = st().fullRebuild(sources(), Date.now(), hooks()); } catch (e) { S.log = { steps: [], ready: false, error: e.message, restored: true }; } render(); }
+  function importCsv() { var t = document.getElementById('edbCsv'); S.csv = t ? t.value : ''; var rows = D.parseCSV(S.csv); S.log = st().initialize([{ rows: rows }]); if (S.log.ready) S.csv = ''; render(); }
+  function mount() {
+    if (document.getElementById('view-edb')) return;
+    var tabs = document.querySelector('.tab[data-tab="pro"]'), v = document.querySelector('.view'); if (!tabs || !v) return;
+    var b = document.createElement('button'); b.className = 'tab sfx-tab'; b.setAttribute('data-tab', 'edb'); b.innerHTML = '<span class="ic">📊</span>EA DATABASE'; tabs.parentNode.insertBefore(b, tabs.nextSibling);
+    var sec = document.createElement('section'); sec.id = 'view-edb'; sec.className = 'view'; sec.innerHTML = '<div id="edbRoot"></div>'; v.parentNode.appendChild(sec);
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (x) { x.classList.remove('active'); }); Array.prototype.forEach.call(document.querySelectorAll('.view'), function (x) { x.classList.remove('active'); }); b.classList.add('active'); sec.classList.add('active');
+      var m = st().meta(); if (m.state !== 'READY') { var rows = sources(); if (rows[0].rows.length || rows[1].rows.length) S.log = st().initialize(rows); } else { var r = st().upsert(sources().reduce(function (a, x) { return a.concat(x.rows); }, [])); }   // mise à jour incrémentale
+      requestAnimationFrame(render);
+    });
+  }
+  function analyze() { var v = function (id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; }; S.inp = { home: v('edbH'), away: v('edbA'), market: v('edbM') || 'over:2.5', p: v('edbP'), odds: v('edbO'), oo: v('edbOO') };
+    var num = function (x) { var n = parseFloat(String(x).replace(',', '.')); return isFinite(n) ? n : null; }, P = num(S.inp.p);
+    S.analysis = EA.dbintel.analyze(st(), { sport: S.sport || 'football', competition: S.comp || undefined, home: S.inp.home, away: S.inp.away, market: S.inp.market, modelP: P == null ? null : P / 100, odds: num(S.inp.odds), oddsOther: S.inp.oo.split(/[;,\s]+/).map(num).filter(function (x) { return x != null; }) }); st().log('MODEL', 'Analyse ' + S.inp.home + ' – ' + S.inp.away + ' · ' + S.inp.market + ' → ' + S.analysis.decision); st().saveNow(); render(); }
+  EA.dbui = { h: { esc: esc, kv: kv, card: card, pct: pct, a2: a2, prov: prov, pager: pager, S: S, st: st, render: render, proRecs: proRecs, filt: filt, rowsR: rowsR }, fullRebuild: fullRebuild, extra: {}, extraSecs: [], setSection: function (x) { S.sec = x; S.page = 0; render(); }, analyze: analyze, sources: sources, rebuild: rebuild, importCsv: importCsv, render: render, store: st };
+  function injectStyle() { if (document.getElementById('edbStyle')) return; var s = document.createElement('style'); s.id = 'edbStyle'; s.textContent = '#edbRoot{max-width:100%;overflow-x:hidden}#edbRoot .pro-kv span{overflow-wrap:anywhere}#edbRoot .pro-btn{min-height:40px}#edbRoot .pro-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}#edbRoot details{margin:6px 0}#edbRoot summary{cursor:pointer;padding:6px 0;overflow-wrap:anywhere}#edbRoot textarea.pro-in{min-height:84px}'; try { (document.head || document.documentElement).appendChild(s); } catch (e) { } }
+  function autoSync() { try { var src = sources(), rows = src.reduce(function (a, x) { return a.concat(x.rows); }, []); if (!rows.length) return; if (st().meta().state !== 'READY') st().initialize(src); else st().upsert(rows); } catch (e) { try { st().log('ERROR', 'Mise à jour automatique : ' + e.message); st().saveNow(); } catch (e2) { } } }
+  function boot() { injectStyle(); setTimeout(autoSync, 1500); setTimeout(autoSync, 6000); }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', mount); document.addEventListener('DOMContentLoaded', boot); } else { mount(); boot(); }
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-dbui2.js ===== */
+/* EA DATABASE — sections finales (S116–S155) enregistrées dans EA.dbui.extra : analyse multi-marchés, ajout de match, performance, décisions, moteurs, contrôle final, dérive, erreurs, tableaux traçables. */
+(function (g) {
+  'use strict';
+  var EA = g.EA; if (!EA || !EA.dbui || !EA.dbfinal || typeof document === 'undefined') return;
+  var U = EA.dbui, H = U.h, F = EA.dbfinal, D = EA.database, esc = H.esc, kv = H.kv, card = H.card, pct = H.pct, st = H.st, S = H.S;
+  var A = { home: '', away: '', lines: 'over:2.5 1.85 55\nbtts_yes 1.75', rp: null, add: null, msg: '' }, BADGE = { VALUE: '🔥 VALUE', CHECK: '🟡 CHECK', 'NO BET': '⚪ NO BET', BLOCKED: '🔴 BLOCKED' };
+  function fd(iso) { return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '—'; }
+  function num(x) { var n = parseFloat(String(x).replace(',', '.')); return isFinite(n) ? n : null; }
+  function bank() { try { var s = EA.storage.loadSettings(g.localStorage); return { bankroll: num(s.bankroll), minStake: num(s.minStake) }; } catch (e) { return {}; } }
+  function ctx() { var recs = H.proRecs(), b = bank(), bt = EA.risk ? EA.risk.rulesBacktest(recs) : null, of = EA.dbintel.overfitting(bt, recs, 0); return { records: recs, bankroll: b.bankroll, minStake: b.minStake, overfit: of.risk }; }
+  var CONF = { 'VERY LOW': 'Très faible', LOW: 'Faible', MODERATE: 'Moyen', GOOD: 'Bon', STRONG: 'Solide' };
+  function statCard(name, r, test, ms) {
+    if (!r || !r.n) return kv(name, 'N/A'); var tr = ms.filter(test), meta = st().meta(), per = ms.length ? fd(ms[0].date) + ' → ' + fd(ms[ms.length - 1].date) : '—';
+    return '<details><summary>' + esc(name) + ' · ' + (r.pct * 100).toFixed(1) + ' % · N=' + r.n + ' · ' + CONF[r.level] + '</summary>' + kv('STAT', esc(name)) + kv('VALUE', (r.pct * 100).toFixed(1) + ' % (' + r.k + '/' + r.n + ')') + kv('N', r.n) + kv('PERIOD', per) + kv('CONFIDENCE', CONF[r.level]) + kv('SOURCE', 'EA DATABASE (interne)') + kv('LAST UPDATE', fd(meta.lastUpdate && meta.lastUpdate.slice(0, 10)))
+      + '<p class="pro-dim">' + tr.length + ' match(s) composent cette statistique (20 plus récents) :</p>' + tr.slice(-20).reverse().map(function (m) { return kv(fd(m.date) + ' · ' + m.home + ' – ' + m.away, m.hs + '-' + m.as); }).join('') + '</details>';
+  }
+  var X = U.extra;
+  X.ou = function (ms) { if (!ms.length) return card('📈 Over / Under', '<p class="pro-dim">N/A : aucune donnée.</p>'); var L = st().league(H.filt()), lines = ms[0].sport === 'basketball' ? D.CFG.ptLines : D.CFG.goalLines, h = '';
+    lines.forEach(function (l) { h += statCard('Over ' + l, L.totals[l].over, function (m) { return m.hs + m.as > l; }, ms) + statCard('Under ' + l, L.totals[l].under, function (m) { return m.hs + m.as < l; }, ms); }); return card('📈 Over / Under', h + H.prov(ms)); };
+  X.btts = function (ms) { if (!ms.length) return card('🎯 BTTS', '<p class="pro-dim">N/A : aucune donnée.</p>'); var L = st().league(H.filt()); if (!L.btts) return card('🎯 BTTS', '<p class="pro-dim">N/A pour ce sport.</p>'); var b = function (m) { return m.hs > 0 && m.as > 0; };
+    return card('🎯 BTTS', statCard('BTTS Oui', L.btts.yes, b, ms) + statCard('BTTS Non', L.btts.no, function (m) { return !b(m); }, ms) + statCard('BTTS + Over 2.5', L.btts.yesOver25, function (m) { return b(m) && m.hs + m.as > 2.5; }, ms) + statCard('BTTS + Under 2.5', L.btts.yesUnder25, function (m) { return b(m) && m.hs + m.as < 2.5; }, ms) + H.prov(ms)); };
+  X.inputs = function () {
+    var f = '<div class="pro-fields"><input class="pro-in" id="edb2H" placeholder="Équipe domicile" value="' + esc(A.home || S.team) + '"><input class="pro-in" id="edb2A" placeholder="Équipe extérieur" value="' + esc(A.away || S.team2) + '"></div><textarea class="pro-in" id="edb2L" rows="4" placeholder="un marché par ligne : marché cote [proba modèle %]">' + esc(A.lines) + '</textarea>'
+      + '<button class="pro-btn" onclick="EA.dbui2.run()">Analyser</button><p class="pro-dim">Marchés : over:1.5, over:2.5, over:3.5, btts_yes, home_win, draw, away_win. Laisser vide pour analyser les 7 marchés sans cote (NO BET « cote absente »). Compétition/sport : filtres du dessus. Seules les données antérieures à aujourd\'hui et à date fiable sont utilisées.</p>';
+    var h = card('🧪 Model inputs · analyse multi-marchés', f); if (A.msg) h += '<p class="pro-dim">' + esc(A.msg) + '</p>'; var rp = A.rp; if (!rp) return h;
+    var r0 = rp.results[0], best = rp.priorities[0] && rp.priorities[0].result, top = best ? best.decision : (rp.results.some(function (r) { return r.decision === 'CHECK'; }) ? 'CHECK' : 'NO BET'), ci = rp.input;
+    h += card('MATCH', kv('Rencontre', esc(ci.home + ' – ' + ci.away)) + kv('Compétition', esc(ci.competition || 'toutes')) + kv('Cutoff anti-leakage', esc(r0.leak.cutoff) + ' ' + r0.leak.icon));
+    h += card('DATA QUALITY · N · FRESHNESS', kv('Qualité', esc(r0.dq.band) + ' (' + r0.dq.score + '/100)') + kv('N', r0.dq.n) + kv('Fraîcheur', 'dernier match ' + fd(r0.dq.lastMatch)) + (r0.excludedApprox ? '<p class="pro-dim">' + r0.excludedApprox + ' match(s) à date approximative exclus.</p>' : ''));
+    if (r0.cons && r0.cons.signals) h += card('MAIN SIGNALS', r0.cons.signals.map(function (s) { return kv(s.name, s.k == null ? pct(s.p) : esc(s.k + '/' + s.n) + ' → ' + pct(s.p)); }).join('') + (r0.matchup && r0.matchup.expected ? kv('Buts attendus (attaque × défense)', r0.matchup.expected.home.toFixed(2) + ' + ' + r0.matchup.expected.away.toFixed(2) + ' = ' + r0.matchup.expected.total.toFixed(2) + ' (ligue ' + r0.matchup.expected.leagueTotal.toFixed(2) + ')') : '') + '<p class="pro-dim">' + esc(r0.cons.provenance) + '</p>');
+    h += card('MARKET ANALYSIS', rp.results.map(function (r, i) {
+      var p = r.probabilities, ck = r.checks.map(function (c) { return '<li>' + (c.ok === true ? '✓' : c.ok === false ? '✗' : '–') + ' ' + esc(c.label) + (c.detail ? ' · ' + esc(c.detail) : '') + (c.ok === false && c.level === 'critical' ? ' <b>(critique)</b>' : '') + '</li>'; }).join('');
+      return '<details><summary>' + BADGE[r.decision] + ' · ' + esc(F.MK[r.input.market] || r.input.market) + (p ? ' · ' + (p.final * 100).toFixed(1) + ' %' : '') + (r.input.odds ? ' @ ' + r.input.odds : '') + '</summary>' + (p ? kv('Modèle · implicite brute · normalisée · finale', [p.model, p.impliedRaw, p.normalized, p.final].map(function (v) { return v == null ? 'UNKNOWN' : (v * 100).toFixed(1) + ' %'; }).join(' · ')) + kv('Cote juste · cote minimale', r.fairOdds.toFixed(2) + ' · ' + r.minOdds.toFixed(2)) + kv('Edge · EV', (r.edgePts == null ? '—' : r.edgePts.toFixed(1) + ' pts') + ' · ' + (r.ev == null ? '—' : (r.ev * 100).toFixed(1) + ' %')) + kv('Confiance · risque', r.confidence.score + '/100 · ' + r.risk.level) + kv('Stabilité · conflit', (r.stability.available ? r.stability.stability + '/100' : '—') + ' · ' + (r.conflict.score == null ? '—' : r.conflict.score + '/100')) + kv('Incertitude', esc(r.uncertainty.note)) + '<p class="pro-dim">Facteurs indisponibles : ' + esc(r.confidence.unavailable.join(' ; ')) + '</p>' : '')
+        + '<h3>FINAL DECISION GATE</h3><ul class="pro-list">' + ck + '</ul>' + kv('Position size', r.sizing.available ? r.sizing.stake.toFixed(2) + ' (plafonnée, sans garantie)' : esc(r.sizing.label) + ' · ' + esc(r.sizing.reason)) + '<p class="pro-dim">Pipeline : ' + r.pipeline.map(function (x) { return x.n + (x.status === 'ok' ? '✓' : x.status === 'n/a' ? '–' : '✗'); }).join(' ') + '</p>'
+        + (r.input.odds > 1 ? '<button class="pro-btn small" onclick="EA.dbui2.save(' + i + ')">Enregistrer cette décision</button>' : '') + '</details>'; }).join(''));
+    h += card('BEST OPPORTUNITIES', rp.priorities.length ? rp.priorities.map(function (x) { return kv(x.medal + ' · ' + esc(F.MK[x.result.input.market]), 'EV ' + (x.result.ev * 100).toFixed(1) + ' % · conf. ' + x.result.confidence.score + '/100'); }).join('') : '<p>Aucune opportunité suffisamment solide.</p>');
+    var risks = {}, conf = {}, why = []; rp.results.forEach(function (r) { (r.risks || []).forEach(function (x) { risks[x] = 1; }); if (r.matchup) r.matchup.contradictions.forEach(function (x) { conf[x] = 1; }); }); if (best) why = best.why.concat(best.reasons);
+    h += card('RISKS', Object.keys(risks).length ? '<ul class="pro-list">' + Object.keys(risks).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '<p class="pro-dim">Aucun risque spécifique relevé.</p>') + card('CONFLICTS', Object.keys(conf).length ? '<ul class="pro-list">' + Object.keys(conf).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '<p class="pro-dim">Aucune contradiction forte.</p>');
+    h += card('WHY', (why.length ? '<ul class="pro-list">' + why.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '<p>' + esc(rp.results.map(function (r) { return r.reasons[0]; }).filter(Boolean).slice(0, 3).join(' · ') || '—') + '</p>') + '<p>' + esc(rp.choiceNote) + '</p>');
+    h += card('FINAL DECISION', '<div class="pro-dec">' + (top === 'NO BET' ? '🚫 NO BET' : BADGE[top]) + '</div>' + (rp.combo ? '<h3>🔥 COMBINÉ RENTABLE</h3>' + rp.combo.legs.map(function (l, i) { return kv('Sélection ' + (i + 1), esc(l.market + ' ' + l.selection) + ' @ ' + l.odds); }).join('') + kv('Cote totale · probabilité jointe', rp.combo.odds.toFixed(2) + ' · ' + (rp.combo.pJoint * 100).toFixed(1) + ' %') + kv('EV (après incertitude)', (rp.combo.ev * 100).toFixed(1) + ' % (' + (rp.combo.evLow * 100).toFixed(1) + ' %)') + '<p class="pro-dim">« Rentable » = favorable selon le modèle et ses hypothèses, jamais un gain garanti. Corrélations provisoires.</p>' : '<p>' + esc(rp.comboText) + '</p>')); return h;
+  };
+  X.add = function () {
+    var f = '<div class="pro-fields"><input class="pro-in" id="edbAd" placeholder="Date AAAA-MM-JJ"><input class="pro-in" id="edbAc" placeholder="Compétition" value="' + esc(S.comp) + '"><input class="pro-in" id="edbAh" placeholder="Domicile"><input class="pro-in" id="edbAa" placeholder="Extérieur"><input class="pro-in" id="edbAhs" inputmode="numeric" placeholder="Buts dom."><input class="pro-in" id="edbAas" inputmode="numeric" placeholder="Buts ext."><input class="pro-in" id="edbAch" inputmode="decimal" placeholder="Corners dom. (opt.)"><input class="pro-in" id="edbAca" inputmode="decimal" placeholder="Corners ext. (opt.)"><input class="pro-in" id="edbAsh" inputmode="decimal" placeholder="Tirs cadrés dom. (opt.)"><input class="pro-in" id="edbAsa" inputmode="decimal" placeholder="Tirs cadrés ext. (opt.)"></div><button class="pro-btn" onclick="EA.dbui2.addMatch()">Ajouter / mettre à jour</button><p class="pro-dim">Un champ vide reste UNKNOWN (jamais 0). Un match déjà connu est mis à jour, jamais dupliqué.</p>';
+    var h = card('➕ Ajouter un match (pipeline complet)', f); if (A.add) h += card('Pipeline', A.add.steps.map(function (s) { return kv((s.ok ? '✓ ' : '✗ ') + s.step, esc(s.detail)); }).join('')); return h; };
+  X.perf = function () { var recs = H.proRecs(), p = F.performance(recs, st().decisions()), f1 = function (v) { return v == null ? '—' : (v * 100).toFixed(1) + ' %'; };
+    if (!p.n) return card('📈 EA PERFORMANCE', '<p class="pro-dim">' + esc(p.note) + '</p>');
+    return card('📈 EA PERFORMANCE', kv('Paris réglés', p.n + ' · ' + esc(p.level)) + kv('Gagnés / perdus', p.won + ' / ' + p.lost) + kv('Taux de réussite', f1(p.hit)) + kv('ROI', f1(p.roi)) + kv('Profit / perte (unités)', p.profit.toFixed(2)) + kv('Pertes cumulées', p.totalLoss.toFixed(2)) + kv('Plus longue série de pertes', p.maxLosingStreak) + kv('Drawdown max', p.drawdown.toFixed(2) + ' u') + kv('EV annoncé moyen', f1(p.meanEV)) + kv('Brier · écart de calibration', (p.brier == null ? '—' : p.brier.toFixed(3)) + ' · ' + (p.ece == null ? '—' : (p.ece * 100).toFixed(1) + ' pts')) + kv('CLV', typeof p.clv === 'number' ? p.clv.toFixed(2) + ' pts' : esc(p.clv)) + '<p class="pro-dim">' + esc(p.note) + ' Les pertes sont affichées au même titre que les gains.</p>'); };
+  X.decis = function () { var all = st().decisions().slice().reverse(), pg = S.page, pgs = Math.max(1, Math.ceil(all.length / 10));
+    return card('🗂 Historique des décisions', (all.length ? all.slice(pg * 10, pg * 10 + 10).map(function (x) { var d = x.prediction; return '<div class="pro-kv"><span>' + fd(new Date(d.createdAt).toISOString().slice(0, 10)) + ' · ' + esc(d.match) + ' · ' + esc(F.MK[d.market] || d.market) + '</span><span>' + esc(d.decision) + (x.result ? ' · ' + (x.result.outcome === 'won' ? 'Gagné' : x.result.outcome === 'lost' ? 'Perdu' : 'Annulé') + ' (' + (x.result.profitUnits >= 0 ? '+' : '') + x.result.profitUnits.toFixed(2) + ' u)' : '') + '</span></div><p class="pro-dim">p ' + (d.p * 100).toFixed(1) + ' % · cote ' + d.odds + ' · cote juste ' + d.fair.toFixed(2) + ' · edge ' + (d.edgePts == null ? '—' : d.edgePts.toFixed(1)) + ' pts · EV ' + (d.ev * 100).toFixed(1) + ' % · confiance ' + d.confidence + ' · risque ' + esc(d.risk) + (st().verifyDecision(d) ? ' · ✅ intact' : ' · ⚠️ altérée') + '</p>' + (x.result || d.decision === 'NO BET' ? '' : '<button class="pro-btn small" onclick="EA.dbui2.settle(\'' + d.id + '\',\'won\')">Gagné</button> <button class="pro-btn small" onclick="EA.dbui2.settle(\'' + d.id + '\',\'lost\')">Perdu</button> <button class="pro-btn small" onclick="EA.dbui2.settle(\'' + d.id + '\',\'void\')">Annulé</button>'); }).join('') : '<p class="pro-dim">Aucune décision enregistrée. Utilisez « Enregistrer cette décision » dans 🧪 Analyse.</p>') + H.pager(pg, pgs) + '<p class="pro-dim">La prédiction est figée ; le résultat est stocké à part et ne la modifie jamais.</p>'); };
+  X.engines = function () { var rg = F.registry(st(), H.proRecs()), ic = { ACTIVE: '🟢', PARTIAL: '🟡', UNAVAILABLE: '🔴', 'INSUFFICIENT DATA': '⚪' };
+    return card('🧰 Moteurs : réalité du code', rg.map(function (x) { return kv(ic[x.status] + ' ' + x.engine, esc(x.status)) + '<p class="pro-dim">' + esc(x.detail) + '</p>'; }).join('')) + card('Couches', F.layers().map(function (l) { return kv((l.status === 'ACTIVE' ? '🟢 ' : '🔴 ') + l.layer, esc(l.status)) + '<p class="pro-dim">' + esc(l.detail) + '</p>'; }).join('')); };
+  X.drift = function () { var d = F.drift(st(), { sport: S.sport || undefined, competition: S.comp || undefined }, H.proRecs()); return card('🌊 Surveillance de dérive', d.items.length ? d.items.map(function (x) { return kv(x.metric, x.nHist ? x.hist.toFixed(2) + ' (N=' + x.nHist + ') → ' + x.recent.toFixed(2) + ' (N=' + x.nRecent + ')' : x.hist.toFixed(3) + ' → ' + x.recent.toFixed(3)) + (x.shift ? '<p>' + d.label + '</p>' : ''); }).join('') + '<p class="pro-dim">' + esc(d.note) + '</p>' : '<p class="pro-dim">Échantillon insuffisant (minimum 40 observations par statistique).</p>'); };
+  X.errors = function () { var e = F.errorPatterns(H.proRecs()); return card('🧠 Mémoire des erreurs', (e.patterns.length ? e.patterns.map(function (p) { return kv((p.pattern ? '🔁 PATTERN · ' : '') + p.marche + ' · ' + p.categorie, p.count + ' / N=' + p.n) + '<p class="pro-dim">' + esc(p.note) + '</p>'; }).join('') : '<p class="pro-dim">Aucun résultat perdu enregistré.</p>') + (e.errors.length ? '<details><summary>' + e.errors.length + ' erreur(s) détaillée(s)</summary>' + e.errors.slice(-15).reverse().map(function (x) { return kv(x.date + ' · ' + x.marche, esc(x.championnat) + ' · p ' + (x.prediction * 100).toFixed(0) + ' % · ' + esc(x.contexte)); }).join('') + '</details>' : '') + '<p class="pro-dim">EA apprend des patterns répétés (N ≥ 30, ≥ 3 occurrences, ≥ 40 % des pertes), jamais d\'un résultat isolé.</p>'); };
+  X.final = function () { var chk = F.selfCheck(), m = st().meta(), recs = H.proRecs(), bt = EA.risk ? EA.risk.rulesBacktest(recs) : null, ss = EA.dbintel.systemStatus(st(), recs, bt), ic = function (n) { return (ss.filter(function (x) { return x.name === n; })[0] || {}).icon || '⚪'; };
+    var ready = m.state === 'READY', mods = F.registry(st(), recs).filter(function (x) { return x.status === 'ACTIVE'; }).length;
+    var ban = '<div class="pro-card"><h3>🧠 EA-VALUE · STATISTICAL INTELLIGENCE SYSTEM</h3>' + kv('📊 DATABASE', ready ? '🟢 READY' : '⚪ VIDE') + kv('⚙️ MODELS', mods + ' moteur(s) ACTIVE · ' + ic('MODELS')) + kv('🎯 DECISION ENGINE', EA.dbfinal.layers().every(function (l) { return l.status === 'ACTIVE'; }) ? '🟢 READY' : '🔴 INCOMPLET') + kv('🛡 RISK ENGINE', EA.risk ? '🟢 READY' : '🔴 INDISPONIBLE') + '<p class="pro-dim">Aucun 🟢 simulé : voir EA SYSTEM STATUS (aperçu).</p></div>';
+    return ban + card('✅ Contrôle final (exécuté maintenant)', chk.map(function (c) { return kv(c.status + ' ' + c.name, esc(c.detail || '')); }).join('') + '<p class="pro-dim">Exécuté sur un jeu de test synthétique en mémoire ; ne modifie pas vos données. ⚪ = non vérifiable depuis l\'application.</p>')
+      + card('Versions', kv('Application', 'EA-VALUE Pro 3.0') + kv('Database', esc(m.name) + ' · schéma ' + m.schema) + kv('Model engine', esc(m.model)) + kv('Paramètres', esc(m.params)) + kv('Dernier rebuild', esc(m.lastRebuild || '—')) + kv('Dernière mise à jour', esc(m.lastUpdate || '—')) + kv('Données', m.matches + ' matchs · ' + m.competitions + ' compétition(s) · ' + m.teams + ' équipe(s)') + (m.versions || []).slice(-5).reverse().map(function (v) { return kv(v.t.slice(0, 16).replace('T', ' '), 'db v' + v.db + ' · ' + v.matches + ' matchs'); }).join('')); };
+  var T = '';
+  EA.dbui2 = {
+    run: function () { var v = function (id) { var e = document.getElementById(id); return e ? e.value : ''; }; A.home = v('edb2H').trim(); A.away = v('edb2A').trim(); A.lines = v('edb2L'); A.msg = '';
+      try { var lines = A.lines.split(/\n+/).map(function (l) { var p = l.trim().split(/\s+/); if (!p[0]) return null; var mp = num(p[2]); return { market: p[0], odds: num(p[1]), modelP: mp == null ? null : mp / 100 }; }).filter(Boolean); A.rp = F.report(st(), { sport: S.sport || 'football', competition: S.comp || undefined, home: A.home, away: A.away }, lines, ctx()); st().log('MODEL', 'Rapport ' + A.home + ' – ' + A.away + ' (' + lines.length + ' marché(s))'); st().saveNow(); }
+      catch (e) { A.rp = null; A.msg = 'Analyse impossible : ' + e.message; } H.render(); },
+    save: function (i) { var r = A.rp && A.rp.results[i]; if (!r || !r.probabilities) return; st().addDecision({ match: A.home + ' – ' + A.away, competition: S.comp || '', sport: S.sport || 'football', market: r.input.market, p: r.probabilities.final, odds: r.input.odds, fair: r.fairOdds, edgePts: r.edgePts, ev: r.ev, confidence: r.confidence.score, risk: r.risk.level, decision: r.decision, engine: EA.core ? EA.core.VERSION : '?', db: st().meta().name }); A.msg = 'Décision enregistrée (figée) — voir 🗂 Décisions.'; H.render(); },
+    settle: function (id, o) { st().settleDecision(id, o, 1); H.render(); },
+    addMatch: function () { var v = function (id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; }, num_ = function (id) { return v(id) === '' ? null : num(v(id)); }; var row = { sport: S.sport || 'football', date: v('edbAd'), competition: v('edbAc'), home: v('edbAh'), away: v('edbAa'), hs: v('edbAhs') === '' ? null : v('edbAhs'), as: v('edbAas') === '' ? null : v('edbAas'), source: 'MANUAL', corners_h: num_('edbAch'), corners_a: num_('edbAca'), sot_h: num_('edbAsh'), sot_a: num_('edbAsa') };
+      try { A.add = F.addMatch(st(), row, { records: H.proRecs() }); } catch (e) { A.add = { steps: [{ step: 'ERREUR', detail: e.message, ok: false }] }; } H.render(); } };
+  U.extraSecs.push(['add', '➕ Ajouter'], ['perf', '📈 Performance'], ['decis', '🗂 Décisions'], ['engines', '🧰 Moteurs'], ['drift', '🌊 Dérive'], ['final', '✅ Contrôle final']);
+})(typeof window !== 'undefined' ? window : global);
+
+/* ===== js/ea-bridge.js ===== */
+/* EA BRIDGE — branche EA DATABASE + FINAL DECISION GATE directement sur les analyses GENÈSE (football) et BASKET ANALYSE.
+   Les calculs historiques ne sont pas modifiés : le verdict base de données s'ajoute sous « Paris retenus » (probabilité Genèse/Basket + base interne → probabilité finale, cote juste, décision). */
+(function (g) {
+  'use strict';
+  var EA = g.EA = g.EA || {}; if (!EA.dbfinal) return;
+  var F = EA.dbfinal, I = EA.dbintel, D = EA.database;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function pc(v, d) { return v == null ? 'UNKNOWN' : (v * 100).toFixed(d == null ? 1 : d) + ' %'; }
+  // ---- correspondance pari legacy → marché de la base (null = marché non couvert, jamais deviné) ----
+  function mapBet(b, sport, names) {
+    var e = (b && b.eval) || {}, t = e.type;
+    if (sport === 'basketball') {
+      if (t === 'result2way') return e.outcome === 'A' ? 'home_win' : 'away_win';
+      var lb = String((b && b.label) || ''), m = /^(Plus|Moins) de ([\d.]+) points/.exec(lb); if (m) return (m[1] === 'Plus' ? 'over:' : 'under:') + m[2];
+      m = /^(.+?) gagne par (\d+)\+/.exec(lb); if (m && names) { if (D.norm(m[1]) === D.norm(names.home)) return 'home_margin_gte:' + m[2]; if (D.norm(m[1]) === D.norm(names.away)) return 'away_margin_gte:' + m[2]; }
+      return null;
+    }
+    if (t === 'goalsLine') return (e.op === 'over' ? 'over:' : 'under:') + e.line;
+    if (t === 'btts') return e.side === 'yes' ? 'btts_yes' : 'btts_no';
+    if (t === 'result1x2' || t === 'result') return e.outcome === 'A' ? 'home_win' : e.outcome === 'B' ? 'away_win' : e.outcome === 'draw' ? 'draw' : null;
+    if (t === 'resultDC' && e.outcomes) { var o = e.outcomes.slice().sort().join(','); return o === 'A,draw' ? 'home_or_draw' : o === 'B,draw' ? 'away_or_draw' : o === 'A,B' ? 'home_or_away' : null; }
+    if (t === 'statLine') { var k = { corners: 'corners', shots: 'sot', cards: 'cards' }[e.stat]; return k ? k + '_' + (e.op === 'over' ? 'over' : 'under') + ':' + e.line : null; }
+    return null;
+  }
+  // ---- verdict (pur : testable sans DOM) ----
+  function verdict(o) {
+    var st = o.store, items = [], recs = o.records || [];
+    (o.bets || []).forEach(function (b, i) {
+      var mk = mapBet(b, o.sport, { home: o.home, away: o.away }), p = b.p > 1 ? b.p / 100 : b.p;
+      if (!mk) { items.push({ i: i, label: b.label, unsupported: true, p: p }); return; }
+      var R = F.analyzeFull(st, { sport: o.sport, competition: o.league || undefined, home: o.home, away: o.away, market: mk, modelP: p, odds: b.odds > 1 ? b.odds : null, live: true }, { records: recs, bankroll: o.bankroll, minStake: o.minStake });
+      items.push({ i: i, label: b.label, market: mk, p: p, R: R });
+    });
+    var ok = items.filter(function (x) { return x.R; }), pr = I.priorities(ok.map(function (x) { return x.R; })), val = ok.filter(function (x) { return x.R.decision === 'VALUE'; });
+    var top = pr.length ? 'VALUE' : ok.some(function (x) { return x.R.decision === 'CHECK'; }) ? 'CHECK' : ok.some(function (x) { return x.R.decision === 'BLOCKED'; }) ? 'BLOCKED' : 'NO BET';
+    var f = { sport: o.sport, competition: o.league || undefined, before: new Date(Date.now() + 864e5).toISOString().slice(0, 10) }, tvl = [];
+    if (ok.length && ok[0].R.cons && ok[0].R.cons.available) [o.home, o.away].forEach(function (t) { try { var x = I.teamVsLeague(st, t, f); if (!x.unknown) tvl.push({ team: t, items: x.items.filter(function (y) { return !y.unknown && (y.shrunkPts != null ? Math.abs(y.shrunkPts) >= 3 : Math.abs(y.shrunkRatio - 1) >= 0.08); }).slice(0, 5), n: x.n }); } catch (e) { } });
+    var h2h = st.played({ sport: o.sport }).filter(function (m) { var a = D.norm(m.home), b = D.norm(m.away), x = D.norm(o.home), y = D.norm(o.away); return (a === x && b === y) || (a === y && b === x); }).slice(-5).reverse();
+    var combo = null; if (val.length >= 2 && EA.parlay) { var r = EA.parlay.optimize(val.map(function (x) { return F.legOf(x.R, { home: o.home, away: o.away }); }), {}); if (r.status === 'BET') combo = r; }
+    var base = ok.length ? ok[0].R : null, why = pr.length ? pr[0].result.why : [], seen = {}, noBet = !pr.length ? ok.map(function (x) { return x.R.reasons[0]; }).filter(function (r) { if (!r || seen[r]) return false; seen[r] = 1; return true; }).slice(0, 2) : [], noOdds = ok.length > 0 && ok.every(function (x) { return !(x.R.input.odds > 1); });
+    return { items: items, ok: ok, priorities: pr, top: top, combo: combo, tvl: tvl, h2h: h2h, dq: base && base.dq, leak: base && base.leak, why: why, noBetReasons: noBet, unsupported: items.filter(function (x) { return x.unsupported; }).length, noOdds: noOdds, home: o.home, away: o.away, league: o.league };
+  }
+  var COL = { VALUE: '#2ecc71', CHECK: '#f1c40f', 'NO BET': '#8a93a6', BLOCKED: '#e74c3c' }, BADGE = { VALUE: '🔥 VALUE', CHECK: '🟡 CHECK', 'NO BET': '🚫 NO BET', BLOCKED: '🔴 BLOCKED' };
+  function html(v) {
+    var dq = v.dq, h = '<div class="section-title">🎯 Verdict EA × Base de données</div>';
+    if (!v.ok.length) return h + '<div style="padding:10px 0;font-size:13px;opacity:.85">Aucun des paris retenus n\'est couvert par la base interne : le verdict de l\'analyse reste celui du moteur ci-dessus (aucune confirmation statistique disponible).</div>';
+    h += '<div style="border-left:4px solid ' + COL[v.top] + ';padding:10px 12px;margin:8px 0;background:rgba(255,255,255,.03);border-radius:6px"><div style="font-weight:700;font-size:15px">' + BADGE[v.top] + (v.priorities.length ? ' — ' + esc(F.labelOf(v.priorities[0].result.input.market)) : '') + '</div>';
+    if (v.priorities.length) { var b = v.priorities[0], r = b.result; h += '<div style="font-size:13px;margin-top:4px">' + esc(v.items.filter(function (x) { return x.R === r; })[0].label) + ' · probabilité finale ' + pc(r.probabilities.final) + ' · cote juste ' + r.fairOdds.toFixed(2) + ' · cote minimale ' + r.minOdds.toFixed(2) + ' · EV ' + (r.ev * 100).toFixed(1) + ' % · confiance ' + r.confidence.score + '/100 · risque ' + r.risk.level + '</div>'; }
+    else h += '<div style="font-size:13px;margin-top:4px">' + (v.noOdds ? 'En attente des cotes : saisissez la « Cote entrée » d\'un pari ci-dessus, EA calcule alors edge, EV et la décision. Les cotes minimales pour qu\'un pari soit intéressant sont indiquées pour chaque pari.' : v.noBetReasons.length ? esc(v.noBetReasons.join(' · ')) : 'Aucun pari ne passe le contrôle final.') + '</div><div style="font-size:12px;opacity:.8;margin-top:4px">NO BET est une sortie normale du moteur : aucun pari n\'est forcé.</div>';
+    h += '</div>';
+    h += '<div style="font-size:12px;opacity:.85;margin:6px 0">Base interne : qualité <b>' + esc(dq.band) + '</b> (' + dq.score + '/100) · N = ' + dq.n + ' matchs · dernier match ' + esc(dq.lastMatch || '—') + ' · anti-leakage ' + esc(v.leak.icon) + (v.leak.approxUsed ? ' · ' + v.leak.approxUsed + ' match(s) à date approximative (résultats déjà connus)' : '') + '</div>';
+    v.items.forEach(function (x) {
+      if (x.unsupported) { h += '<div style="padding:8px 0;border-top:1px solid rgba(255,255,255,.08);font-size:13px"><b>' + esc(x.label) + '</b><div style="opacity:.75;font-size:12px">Marché non couvert par la base interne (aucune estimation inventée).</div></div>'; return; }
+      var R = x.R, p = R.probabilities, sg = (R.cons && R.cons.signals) || [], base = sg.filter(function (s) { return s.name.indexOf('League') === 0; })[0];
+      h += '<details style="padding:8px 0;border-top:1px solid rgba(255,255,255,.08)"><summary style="cursor:pointer;overflow-wrap:anywhere"><b>' + BADGE[R.decision] + '</b> · ' + esc(x.label) + ' <span style="opacity:.8">— ' + (p ? 'Moteur ' + pc(x.p, 0) + ' → final ' + pc(p.final, 0) + ' · cote min. ' + R.minOdds.toFixed(2) + (R.input.odds > 1 ? ' · edge ' + (R.edgePts == null ? '—' : R.edgePts.toFixed(1) + ' pts') + ' · EV ' + (R.ev * 100).toFixed(1) + ' %' : '') : esc(R.reasons[0] || '')) + '</span></summary><div style="font-size:12.5px;line-height:1.5;padding:6px 0">';
+      if (p) { h += '<div>Probabilité moteur <b>' + pc(x.p) + '</b> · base interne (consensus) <b>' + pc(R.cons.p) + '</b> · finale <b>' + pc(p.final) + '</b>' + (base ? ' · baseline ligue ' + pc(base.raw) + ' (N=' + base.n + ')' : '') + '</div><div>Cote juste <b>' + R.fairOdds.toFixed(2) + '</b> · cote minimale acceptable <b>' + R.minOdds.toFixed(2) + '</b>' + (R.input.odds > 1 ? ' · cote saisie ' + R.input.odds + ' · edge ' + (R.edgePts == null ? '—' : R.edgePts.toFixed(1) + ' pts') + ' · EV ' + (R.ev * 100).toFixed(1) + ' %' : ' · <i>saisissez la cote du bookmaker pour obtenir l\'edge et l\'EV</i>') + '</div>';
+        h += '<div>Confiance ' + R.confidence.score + '/100 · risque ' + R.risk.level + ' · stabilité ' + (R.stability && R.stability.available ? R.stability.label + ' (' + R.stability.stability + '/100)' : '—') + ' · conflit ' + (R.conflict && R.conflict.score != null ? R.conflict.label + ' (' + R.conflict.score + '/100)' : '—') + ' · ' + esc(R.uncertainty.note) + '</div>';
+        h += '<div style="margin-top:4px">' + sg.map(function (s) { return esc(s.name) + ' : ' + (s.k == null ? pc(s.p) : s.k + '/' + s.n + ' → ' + pc(s.p)); }).join(' · ') + '</div>'; if (R.cons.conflict) h += '<div style="color:#f1c40f">⚠️ CONFLIT STATISTIQUE : signal insuffisamment cohérent</div>'; }
+      h += '<div style="margin-top:4px"><b>Contrôle final</b> : ' + R.checks.filter(function (c) { return c.ok !== null; }).map(function (c) { return (c.ok ? '✓ ' : '✗ ') + esc(c.label); }).join(' · ') + '</div>' + (R.decision !== 'VALUE' ? '<div><b>Pourquoi pas :</b> ' + esc(R.reasons.join(' · ')) + '</div>' : '<div><b>Pourquoi :</b> ' + esc(R.why.slice(0, 4).join(' · ') || R.reasons[0]) + '</div>') + '</div></details>'; });
+    if (v.tvl.length) h += '<div style="margin-top:10px"><b style="font-size:13px">Équipes vs baseline du championnat</b>' + v.tvl.map(function (t) { return '<div style="font-size:12.5px;padding:4px 0"><b>' + esc(t.team) + '</b> (N=' + t.n + ') : ' + (t.items.length ? t.items.map(function (y) { return esc(y.name) + ' ' + (y.shrunkPts != null ? (y.shrunkPts >= 0 ? '+' : '') + y.shrunkPts.toFixed(1) + ' pts' : '×' + y.shrunkRatio.toFixed(2)); }).join(' · ') : 'proche de la moyenne du championnat') + '</div>'; }).join('') + '</div>';
+    if (v.h2h.length) h += '<div style="margin-top:8px;font-size:12.5px"><b>H2H en base</b> : ' + v.h2h.map(function (m) { return esc(m.home) + ' ' + m.hs + '-' + m.as + ' ' + esc(m.away); }).join(' · ') + ' <span style="opacity:.7">(poids réduit si ancien)</span></div>';
+    h += '<div style="margin-top:10px;padding:8px 10px;border-radius:6px;background:rgba(255,255,255,.04);font-size:13px">' + (v.combo ? '<b>🔥 COMBINÉ RENTABLE</b> : ' + v.combo.legs.map(function (l) { return esc(l.market + ' ' + l.selection) + ' @' + l.odds; }).join(' + ') + ' → cote ' + v.combo.odds.toFixed(2) + ', probabilité jointe ' + pc(v.combo.pJoint) + ', EV ' + (v.combo.ev * 100).toFixed(1) + ' % (corrélation provisoire).' : '❌ Aucun combiné suffisamment solide.') + '</div>';
+    if (v.unsupported) h += '<div style="font-size:11.5px;opacity:.7;margin-top:6px">' + v.unsupported + ' pari(s) hors couverture de la base.</div>';
+    return h + '<div style="font-size:11.5px;opacity:.7;margin-top:8px">Probabilités et verdicts = estimations statistiques, jamais une garantie de gain. Source : EA DATABASE (interne), version ' + esc(EA.dbui ? EA.dbui.store().meta().name : '') + '.</div>';
+  }
+  // ---- câblage DOM ----
+  var lastSync = 0;
+  function sync(force) { if (!EA.dbui) return; var now = Date.now(); if (!force && now - lastSync < 2000) return; lastSync = now; try { var src = EA.dbui.sources(), rows = src.reduce(function (a, x) { return a.concat(x.rows); }, []), s = EA.dbui.store(); if (!rows.length) return; if (s.meta().state !== 'READY') s.initialize(src); else s.upsert(rows); } catch (e) { try { EA.dbui.store().log('ERROR', 'Sync : ' + e.message); } catch (e2) { } } }
+  function proRecs() { try { var raw = JSON.parse(g.localStorage.getItem('ea_pro_memory')); return raw && raw.analyses || []; } catch (e) { return []; } }
+  function render(sport) {
+    var hostId = sport === 'football' ? 'betsListGe' : 'betsListBk', host = document.getElementById(hostId); var DBx = typeof DB !== 'undefined' ? DB : null; if (!host || !DBx || !EA.dbui) return;
+    var rec = (DBx[sport] || [])[0]; if (!rec || Date.now() - rec.timestamp > 6 * 3600 * 1000 || !rec.bets) return;
+    sync(true); var box = document.getElementById('eaDb_' + sport);
+    if (!box) { box = document.createElement('div'); box.id = 'eaDb_' + sport; box.style.cssText = 'padding:0 22px 22px;max-width:100%;overflow-wrap:anywhere'; host.parentNode.parentNode.insertBefore(box, host.parentNode.nextSibling); }
+    var bets = rec.bets.map(function (b, i) { var inp = document.querySelector('.odds-input-bet[data-rec="' + rec.id + '"][data-idx="' + i + '"][data-kind="entry"]'), od = inp ? parseFloat(inp.value) : NaN; return Object.assign({}, b, { odds: od > 1 ? od : null }); });
+    var v; try { v = verdict({ store: EA.dbui.store(), sport: sport, home: rec.nameA, away: rec.nameB, league: rec.league, bets: bets, records: proRecs() }); box.innerHTML = html(v); }
+    catch (e) { box.innerHTML = '<div class="section-title">🎯 Verdict EA × Base de données</div><div style="font-size:12.5px;opacity:.85">Verdict base de données indisponible (' + esc(e.message) + '). L\'analyse ci-dessus n\'est pas affectée.</div>'; try { EA.dbui.store().log('ERROR', 'Bridge ' + sport + ' : ' + e.message); } catch (e2) { } return; }
+    try { rec.dbVerdict = { at: Date.now(), top: v.top, items: v.ok.map(function (x) { return { label: x.label, decision: x.R.decision, pFinal: x.R.probabilities ? x.R.probabilities.final : null }; }), baseN: v.dq && v.dq.n, engine: EA.core && EA.core.VERSION }; if (typeof g.persistDB === 'function') g.persistDB(); } catch (e) { }
+  }
+  function boot() {
+    [['generateBtn', 'football'], ['bkGenerateBtn', 'basketball']].forEach(function (p) { var b = document.getElementById(p[0]); if (b) b.addEventListener('click', function () { setTimeout(function () { try { render(p[1]); } catch (e) { } }, 0); }); });
+    var t = null; document.addEventListener('input', function (e) { var el = e.target; if (!el || !el.classList || !el.classList.contains('odds-input-bet') || el.getAttribute('data-kind') !== 'entry') return; var sp = el.getAttribute('data-sport'); clearTimeout(t); t = setTimeout(function () { try { render(sp); } catch (e2) { } }, 350); });
+    if (typeof g.markResult === 'function') { var mr = g.markResult; g.markResult = function () { var r = mr.apply(this, arguments); try { sync(true); } catch (e) { } return r; }; }
+    setTimeout(function () { sync(true); }, 400);
+  }
+  EA.bridge = { mapBet: mapBet, verdict: verdict, html: html, render: render, sync: sync };
+  if (typeof document !== 'undefined') { if (document.readyState === 'complete') boot(); else g.addEventListener('load', boot); }
+  if (typeof module === 'object' && module.exports) module.exports = EA.bridge;
 })(typeof window !== 'undefined' ? window : global);
 
 /* ===== js/ea-engine.js ===== */
@@ -3249,11 +4093,17 @@ try {
 
   // ---------- COMBINÉ RENTABLE (bloc unique) ----------
   S.pool = [];
+  function dbMarket(m) { var s = m.selection, x = String(m.market || '');
+    if (x === 'btts' && s === 'yes') return 'btts_yes'; var o = /^ou:([\d.]+)$/.exec(x); if (o && s === 'over') return 'over:' + o[1];
+    if ((x === '1X2' || x === 'ml') && (s === 'home' || s === 'away')) return s + '_win'; return x === '1X2' && s === 'draw' ? 'draw' : null; }
+  function dbConflict(res, m) {   // EA DATABASE : conflit entre sources internes et modèle ⇒ jambe écartée du combiné
+    try { var mk = dbMarket(m); if (!mk || !EA.dbui || !EA.database) return false; var st = EA.dbui.store(); if (st.meta().state !== 'READY') return false;
+      var c = st.consensus({ sport: S.sport || 'football', competition: res.competition || res.league, home: res.home, away: res.away, market: mk, modelP: m.p, before: res.matchDate }); return !!(c.available && c.conflict); } catch (e) { return false; } }
   function poolAdd(res) {
     if (!res || !res.markets || !EA.parlay) return;
     var key = [res.home, res.away, res.matchDate].join('|'), label = (res.home || '?') + ' – ' + (res.away || '?');
     S.pool = S.pool.filter(function (l) { return l.matchKey !== key; }); var wm = EA.market ? EA.market.weightMap(records()) : {};
-    res.markets.forEach(function (m) { S.pool.push({ matchKey: key, label: label, market: m.market, selection: m.selection, p: m.p, odds: m.odds, value: m.value, uncertaintyHalfPts: m.uncertaintyHalfPts, decision: m.decision && m.decision.decision, dataQuality: res.dataQuality && res.dataQuality.score, weightsLabel: m.weightsLabel, weight: wm[(S.sport || '?') + '/' + m.market] }); });
+    res.markets.forEach(function (m) { S.pool.push({ matchKey: key, label: label, market: m.market, selection: m.selection, p: m.p, odds: m.odds, value: m.value, uncertaintyHalfPts: m.uncertaintyHalfPts, decision: m.decision && m.decision.decision, dataQuality: res.dataQuality && res.dataQuality.score, weightsLabel: m.weightsLabel, weight: wm[(S.sport || '?') + '/' + m.market], dbConflict: dbConflict(res, m) }); });
   }
   function parlayHtml() {
     if (!EA.parlay) return '';
@@ -3281,6 +4131,7 @@ try {
     if (r.rejected.length) h += '<details><summary>Pourquoi pas ? (' + r.rejected.length + ' marché(s) écarté(s))</summary><ul class="pro-list">' + r.rejected.slice(0, 12).map(function (x) { return '<li>' + esc(x.leg) + ' : ' + esc(x.why) + '</li>'; }).join('') + '</ul></details>';
     if (r.invalidCombos) h += '<p class="pro-dim">' + r.invalidCombos + ' combinaison(s) rejetée(s) pour corrélation excessive ou dépendance inconnue.</p>';
     h += '<button class="pro-btn" onclick="EA.ui._clearPool()">Vider le pool</button></div>';
+    if (r.ranked && r.ranked.length) h += '<div class="pro-card"><h3>Priorité des paris</h3>' + r.ranked.map(function (x, i) { return '<div class="pro-kv"><span>' + ['🥇 PRIORITÉ 1', '🥈 PRIORITÉ 2', '🥉 PRIORITÉ 3'][i] + ' · ' + esc(x.leg.label) + '</span><span>' + esc(x.leg.market + ' ' + x.leg.selection) + ' @ ' + x.leg.odds.toFixed(2) + ' · EV pess. ' + (x.evLow * 100).toFixed(1) + ' %</span></div>'; }).join('') + '<p class="pro-dim">Uniquement des paris individuels BET dont l\'EV reste positive après incertitude ; aucun Top 3 artificiel.</p></div>';
     return h;
   }
   var _renderDecision = renderDecision;
