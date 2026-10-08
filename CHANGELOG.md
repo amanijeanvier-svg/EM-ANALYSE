@@ -1,3 +1,16 @@
+## EA TREND LAYER — les tendances (séries, nuls, invincibilité, H2H) pèsent maintenant sur le choix des paris (cache v33)
+**Constat** : en Genèse, les paris retenus venaient uniquement du λ (Poisson / Dixon-Coles / Monte Carlo). Les scores saisis servaient à calculer le λ, mais jamais à regarder ce qui s'est *répété* (BTTS 5/5, +2.5 en H2H, série de nuls…).
+**Nouveau (Genèse, football)**
+- `computeTrendLayer` : à partir des scores déjà saisis (série A/B, domicile A, extérieur B, H2H A–B et B–A, ce dernier retourné au point de vue de A), calcule pour chaque marché (victoire A / nul / victoire B, plus/moins de X buts, BTTS oui/non) un taux de tendance sur 3 sources : **Forme**, **Dom./Ext.**, **Face-à-face**. Les 5 derniers matchs comptent ×1,5.
+- **Poids petit et plafonné** : chaque source pèse `plafond × n/(n+k)` (forme 0,18 · dom./ext. 0,14 · H2H 0,22), total ≤ 40 %. « 5 sur 5 » ne vaut donc pas 100 % : environ 0,2 de poids. Probabilité finale = (1−W) × modèle + W × tendances.
+- **Le H2H spécifique l'emporte sur l'habitude générale** : un H2H extrême (0 % ou ≥ 80 %, ≥ 4 matchs) pèse ×1,6 et divise par 2 le poids de la forme/dom.-ext. quand elle le contredit. Ex. : série de nuls en forme mais 0 nul en H2H → le nul est neutralisé ; H2H toujours +2.5 malgré des formes basses → le +2.5 remonte.
+- Les tendances agissent **avant** la sélection : 1X2 (donc victoire / double chance), ligne de buts, BTTS et paris de complément (nouveau candidat « Match nul » quand les tendances le justifient). Doublons de marché retirés.
+- **Affichage** : sous chaque pari « Modèle X % · Tendances Y % (poids Z %) → final, ✅ concordantes / ⚠️ contraires / ➖ neutres » + panneau « 📈 Tendances » (V-N-D sur 5, invincibilité, séries de nuls, BTTS / +1.5 / +2.5 / +3.5 / clean sheets, H2H, signaux : invaincue, nuls, profil « moins de 2.5 », H2H +2.5…). Badge moteur « Tendances ».
+- Sans aucun score saisi : couche absente, comportement identique à avant. Aucune donnée inventée.
+- **Profondeur d'effectif** (nouveau sélecteur par équipe : Normale / Profonde / Faible) : un effectif profond atténue de moitié l'effet des absences, de la fatigue et du doute sur la composition sur le λ ; un effectif juste l'amplifie de 30 %. « Normale » = calcul historique inchangé.
+- Non touché : Basket, onglet Pro 3.0, EA DATABASE.
+- Tests : module testé en Node (scénarios nuls/H2H/+2.5) et Genèse testée dans Chromium (génération, panneau, profondeur : λ A 1,32 faible → 1,43 normale → 1,61 profonde, 0 erreur JS). Les suites `tests/` ne faisaient pas partie de l'archive reçue et n'ont pas été relancées.
+
 ## Correctif — EA DATABASE ne voyait pas les matchs analysés + historique des combinés (cache v32)
 **EA DATABASE (coller / importer la sauvegarde JSON)**
 - **Cause 1** : le champ d'import de l'onglet 📊 ne lisait que du CSV (`parseCSV`). Un JSON collé tient sur une seule ligne → 0 ligne importée, sans message d'erreur.

@@ -27,7 +27,10 @@ PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-mobile.js   # navigateur, 360/
 ```
 
 ## Déploiement
-Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v32`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
+Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v33`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
 
 ## Basketball V2
 Basket Analyse affiche maintenant le panneau « Analyse V2 — distribution unique » (voir CHANGELOG, EA-BK2). Tests : `node tests/run-bk2.js` ; navigateur : `PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-bk2.js`.
+
+## Tendances (EA TREND LAYER) — Genèse
+Les scores saisis (série, domicile/extérieur, H2H) alimentent maintenant aussi une couche « analyse humaine » : taux de BTTS, +1.5/+2.5/+3.5, clean sheets, séries d'invincibilité/de nuls, H2H. Poids plafonné à 40 %, proportionnel à la taille de l'échantillon ; le modèle reste la base. Chaque pari affiche « Modèle · Tendances → final » et un badge ✅/⚠️/➖. Nouveau sélecteur **Profondeur d'effectif** par équipe. Détail : CHANGELOG.md.

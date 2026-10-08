@@ -796,7 +796,7 @@ input{font-family:inherit;}
                 </div>
                 <label class="flag-check"><input type="checkbox" id="uncertainA"> Doute sur la composition</label>
                 <div class="severity-seg" id="uncertainSeverityA" data-flag="uncertain" data-team="A"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
-                <div class="pos-abs-lbl">Titulaires clés absents, par poste</div>
+                <div class="pos-abs-lbl">Profondeur d'effectif (atténue l'effet des absences et de la fatigue)</div><select id="depthA" class="match-type-select" style="margin-bottom:8px;"><option value="normale">Normale</option><option value="profonde">Profonde — bons remplaçants</option><option value="faible">Faible — peu de relais</option></select> <div class="pos-abs-lbl">Titulaires clés absents, par poste</div>
                 <div class="pos-abs-grid">
                   <div><label>Gardien</label><input type="number" id="posGkA" min="0" max="1" placeholder="0"></div>
                   <div><label>Défense</label><input type="number" id="posDefA" min="0" max="5" placeholder="0"></div>
@@ -819,7 +819,7 @@ input{font-family:inherit;}
                 </div>
                 <label class="flag-check"><input type="checkbox" id="uncertainB"> Doute sur la composition</label>
                 <div class="severity-seg" id="uncertainSeverityB" data-flag="uncertain" data-team="B"><button type="button" data-lvl="faible">Faible</button><button type="button" data-lvl="modere" class="active">Modéré</button><button type="button" data-lvl="eleve">Élevé</button></div>
-                <div class="pos-abs-lbl">Titulaires clés absents, par poste</div>
+                <div class="pos-abs-lbl">Profondeur d'effectif (atténue l'effet des absences et de la fatigue)</div><select id="depthB" class="match-type-select" style="margin-bottom:8px;"><option value="normale">Normale</option><option value="profonde">Profonde — bons remplaçants</option><option value="faible">Faible — peu de relais</option></select> <div class="pos-abs-lbl">Titulaires clés absents, par poste</div>
                 <div class="pos-abs-grid">
                   <div><label>Gardien</label><input type="number" id="posGkB" min="0" max="1" placeholder="0"></div>
                   <div><label>Défense</label><input type="number" id="posDefB" min="0" max="5" placeholder="0"></div>
@@ -871,6 +871,7 @@ input{font-family:inherit;}
             <div style="padding:22px 22px 0;"><div class="section-title">Moteurs actifs</div><div id="enginesRowGe" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div><div id="completenessGe" style="margin-bottom:18px;"></div></div>
             <div style="padding:0 22px 22px;"><div class="section-title">Scores exacts probables</div><div class="scores-row" id="scoresRowGe"></div><div class="lambda-row" id="lambdaRowGe"></div></div>
             <div style="padding:0 22px 22px;"><div class="section-title">Paris retenus</div><div id="betsListGe"></div></div>
+            <div style="padding:0 22px 22px;" id="trendsGe"></div>
             <div style="padding:0 22px 22px;" id="valueProGe"></div>
             <div style="padding:0 22px 22px;">
               <button id="communityPublishBtnGe" style="background:linear-gradient(135deg, var(--gold), var(--gold-dim)); color:var(--ink); font-weight:700; border:none; border-radius:8px; padding:10px 18px; font-size:12px; cursor:pointer;">🌐 Publier à la communauté</button>
@@ -6348,12 +6349,17 @@ function marketTypeFromEval(evalSpec){
 /* -- (b) absences de joueurs clés, PAR POSTE (gardien/défense/milieu/attaque) --
    Une absence en attaque/milieu pèse sur la propre force offensive de l'équipe ;
    une absence en défense/gardien fragilise sa solidité et gonfle le lambda adverse. */
-function positionAdjustment(pos){
+// Profondeur d'effectif : un effectif profond encaisse mieux les absences / la fatigue (×0.5),
+// un effectif juste les subit davantage (×1.3). 'normale' = comportement historique inchangé.
+function depthScale(d){ return d==='profonde' ? 0.5 : d==='faible' ? 1.3 : 1; }
+function scaleMult(m,sc){ return (m==null||sc===1) ? m : Math.max(0.3, 1-(1-m)*sc); }
+function positionAdjustment(pos,depth){
+  const dsc = depthScale(depth);
   pos = pos || {gk:0,def:0,mid:0,att:0};
   const gk = Math.min(1, pos.gk||0), def = Math.min(4, pos.def||0), mid = Math.min(4, pos.mid||0), att = Math.min(4, pos.att||0);
   const attackFactor = Math.max(0.55, 1 - 0.07*att - 0.03*mid);
   const defenseWeaken = Math.min(0.45, 0.10*gk + 0.06*def + 0.02*mid);
-  return {attackFactor, defenseWeaken};
+  return {attackFactor: dsc===1 ? attackFactor : Math.max(0.4, 1-(1-attackFactor)*dsc), defenseWeaken: defenseWeaken*dsc};
 }
 function absenceAdjustment(nb){
   // Conservée pour compatibilité (basket, qui reste sur un compteur global simple).
@@ -7278,7 +7284,7 @@ async function autoFillFootballTeam(which){
 document.getElementById('autoFillBtnA').addEventListener('click', ()=>autoFillFootballTeam('A'));
 document.getElementById('autoFillBtnB').addEventListener('click', ()=>autoFillFootballTeam('B'));
 
-const matchFlags = {matchType:'championnat', league:'', stage:'poules', leg:'sec', aggAllerA:null, aggAllerB:null, injuryA:false, fatigueA:false, uncertainA:false, injuryB:false, fatigueB:false, uncertainB:false, posA:{gk:0,def:0,mid:0,att:0}, posB:{gk:0,def:0,mid:0,att:0},
+const matchFlags = {matchType:'championnat', league:'', stage:'poules', leg:'sec', aggAllerA:null, aggAllerB:null, injuryA:false, fatigueA:false, uncertainA:false, injuryB:false, fatigueB:false, uncertainB:false, posA:{gk:0,def:0,mid:0,att:0}, posB:{gk:0,def:0,mid:0,att:0}, depthA:'normale', depthB:'normale',
   injurySeverityA:'modere', fatigueSeverityA:'modere', uncertainSeverityA:'modere', injurySeverityB:'modere', fatigueSeverityB:'modere', uncertainSeverityB:'modere',
   restDaysA:null, matches7dA:null, matches14dA:null, extraTimeA:false, restDaysB:null, matches7dB:null, matches14dB:null, extraTimeB:false,
   weatherWind:'', weatherRain:'', weatherPitch:''};
@@ -7337,6 +7343,7 @@ document.getElementById('leagueGe').addEventListener('input', e=>{
 [['posGkA','A','gk'],['posDefA','A','def'],['posMidA','A','mid'],['posAttA','A','att'],['posGkB','B','gk'],['posDefB','B','def'],['posMidB','B','mid'],['posAttB','B','att']].forEach(([id,team,pos])=>{
   document.getElementById(id).addEventListener('input', e=>{ matchFlags['pos'+team][pos] = e.target.value===''?0:parseInt(e.target.value,10)||0; });
 });
+['A','B'].forEach(T=>{ const el=document.getElementById('depth'+T); if(el) el.addEventListener('change', e=>{ matchFlags['depth'+T]=e.target.value; }); });
 // -- Module fatigue calculé (section 40) : purement additif au curseur manuel existant
 // (fatigueA/fatigueSeverityA) — celui-ci reste la saisie "à dire d'expert" quand on n'a pas le
 // détail, celui-là calcule un score 0-100 objectif à partir de données concrètes quand elles
@@ -7370,6 +7377,8 @@ document.getElementById('resetBtn').addEventListener('click', ()=>{
   document.getElementById('rankPreviewA').textContent=''; document.getElementById('rankPreviewB').textContent='';
   ADV_FIELDS.forEach(id=>{ document.getElementById(id).value=''; advStats[id]=null; });
   document.getElementById('matchTypeGe').value='championnat'; matchFlags.matchType='championnat';
+  ['A','B'].forEach(T=>{ const el=document.getElementById('depth'+T); if(el) el.value='normale'; matchFlags['depth'+T]='normale'; });
+  { const tg=document.getElementById('trendsGe'); if(tg) tg.innerHTML=''; }
   document.getElementById('stageGe').value='poules'; matchFlags.stage='poules';
   document.getElementById('legGe').value='sec'; matchFlags.leg='sec';
   document.getElementById('aggAllerA').value=''; document.getElementById('aggAllerB').value='';
@@ -7669,19 +7678,19 @@ function computeGeneseLambdas(){
   const fatigueScoreB = computeFatigueScore({restDays:matchFlags.restDaysB, matches7d:matchFlags.matches7dB, matches14d:matchFlags.matches14dB, extraTime:matchFlags.extraTimeB});
   const fatigueImpactA = fatigueLambdaImpact(fatigueScoreA), fatigueImpactB = fatigueLambdaImpact(fatigueScoreB);
   if(lambdaA!==null){
-    if(matchFlags.injuryA) lambdaA *= BK_SEVERITY_MULT.injury[matchFlags.injurySeverityA];
-    if(matchFlags.fatigueA) lambdaA *= BK_SEVERITY_MULT.fatigue[matchFlags.fatigueSeverityA];
-    if(matchFlags.uncertainA) lambdaA *= BK_SEVERITY_MULT.uncertain[matchFlags.uncertainSeverityA];
+    if(matchFlags.injuryA) lambdaA *= scaleMult(BK_SEVERITY_MULT.injury[matchFlags.injurySeverityA], depthScale(matchFlags.depthA));
+    if(matchFlags.fatigueA) lambdaA *= scaleMult(BK_SEVERITY_MULT.fatigue[matchFlags.fatigueSeverityA], depthScale(matchFlags.depthA));
+    if(matchFlags.uncertainA) lambdaA *= scaleMult(BK_SEVERITY_MULT.uncertain[matchFlags.uncertainSeverityA], depthScale(matchFlags.depthA));
     lambdaA *= fatigueImpactA.attackMult; lambdaA *= fatigueImpactB.concedeMult;
   }
   if(lambdaB!==null){
-    if(matchFlags.injuryB) lambdaB *= BK_SEVERITY_MULT.injury[matchFlags.injurySeverityB];
-    if(matchFlags.fatigueB) lambdaB *= BK_SEVERITY_MULT.fatigue[matchFlags.fatigueSeverityB];
-    if(matchFlags.uncertainB) lambdaB *= BK_SEVERITY_MULT.uncertain[matchFlags.uncertainSeverityB];
+    if(matchFlags.injuryB) lambdaB *= scaleMult(BK_SEVERITY_MULT.injury[matchFlags.injurySeverityB], depthScale(matchFlags.depthB));
+    if(matchFlags.fatigueB) lambdaB *= scaleMult(BK_SEVERITY_MULT.fatigue[matchFlags.fatigueSeverityB], depthScale(matchFlags.depthB));
+    if(matchFlags.uncertainB) lambdaB *= scaleMult(BK_SEVERITY_MULT.uncertain[matchFlags.uncertainSeverityB], depthScale(matchFlags.depthB));
     lambdaB *= fatigueImpactB.attackMult; lambdaB *= fatigueImpactA.concedeMult;
   }
-  const posAdjA = positionAdjustment(matchFlags.posA);
-  const posAdjB = positionAdjustment(matchFlags.posB);
+  const posAdjA = positionAdjustment(matchFlags.posA, matchFlags.depthA);
+  const posAdjB = positionAdjustment(matchFlags.posB, matchFlags.depthB);
   if(lambdaA!==null){ lambdaA *= posAdjA.attackFactor; lambdaA *= (1+posAdjB.defenseWeaken); }
   if(lambdaB!==null){ lambdaB *= posAdjB.attackFactor; lambdaB *= (1+posAdjA.defenseWeaken); }
   // Enjeu du stade de compétition (16e, quart, demi, finale...) : resserre le jeu.
@@ -8037,6 +8046,181 @@ function applyStrengthToResult(pHome, pDraw, pAway, strengthGap){
   return {pHome:pH/total, pDraw:pD/total, pAway:pAw/total, strengthGap:g};
 }
 
+/* ================================================================
+   5quater. TENDANCES — couche « analyse humaine » (EA TREND LAYER)
+   Le modèle (λ + Monte Carlo) calcule ce qui DEVRAIT arriver ; les tendances regardent ce qui
+   s'est RÉELLEMENT répété : 1.5 / 2.5 / 3.5 buts, BTTS, clean sheets, séries d'invincibilité,
+   séries de nuls, face-à-face. Elles ne remplacent jamais le modèle : elles le corrigent d'un
+   POIDS PETIT ET PLAFONNÉ (≤ 40 %), qui croît avec la taille de l'échantillon
+   (« 5 sur 5 » pèse environ 0,2, pas 100 %). Aucune donnée n'est inventée : sans score saisi,
+   la couche est absente et le verdict reste celui du modèle.
+================================================================= */
+const TREND_CFG = { win:10, recent:5, recentBoost:1.5, minH2H:2, minTeamN:3, maxTotal:0.40, strongH2H:1.6, strongTeam:1.3, strongMinN:4,
+  src:{ form:{cap:0.18, k:8, label:'Forme'}, venue:{cap:0.14, k:6, label:'Dom./Ext.'}, h2h:{cap:0.22, k:4, label:'Face-à-face'} } };
+function trEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function trPairs(arr){ return (arr||[]).filter(p=>Array.isArray(p)&&isFinite(p[0])&&isFinite(p[1])).slice(-TREND_CFG.win); }
+function trTestsFor(key){
+  const win=(f,g)=>f>g, loss=(f,g)=>f<g, draw=(f,g)=>f===g;
+  if(key==='A') return {a:win, b:loss, h:win};
+  if(key==='B') return {a:loss, b:win, h:loss};
+  if(key==='D') return {a:draw, b:draw, h:draw};
+  if(key==='btts:yes'){ const t=(f,g)=>f>0&&g>0; return {a:t,b:t,h:t}; }
+  if(key==='btts:no'){ const t=(f,g)=>!(f>0&&g>0); return {a:t,b:t,h:t}; }
+  const m=/^(over|under):([\d.]+)$/.exec(key);
+  if(m){ const L=+m[2], ov=m[1]==='over'; const t=(f,g)=> ov ? (f+g>L) : (f+g<L); return {a:t,b:t,h:t}; }
+  return null;
+}
+// taux pondéré : les 5 derniers matchs comptent 1,5 fois plus que les plus anciens
+function trW(pairs,test){ let k=0,n=0; for(let i=0;i<pairs.length;i++){ const w=(pairs.length-1-i)<TREND_CFG.recent?TREND_CFG.recentBoost:1; n+=w; if(test(pairs[i][0],pairs[i][1])) k+=w; } return {k,n}; }
+function trCount(pairs,test,last){ const a=last?pairs.slice(-last):pairs; let k=0; a.forEach(p=>{ if(test(p[0],p[1])) k++; }); return {k,n:a.length}; }
+function trRun(pairs,test){ let c=0; for(let i=pairs.length-1;i>=0;i--){ if(test(pairs[i][0],pairs[i][1])) c++; else break; } return c; }
+function trSourceRate(src,key){
+  const T=trTestsFor(key); if(!T) return null;
+  if(src.id==='h2h'){
+    if(src.H.length<TREND_CFG.minH2H) return null;
+    const x=trW(src.H,T.h), r=x.k/x.n, n=src.H.length;
+    let mult=1; if(n>=TREND_CFG.strongMinN && (r>=0.999||r<=0.001)) mult=TREND_CFG.strongH2H; else if(n>=5 && (r>=0.8||r<=0.1)) mult=1.3;
+    return {r,n,mult};
+  }
+  const rates=[]; let n=0;
+  if(src.A.length>=1){ const x=trW(src.A,T.a); rates.push(x.k/x.n); n+=src.A.length; }
+  if(src.B.length>=1){ const x=trW(src.B,T.b); rates.push(x.k/x.n); n+=src.B.length; }
+  if(!rates.length || n<TREND_CFG.minTeamN) return null;
+  const r=rates.reduce((s,v)=>s+v,0)/rates.length; let mult=1;
+  if(rates.length===2 && src.A.length>=4 && src.B.length>=4 && ((rates[0]>=0.8&&rates[1]>=0.8)||(rates[0]<=0.1&&rates[1]<=0.1))) mult=TREND_CFG.strongTeam;
+  if(rates.length===1) mult*=0.6;      // une seule équipe renseignée : signal moins fiable
+  return {r,n,mult};
+}
+function trVerdict(pModel,pTrend,W){
+  if(pTrend==null || W==null || W<0.04) return 'none';
+  const same=(pModel>=0.5)===(pTrend>=0.5), gap=Math.abs(pModel-pTrend);
+  if(same) return 'agree';
+  return gap>=0.15 ? 'conflict' : 'neutral';
+}
+function trFacts(pairs){
+  if(!pairs.length) return null;
+  const W=(f,g)=>f>g, D=(f,g)=>f===g, L=(f,g)=>f<g;
+  const last5=pairs.slice(-5), c=(t,n)=>trCount(pairs,t,n);
+  return { n:pairs.length, n5:last5.length,
+    w5:c(W,5).k, d5:c(D,5).k, l5:c(L,5).k,
+    unbeaten:trRun(pairs,(f,g)=>f>=g), winRun:trRun(pairs,W), drawRun:trRun(pairs,D), noWinRun:trRun(pairs,(f,g)=>f<=g), lossRun:trRun(pairs,L),
+    btts5:c((f,g)=>f>0&&g>0,5), o15:c((f,g)=>f+g>1.5,5), o25:c((f,g)=>f+g>2.5,5), o35:c((f,g)=>f+g>3.5,5),
+    cs5:c((f,g)=>g===0,5), fts5:c((f,g)=>f===0,5), low5:c((f,g)=>f+g<=1,5), zero5:c((f,g)=>f===0&&g===0,5),
+    btts10:c((f,g)=>f>0&&g>0), o25_10:c((f,g)=>f+g>2.5), draws10:c(D) };
+}
+function computeTrendLayer(nameA,nameB){
+  const SA=trPairs(store.aSerie), SB=trPairs(store.bSerie), DA=trPairs(store.aDom), DB=trPairs(store.bExt);
+  // « A vs B » est saisi du point de vue de A ; « B vs A » du point de vue de B → on le retourne
+  const H=trPairs((store.ab||[]).concat((store.ba||[]).map(p=>[p[1],p[0]])));
+  if(SA.length+SB.length+DA.length+DB.length+H.length===0) return null;
+  const sources=[{id:'form',A:SA,B:SB},{id:'venue',A:DA,B:DB},{id:'h2h',H:H}];
+  function comp(key){
+    const parts=[]; let sw=0, sr=0;
+    sources.forEach(s=>{ const x=trSourceRate(s,key); if(!x) return; const cfg=TREND_CFG.src[s.id], w=cfg.cap*x.n/(x.n+cfg.k)*x.mult;
+      parts.push({id:s.id,label:cfg.label,r:x.r,n:x.n,w}); sw+=w; sr+=w*x.r; });
+    if(!parts.length) return null;
+    // Le face-à-face est LE signal spécifique à cette affiche : quand il est extrême (≤ 10 % ou ≥ 80 %)
+    // et contredit une habitude générale (forme, dom./ext.), l'habitude pèse moitié moins.
+    const hp=parts.find(x=>x.id==='h2h');
+    if(hp && hp.n>=TREND_CFG.strongMinN && (hp.r>=0.8||hp.r<=0.1)){
+      parts.forEach(x=>{ if(x.id!=='h2h' && (x.r>=0.5)!==(hp.r>=0.5)){ x.w*=0.5; x.damped=true; } });
+      sw=parts.reduce((s,x)=>s+x.w,0); sr=parts.reduce((s,x)=>s+x.w*x.r,0);
+    }
+    return {r:sr/sw, W:Math.min(TREND_CFG.maxTotal,sw), parts};
+  }
+  function slim(c,pModel){ if(!c) return null; return {pTrend:+c.r.toFixed(3), W:+c.W.toFixed(3), tag:trVerdict(pModel,c.r,c.W), parts:c.parts.map(p=>({id:p.id,r:+p.r.toFixed(3),n:p.n,w:+p.w.toFixed(3)}))}; }
+  function evKeys(ev){
+    if(!ev) return null;
+    if(ev.type==='result1x2') return [ev.outcome==='A'?'A':ev.outcome==='B'?'B':'D'];
+    if(ev.type==='resultDC') return ev.outcomes.map(o=>o==='A'?'A':o==='B'?'B':'D');
+    if(ev.type==='goalsLine') return [ev.op+':'+ev.line];
+    if(ev.type==='btts') return ['btts:'+ev.side];
+    return null;
+  }
+  // probabilité du modèle → probabilité mélangée (poids plafonné)
+  function blend(key,pm){
+    const c=comp(key); if(!c) return {p:pm,pModel:pm,pTrend:null,W:0,tag:'none',parts:[]};
+    const p=Math.max(0.02,Math.min(0.97,(1-c.W)*pm+c.W*c.r));
+    return {p,pModel:pm,pTrend:c.r,W:c.W,tag:trVerdict(pm,c.r,c.W),parts:c.parts};
+  }
+  // description d'un pari (sans re-mélanger) : taux de tendance + poids ; double chance = somme des issues
+  function describe(ev,pModel){
+    const ks=evKeys(ev); if(!ks) return null;
+    const cs=ks.map(comp); if(cs.some(x=>!x)) return null;
+    const r=Math.min(0.99,cs.reduce((s,x)=>s+x.r,0)), W=cs.reduce((s,x)=>s+x.W,0)/cs.length;
+    const parts=cs[0].parts.map(p0=>{ const same=cs.map(c=>c.parts.find(x=>x.id===p0.id)); if(same.some(x=>!x)) return null;
+      return {id:p0.id,label:p0.label,n:p0.n,r:Math.min(0.99,same.reduce((a,x)=>a+x.r,0)),w:same.reduce((a,x)=>a+x.w,0)/same.length}; }).filter(Boolean);
+    return slim({r,W,parts},pModel);
+  }
+  function signals(){
+    const out=[], fA=trFacts(SA), fB=trFacts(SB), fDA=trFacts(DA), fDB=trFacts(DB), pushT=(icon,text,kind)=>out.push({icon,text,kind});
+    const team=(nm,f)=>{ if(!f) return;
+      const allDraws=(f.unbeaten>=4 && f.noWinRun>=4);   // invaincue ET sans victoire = que des nuls
+      if(f.unbeaten>=4 && !allDraws) pushT('🛡️',`${nm} invaincue depuis ${f.unbeaten} matchs (victoire ou nul probable)`,'pos');
+      if(f.winRun>=3) pushT('🔥',`${nm} : ${f.winRun} victoires d'affilée`,'pos');
+      if(!allDraws && (f.lossRun>=3 || f.noWinRun>=5)) pushT('📉',`${nm} : ${f.lossRun>=3?f.lossRun+' défaites':f.noWinRun+' matchs sans victoire'} d'affilée`,'neg');
+      if(f.drawRun>=3 || f.d5>=3) pushT('🤝',`${nm} : ${f.drawRun>=3?f.drawRun+' nuls d\'affilée':f.d5+' nuls sur '+f.n5} — tendance au nul (à confirmer par le face-à-face)`,'draw');
+      if(f.zero5.k>=2 || f.low5.k>=3) pushT('🔒',`${nm} : ${f.low5.k}/${f.low5.n} matchs à 1 but ou moins (${f.zero5.k} × 0-0) → profil « moins de 2.5 »`,'under');
+      if(f.o25.n>=4 && f.o25.k>=4) pushT('⚽',`${nm} : plus de 2.5 buts dans ${f.o25.k}/${f.o25.n} matchs`,'over');
+      if(f.btts5.n>=4 && f.btts5.k>=4) pushT('🎯',`${nm} : BTTS dans ${f.btts5.k}/${f.btts5.n} matchs`,'btts');
+      if(f.cs5.n>=4 && f.cs5.k>=3) pushT('🧤',`${nm} : ${f.cs5.k} clean sheets sur ${f.cs5.n}`,'under');
+    };
+    team(nameA,fA); team(nameB,fB);
+    const hf=trFacts(H);
+    if(hf && hf.n>=3){
+      const tt=(t)=>trCount(H,t), o25=tt((f,g)=>f+g>2.5), o35=tt((f,g)=>f+g>3.5), bt=tt((f,g)=>f>0&&g>0), dr=tt((f,g)=>f===g), u25=tt((f,g)=>f+g<2.5);
+      if(hf.n>=4 && o25.k/o25.n>=0.8) pushT('🔥',`Face-à-face : plus de 2.5 buts dans ${o25.k}/${o25.n}${o35.k/o35.n>=0.6?` (plus de 3.5 dans ${o35.k}/${o35.n})`:''} — signal fort, même si la forme est basse`,'over');
+      if(hf.n>=4 && u25.k/u25.n>=0.8) pushT('🔒',`Face-à-face : moins de 2.5 buts dans ${u25.k}/${u25.n}`,'under');
+      if(hf.n>=4 && bt.k/bt.n>=0.8) pushT('🎯',`Face-à-face : les deux équipes marquent dans ${bt.k}/${bt.n}`,'btts');
+      if(hf.n>=4 && bt.k===0) pushT('🚫',`Face-à-face : jamais de BTTS (0/${bt.n})`,'under');
+      if(hf.n>=4 && dr.k===0 && ((fA&&(fA.drawRun>=3||fA.d5>=3))||(fB&&(fB.drawRun>=3||fB.d5>=3)))) pushT('⚖️',`Série de nuls en forme MAIS 0 nul en ${dr.n} face-à-face → le nul est neutralisé, une victoire est plus probable`,'draw');
+      else if(hf.n>=4 && dr.k/dr.n>=0.5) pushT('🤝',`Face-à-face : ${dr.k} nuls sur ${dr.n} — le nul est fréquent entre ces équipes`,'draw');
+    }
+    [['A',nameA,fDA,'à domicile'],['B',nameB,fDB,'à l\'extérieur']].forEach(([k,nm,f,lbl])=>{ if(!f||f.n<4) return;
+      const allD=(f.unbeaten>=f.n && f.noWinRun>=f.n);
+      if(allD) pushT('🤝',`${nm} : ${f.n} nuls sur ${f.n} ${lbl}`,'draw');
+      else if(f.unbeaten>=f.n) pushT('🏟️',`${nm} invaincue ${lbl} sur ses ${f.n} derniers matchs`,'pos');
+      else if(f.noWinRun>=f.n) pushT('🏟️',`${nm} sans victoire ${lbl} sur ses ${f.n} derniers matchs`,'neg'); });
+    return out;
+  }
+  return { sources, comp, blend, describe, slim, evKeys, signals, facts:{A:trFacts(SA),B:trFacts(SB),DA:trFacts(DA),DB:trFacts(DB),H:trFacts(H)}, n:{A:SA.length,B:SB.length,DA:DA.length,DB:DB.length,H:H.length} };
+}
+// goals line : même 3 lignes candidates que pickGoalsLineMarket, mais avec la probabilité mélangée aux tendances
+function pickGoalsLineMarketTR(lambdaSum,matrix,TR){
+  if(!TR) return pickGoalsLineMarket(lambdaSum,matrix);
+  const baseLine=Math.max(0.5,Math.floor(lambdaSum)-0.5); let best=null;
+  for(const line of [baseLine,baseLine+1,baseLine+2]){
+    const pOverM=sumWhereMatrix(matrix,(a,b)=>a+b>line);
+    [['over',pOverM,`Plus de ${line} buts`],['under',1-pOverM,`Moins de ${line} buts`]].forEach(([op,pm,label])=>{
+      const bl=TR.blend(op+':'+line,pm), cand={label,p:bl.p,eval:{type:'goalsLine',op,line},pModel:pm,trend:bl.pTrend==null?null:TR.slim({r:bl.pTrend,W:bl.W,parts:bl.parts},pm)};
+      if(!best||cand.p>best.p) best=cand; });
+  }
+  return best;
+}
+function trendBetLine(b){
+  if(b.pModel==null || !b.trend) return '';
+  const t=b.trend, st='font-family:\'IBM Plex Mono\',monospace; font-size:10px; margin:6px 0 2px; line-height:1.5;';
+  if(t.pTrend==null || t.W<0.01) return `<div style="${st} color:var(--text-faint);">📈 Tendances : échantillon insuffisant pour ce pari (modèle seul)</div>`;
+  const tag=t.tag==='agree'?'<span style="color:#7bd88f;">✅ tendances concordantes</span>':t.tag==='conflict'?'<span style="color:#ffb454;">⚠️ tendances contraires au modèle</span>':'<span style="color:var(--text-faint);">➖ tendances neutres</span>';
+  const pf=b.pRaw!=null?b.pRaw:b.p, src=(t.parts||[]).map(p=>`${p.label||({form:'Forme',venue:'Dom./Ext.',h2h:'H2H'})[p.id]} ${Math.round(p.r*100)} % (${p.n})`).join(' · ');
+  return `<div style="${st} color:var(--text-dim,#aab);">📈 Modèle ${fmtPct(b.pModel)} · Tendances ${fmtPct(t.pTrend)} <span style="opacity:.7;">(poids ${Math.round(t.W*100)} %)</span> → <b>${fmtPct(pf)}</b> · ${tag}<br><span style="opacity:.65;">${trEsc(src)}</span></div>`;
+}
+function renderTrendsPanel(TR,nameA,nameB){
+  if(!TR) return '';
+  const st='font-family:\'IBM Plex Mono\',monospace; font-size:10.5px; line-height:1.6;', dim='color:var(--text-faint);';
+  const line=(nm,f,tag)=>{ if(!f) return ''; return `<div style="margin:3px 0;"><b>${trEsc(nm)}</b> <span style="${dim}">${tag} · ${f.n} matchs</span><br>`
+    + `${f.w5}V ${f.d5}N ${f.l5}D (5 der.) · invaincue ${f.unbeaten} · nuls en série ${f.drawRun} · BTTS ${f.btts5.k}/${f.btts5.n} · +1.5 ${f.o15.k}/${f.o15.n} · +2.5 ${f.o25.k}/${f.o25.n} · +3.5 ${f.o35.k}/${f.o35.n} · clean sheets ${f.cs5.k}/${f.cs5.n}</div>`; };
+  const H=TR.facts.H; let h2h='';
+  if(H){ const pairs=trPairs((store.ab||[]).concat((store.ba||[]).map(p=>[p[1],p[0]]))); const c=(t)=>trCount(pairs,t);
+    h2h=`<div style="margin:3px 0;"><b>Face-à-face</b> <span style="${dim}">${H.n} matchs</span><br>${trEsc(nameA)} ${c((f,g)=>f>g).k}V · ${c((f,g)=>f===g).k}N · ${trEsc(nameB)} ${c((f,g)=>f<g).k}V · BTTS ${c((f,g)=>f>0&&g>0).k}/${H.n} · +2.5 ${c((f,g)=>f+g>2.5).k}/${H.n} · +3.5 ${c((f,g)=>f+g>3.5).k}/${H.n}</div>`; }
+  const sig=TR.signals(), col={pos:'#7bd88f',neg:'#ff8a80',draw:'#c8b6ff',under:'#8fc9ff',over:'#ffb454',btts:'#ffd166'};
+  const sigHtml=sig.length?sig.map(s=>`<div style="margin:3px 0; color:${col[s.kind]||'inherit'};">${s.icon} ${trEsc(s.text)}</div>`).join(''):`<div style="${dim}">Aucun signal marqué dans les séries saisies.</div>`;
+  return `<div class="section-title">📈 Tendances (analyse « humaine »)</div><div style="${st} border-left:3px solid var(--gold,#d4af37); padding:8px 12px; background:rgba(255,255,255,.03); border-radius:6px;">`
+    + line(nameA,TR.facts.A,'forme')+line(nameB,TR.facts.B,'forme')+line(nameA,TR.facts.DA,'à domicile')+line(nameB,TR.facts.DB,'à l\'extérieur')+h2h
+    + `<div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--line,#333);">${sigHtml}</div>`
+    + `<div style="${dim} margin-top:8px; font-size:9.5px;">Poids des tendances plafonné à ${Math.round(TREND_CFG.maxTotal*100)} % et proportionnel à la taille de l'échantillon : le modèle (λ, forme, effectif) reste la base. Une série n'est jamais une garantie.</div></div>`;
+}
+
 function pickResultMarket(pHome,pDraw,pAway,nameA,nameB){
   const favIsA=pHome>=pAway, favP=Math.max(pHome,pAway), dogP=Math.min(pHome,pAway);
   const favName=favIsA?nameA:nameB, gap=favP-dogP;
@@ -8318,10 +8502,18 @@ function runAnalysisGe(){
   // P_MARKET : calculé et affiché à part — ne descend plus JAMAIS dans P_MODEL ci-dessous.
   const pMarketModel = computeMarketProbabilities(advStats.coteHome, advStats.coteDraw, advStats.coteAway);
   // P_MODEL : uniquement des modèles sportifs (statistique + Elo). Voir bloc EA VALUE PRO plus haut.
-  const {pHome, pDraw, pAway, usedElo:modelUsedElo} = computeModelProbability({pHome:pHomeStat, pDraw:pDrawStat, pAway:pAwayStat}, pEloModel);
+  const {pHome:pHomeM, pDraw:pDrawM, pAway:pAwayM, usedElo:modelUsedElo} = computeModelProbability({pHome:pHomeStat, pDraw:pDrawStat, pAway:pAwayStat}, pEloModel);
+  // TENDANCES (couche « analyse humaine ») : les séries/H2H saisis corrigent le modèle d'un poids petit et
+  // plafonné. Sans score saisi, TR=null et tout reste strictement identique au modèle.
+  const TR = computeTrendLayer(nameA, nameB);
+  let pHome=pHomeM, pDraw=pDrawM, pAway=pAwayM;
+  if(TR){ const tH=TR.blend('A',pHomeM), tD=TR.blend('D',pDrawM), tAw=TR.blend('B',pAwayM), tt=tH.p+tD.p+tAw.p; pHome=tH.p/tt; pDraw=tD.p/tt; pAway=tAw.p/tt; }
+  const pmOfEval=(ev)=>{ const one=o=>o==='A'?pHomeM:o==='B'?pAwayM:pDrawM; if(ev.type==='result1x2') return one(ev.outcome); if(ev.type==='resultDC') return ev.outcomes.reduce((x,o)=>x+one(o),0); return null; };
+  const trAnn=(bet)=>{ if(TR && bet && bet.eval){ const pm=pmOfEval(bet.eval); if(pm!=null){ bet.pModel=pm; bet.trend=TR.describe(bet.eval,pm); } } return bet; };
+  const trOf=(bl)=> (TR && bl && bl.pTrend!=null) ? TR.slim({r:bl.pTrend,W:bl.W,parts:bl.parts},bl.pModel) : null;
   const modelAgreementPct = computeModelAgreement({pHome:pHomeStat, pDraw:pDrawStat, pAway:pAwayStat}, pEloModel);
 
-  const resultBet=pickResultMarket(pHome,pDraw,pAway,nameA,nameB);
+  const resultBet=trAnn(pickResultMarket(pHome,pDraw,pAway,nameA,nameB));
   // EV = P_MODEL (resultBet.p, jamais du marché) × VRAIE cote bookmaker - 1. legOddsFromRecord
   // renvoie source==='interne' (repli 1/p) quand aucune cote n'a été saisie pour cette issue —
   // dans ce cas on n'appelle pas computeEV, ça donnerait toujours 0% par construction et
@@ -8336,20 +8528,24 @@ function runAnalysisGe(){
   const uncertainty = computeUncertainty({pModel:resultBet.p, dataQualityPct, modelAgreement:modelAgreementPct});
   const noBetVerdict = computeNoBetVerdict({ev:resultEV, dataQualityPct, modelAgreement:modelAgreementPct, uncertaintyHalf:uncertainty.half});
 
-  const goalsBet={...pickGoalsLineMarket(lambdaA+lambdaB, matrix), cat:'buts'};
-  const bttsBet= pBTTSyes>=pBTTSno ? {label:'Les deux équipes marquent', p:pBTTSyes, cat:'btts', eval:{type:'btts',side:'yes'}} : {label:'Au moins une équipe muette', p:pBTTSno, cat:'btts', eval:{type:'btts',side:'no'}};
+  const goalsBet={...pickGoalsLineMarketTR(lambdaA+lambdaB, matrix, TR), cat:'buts'};
+  const bBy=TR?TR.blend('btts:yes',pBTTSyes):null, bBn=TR?TR.blend('btts:no',pBTTSno):null;
+  const pBY=bBy?bBy.p:pBTTSyes, pBN=bBn?bBn.p:pBTTSno;
+  const bttsBet= pBY>=pBN ? {label:'Les deux équipes marquent', p:pBY, cat:'btts', eval:{type:'btts',side:'yes'}, ...(bBy?{pModel:pBTTSyes, trend:trOf(bBy)}:{})} : {label:'Au moins une équipe muette', p:pBN, cat:'btts', eval:{type:'btts',side:'no'}, ...(bBn?{pModel:pBTTSno, trend:trOf(bBn)}:{})};
 
   const chosen=[resultBet, goalsBet, bttsBet];
   const cornersBet=pickCornersMarket(), shotsBet=pickShotsMarket(), cardsBet=pickCardsMarket();
   if(cornersBet) chosen.push(cornersBet);
   if(shotsBet) chosen.push(shotsBet);
   if(cardsBet) chosen.push(cardsBet);
+  const o15m=sumWhereMatrix(matrix,(a,b)=>a+b>=2), o15=TR?TR.blend('over:1.5',o15m):null;
   const fillers=[
-    {label:'Plus de 1.5 buts', p:sumWhereMatrix(matrix,(a,b)=>a+b>=2), cat:'buts', eval:{type:'goalsLine',op:'over',line:1.5}},
-    {label:`${nameA} ou nul (double chance)`, p:pHome+pDraw, cat:'résultat', eval:{type:'resultDC',outcomes:['A','draw']}},
-    {label:`${nameB} ou nul (double chance)`, p:pAway+pDraw, cat:'résultat', eval:{type:'resultDC',outcomes:['B','draw']}},
+    {label:'Plus de 1.5 buts', p:o15?o15.p:o15m, cat:'buts', eval:{type:'goalsLine',op:'over',line:1.5}, ...(o15?{pModel:o15m, trend:trOf(o15)}:{})},
+    trAnn({label:`${nameA} ou nul (double chance)`, p:pHome+pDraw, cat:'résultat', eval:{type:'resultDC',outcomes:['A','draw']}}),
+    trAnn({label:`${nameB} ou nul (double chance)`, p:pAway+pDraw, cat:'résultat', eval:{type:'resultDC',outcomes:['B','draw']}}),
+    ...(TR ? [trAnn({label:'Match nul', p:pDraw, cat:'résultat', eval:{type:'result1x2',outcome:'draw'}})] : []),
   ].sort((a,b)=>b.p-a.p);
-  for(const f of fillers){ if(chosen.length>=5) break; if(!chosen.some(c=>c.label===f.label)) chosen.push(f); }
+  for(const f of fillers){ if(chosen.length>=5) break; if(!chosen.some(c=>c.label===f.label || JSON.stringify(c.eval)===JSON.stringify(f.eval))) chosen.push(f); }
   const finalBets=applyMarketRecalibration('football', chosen.slice(0,5), matchFlags.league).map(b=>({...b, valueMeta:{dataQualityPct, modelAgreementPct, uncertaintyHalf:computeUncertainty({pModel:b.p,dataQualityPct,modelAgreement:modelAgreementPct}).half, valueEngine:VALUE_ENGINE_VERSION}}));
 
   const engines=[
@@ -8361,6 +8557,7 @@ function runAnalysisGe(){
     {name:'xG', on: advStats.xgA!=null||advStats.xgB!=null},
     {name:'Monte Carlo', on:true},
     {name:'Enjeu (40%)', on: zoneA!=null},
+    {name:'Tendances', on: !!TR},
   ];
   document.getElementById('enginesRowGe').innerHTML = engines.map(e=>`<span class="engine-badge ${e.on?'on':''}">${e.on?'✓':'—'} ${e.name}</span>`).join('');
   renderCompletenessBadge('completenessGe', completenessGe);
@@ -8374,9 +8571,11 @@ function runAnalysisGe(){
   document.getElementById('betsListGe').innerHTML = finalBets.map((b,i)=>`
     <div class="bet"><div class="bet-top"><div><span class="bet-name">${b.label}</span><br><span class="bet-cat">${b.cat}</span></div><div class="bet-pct">${fmtPct(b.p)}</div></div>
     <div class="gauge"><div class="ticks">${'<i></i>'.repeat(10)}</div><div class="fill" style="width:${(b.p*100).toFixed(1)}%; ${gaugeStyle(b.p)}"></div></div>
+    ${trendBetLine(b)}
     <div class="odds-row"><input type="number" step="0.01" min="1" class="odds-input-bet" placeholder="Cote entrée" data-rec="${recordId}" data-sport="football" data-idx="${i}" data-kind="entry"><input type="number" step="0.01" min="1" class="odds-input-bet closing-odds-input" placeholder="Cote clôture (après match)" data-rec="${recordId}" data-sport="football" data-idx="${i}" data-kind="closing"><span class="edge-out" id="edge-${recordId}-${i}"></span></div>
     </div>`).join('');
   requestAnimationFrame(()=>{ document.querySelectorAll('#betsListGe .gauge .fill').forEach(f=>{ const w=f.style.width; f.style.width='0%'; requestAnimationFrame(()=>f.style.width=w); }); });
+  { const trEl=document.getElementById('trendsGe'); if(trEl) trEl.innerHTML=renderTrendsPanel(TR,nameA,nameB); }
 
   const totalExp=lambdaA+lambdaB, diff=lambdaA-lambdaB, favTeam=diff>=0?nameA:nameB, dogTeam=diff>=0?nameB:nameA, gapAbs=Math.abs(diff);
 
