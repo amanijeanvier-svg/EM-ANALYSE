@@ -136,6 +136,30 @@
       var d = r.matchDate || r.date || (r.timestamp ? new Date(r.timestamp).toISOString().slice(0, 10) : null), fs = r.finalStats || {}; out.push({ sport: sp, competition: r.league, home: r.nameA, away: r.nameB, hs: f.a, as: f.b, date: d, dateApprox: !(r.matchDate || r.date), source: 'LEGACY-HISTORY', corners_t: fs.corners == null ? null : fs.corners, sot_t: fs.shots == null ? null : fs.shots, cards_t: fs.cards == null ? null : fs.cards }); }); });
     return out;
   }
+  // Ligne « TRACK » (historique permanent des 180+ matchs validés) : même structure que DB, on réutilise fromLegacy.
+  function fromTrack(TR) { return fromLegacy(TR).map(function (r) { r.source = 'TRACK-HISTORY'; return r; }); }
+  // Sauvegarde JSON exportée par l'appli (Réglages → Exporter) : {track, db, archive, settings.ea_pro_memory}
+  function fromBackup(p) {
+    var out = []; if (!p || typeof p !== 'object') return out;
+    fromTrack(p.track).forEach(function (r) { out.push(r); });
+    fromLegacy(p.db).forEach(function (r) { r.source = 'BACKUP-DB'; out.push(r); });
+    try { var m = p.settings && p.settings.ea_pro_memory; if (m) { var mm = typeof m === 'string' ? JSON.parse(m) : m; fromMemory(mm.analyses || []).forEach(function (r) { r.source = 'BACKUP-MEMORY'; out.push(r); }); } } catch (e) { }
+    return out;
+  }
+  // Dédoublonnage entre sources : un même match (même sport, équipes et score) vu par TRACK (date de validation, approx.)
+  // et par la mémoire (date exacte) ne doit être compté qu'une fois. On garde la date exacte de préférence.
+  function dedupeRows(rows) {
+    // Ne fusionne QUE des lignes venant de sources différentes (ex. TRACK ↔ mémoire ↔ DB) : deux lignes de la même
+    // source sont deux matchs distincts, même si équipes et score sont identiques.
+    var best = {}, order = [], DAY = 864e5;
+    (rows || []).forEach(function (r) {
+      if (!r || r.hs == null || r.as == null || !r.home || !r.away) { order.push({ r: r, src: {} }); return; }
+      var k = [norm(r.sport) === 'basketball' ? 'b' : 'f', norm(r.home), norm(r.away), r.hs, r.as].join('|'), t = Date.parse(r.date), list = best[k] = best[k] || [], hit = null, sc = r.source || '?';
+      for (var i = 0; i < list.length; i++) { var u = Date.parse(list[i].r.date); if (!list[i].src[sc] && (isNaN(t) || isNaN(u) || Math.abs(t - u) <= 14 * DAY)) { hit = list[i]; break; } }
+      if (!hit) { var e = { r: r, src: {} }; e.src[sc] = 1; list.push(e); order.push(e); } else { hit.src[sc] = 1; if (hit.r.dateApprox && !r.dateApprox) hit.r = r; }
+    });
+    return order.map(function (e) { return e.r; });
+  }
   function fromMemory(recs) { var seen = {}, out = []; (recs || []).forEach(function (r) { var s = r.result && r.result.score; if (!s || r.type === 'combo' || !r.matchDate) return; var k = [r.sport, r.competition, r.matchDate, r.home, r.away].join('|'); if (seen[k]) return; seen[k] = 1;
     out.push({ sport: r.sport, competition: r.competition, home: r.home, away: r.away, hs: s.a, as: s.b, date: r.matchDate, source: 'EA-MEMORY' }); }); return out; }
 
@@ -208,7 +232,7 @@
     }
     return { fullRebuild: fullRebuild, addDecision: addDecision, settleDecision: settleDecision, verifyDecision: verifyDecision, decisions: function () { var s = load(); return s.decisions.map(function (x) { return { prediction: x, result: s.decisionResults[x.id] || null }; }); }, load: load, save: save, upsert: upsert, played: played, meta: meta, league: league, team: team, initialize: initialize, consensus: function (o) { return consensus(played({ before: o.before, sport: o.sport }), o); }, quarantine: function () { return load().quarantine; }, duplicates: function () { return load().duplicates; }, journal: function () { return load().journal; }, log: log, saveNow: save, reset: function () { st = null; cache = {}; try { storage.removeItem(KEY); } catch (e) { } } };
   }
-  EA.database = { marketSpec: marketSpec, statTotal: statTotal, SCHEMA: SCHEMA, teamView: teamView, createStore: createStore, normalize: normalize, aggregate: aggregate, consensus: consensus, parseCSV: parseCSV, fromLegacy: fromLegacy, fromMemory: fromMemory, level: level, fmt: fmt, norm: norm, CFG: CFG, KEY: KEY,
+  EA.database = { marketSpec: marketSpec, statTotal: statTotal, SCHEMA: SCHEMA, teamView: teamView, createStore: createStore, normalize: normalize, aggregate: aggregate, consensus: consensus, parseCSV: parseCSV, fromLegacy: fromLegacy, fromTrack: fromTrack, fromBackup: fromBackup, dedupeRows: dedupeRows, fromMemory: fromMemory, level: level, fmt: fmt, norm: norm, CFG: CFG, KEY: KEY,
     provider: { name: 'MANUAL / LOCAL DATABASE', note: 'Remplaçable par un fournisseur API : il suffit de fournir des lignes {date, home, away, hs, as, …} à initialize().' } };
   if (typeof module === 'object' && module.exports) module.exports = EA.database;
 })(typeof window !== 'undefined' ? window : global);
