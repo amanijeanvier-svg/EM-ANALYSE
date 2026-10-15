@@ -741,7 +741,8 @@ input{font-family:inherit;}
             <div id="stageBlockGe" class="hidden" style="margin-bottom:12px;">
               <label style="display:block; font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--text-faint); margin-bottom:4px;">Stade de la compétition</label>
               <select id="stageGe" class="match-type-select">
-                <option value="poules">Phase de groupes / qualifications</option>
+                <option value="poules">Phase de ligue / groupes / qualifications</option>
+                <option value="barrage">Barrage (play-offs)</option>
                 <option value="32e">32e de finale</option>
                 <option value="16e">16e de finale</option>
                 <option value="8e">8e de finale</option>
@@ -828,6 +829,20 @@ input{font-family:inherit;}
                 </div>
               </div>
             </div>
+          </div>
+
+          <div id="euroBlockGe" class="field-group hidden">
+            <div class="field-label">🏆 Matchs de la compétition européenne <span class="tag">SCORES EUROPE</span></div>
+            <label style="display:block; font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--text-faint); margin-bottom:4px;">Compétition</label>
+            <select id="euroCompGe" class="match-type-select" style="margin-bottom:10px;">
+              <option value="ldc">Ligue des Champions</option>
+              <option value="uel">Ligue Europa</option>
+              <option value="uecl">Ligue Conférence</option>
+              <option value="euro">Euro (équipes nationales)</option>
+              <option value="autre">Autre compétition européenne</option>
+            </select>
+            <p class="cup-hint" style="margin:0 0 14px;">💡 Saisissez ici <b>uniquement les matchs déjà joués dans cette compétition</b> (journées de la phase de ligue, barrages, tours suivants), avec le lieu et la journée. Ils sont traités à part : un championnat modeste (ex. Autriche) et un grand championnat (ex. Angleterre) ne sont pas comparables, donc en Europe les scores de championnat saisis plus bas ne désignent plus le favori — l'Elo et ces matchs européens prennent le relais.</p>
+            <div id="euroTeamsGe"></div>
           </div>
 
           <div id="fields"></div>
@@ -1189,7 +1204,7 @@ input{font-family:inherit;}
             <li><strong>Série / forme récente</strong> — les résultats des derniers matchs (victoire/nul/défaite), reflète la dynamique du moment.</li>
             <li><strong>Face-à-face (H2H)</strong> — l'historique des confrontations directes entre ces deux équipes précises.</li>
             <li><strong>Absences</strong> — joueurs clés blessés/suspendus, à cocher par poste (gardien, défense, milieu, attaque) — plus le poste est défensif, plus l'impact sur les buts encaissés est fort.</li>
-            <li><strong>Type de match</strong> — championnat, coupe ou compétition européenne. Pour les compétitions à élimination directe, précisez aussi le stade (quart, demi, finale...) et si c'est un match aller ou retour.</li>
+            <li><strong>Type de match</strong> — championnat, coupe ou compétition européenne. Pour les compétitions à élimination directe, précisez aussi le stade (barrage, 8e, quart, demi, finale...) et si c'est un match aller ou retour. En compétition européenne, un bloc dédié apparaît dans la saisie des scores : entrez-y les matchs déjà joués dans la compétition (journée, lieu, score) — ils sont traités à part des scores de championnat.</li>
             <li><strong>Ligue</strong> (optionnel mais recommandé) — tapez le nom de la ligue/championnat. Ça permet à l'appli de calibrer ses calculs spécifiquement sur cette compétition au fil du temps, plutôt que de tout mélanger.</li>
           </ul>
           <h4>Où trouver ces données</h4>
@@ -7284,7 +7299,7 @@ async function autoFillFootballTeam(which){
 document.getElementById('autoFillBtnA').addEventListener('click', ()=>autoFillFootballTeam('A'));
 document.getElementById('autoFillBtnB').addEventListener('click', ()=>autoFillFootballTeam('B'));
 
-const matchFlags = {matchType:'championnat', league:'', stage:'poules', leg:'sec', aggAllerA:null, aggAllerB:null, injuryA:false, fatigueA:false, uncertainA:false, injuryB:false, fatigueB:false, uncertainB:false, posA:{gk:0,def:0,mid:0,att:0}, posB:{gk:0,def:0,mid:0,att:0}, depthA:'normale', depthB:'normale',
+const matchFlags = {matchType:'championnat', euroComp:'ldc', league:'', stage:'poules', leg:'sec', aggAllerA:null, aggAllerB:null, injuryA:false, fatigueA:false, uncertainA:false, injuryB:false, fatigueB:false, uncertainB:false, posA:{gk:0,def:0,mid:0,att:0}, posB:{gk:0,def:0,mid:0,att:0}, depthA:'normale', depthB:'normale',
   injurySeverityA:'modere', fatigueSeverityA:'modere', uncertainSeverityA:'modere', injurySeverityB:'modere', fatigueSeverityB:'modere', uncertainSeverityB:'modere',
   restDaysA:null, matches7dA:null, matches14dA:null, extraTimeA:false, restDaysB:null, matches7dB:null, matches14dB:null, extraTimeB:false,
   weatherWind:'', weatherRain:'', weatherPitch:''};
@@ -7303,6 +7318,7 @@ function leagueSlug(name){
 function syncStageBlockGe(){
   const isKO = matchFlags.matchType==='coupe' || matchFlags.matchType==='europe';
   document.getElementById('stageBlockGe').classList.toggle('hidden', !isKO);
+  { const eb=document.getElementById('euroBlockGe'); if(eb) eb.classList.toggle('hidden', matchFlags.matchType!=='europe'); }
   document.getElementById('aggregateBlockGe').classList.toggle('hidden', matchFlags.leg!=='retour');
 }
 document.getElementById('matchTypeGe').addEventListener('change', e=>{ matchFlags.matchType = e.target.value; document.getElementById('cupHintGe').classList.toggle('hidden', e.target.value!=='coupe'); syncStageBlockGe(); });
@@ -7365,6 +7381,151 @@ function syncTeamLabelsGe(){
 document.getElementById('nameA').addEventListener('input', syncTeamLabelsGe);
 document.getElementById('nameB').addEventListener('input', syncTeamLabelsGe);
 syncTeamLabelsGe();
+
+/* ================================================================
+   EA EURO SCORES — matchs de la compétition européenne saisis à part (LDC / Europa / Conférence…)
+   Constat (cas LASK–Liverpool) : en Europe, les seuls scores saisis étaient ceux du CHAMPIONNAT
+   (Autriche vs Angleterre, non comparables) : LASK paraissait dominant. Ici, on saisit séparément les
+   matchs réellement joués DANS la compétition (journées de la phase de ligue, barrages, tours suivants).
+   Ils sont traités à part, pondérés selon leur nombre, et les stats de championnat ne servent plus à
+   désigner le favori en Europe (écart de force : Elo + matchs européens). Rien n'est inventé : sans match
+   européen saisi, la couche est absente et un avertissement l'indique.
+================================================================= */
+const EURO_ROUNDS = [
+  {id:'QUAL', label:'Tour de qualification', short:'Qualif.'},
+  {id:'J1', label:'Journée 1', short:'J1'}, {id:'J2', label:'Journée 2', short:'J2'}, {id:'J3', label:'Journée 3', short:'J3'},
+  {id:'J4', label:'Journée 4', short:'J4'}, {id:'J5', label:'Journée 5', short:'J5'}, {id:'J6', label:'Journée 6', short:'J6'},
+  {id:'J7', label:'Journée 7', short:'J7'}, {id:'J8', label:'Journée 8', short:'J8'},
+  {id:'BAR', label:'Barrage (play-offs)', short:'Barrage'},
+  {id:'16E', label:'16e de finale', short:'16e'}, {id:'8E', label:'8e de finale', short:'8e'},
+  {id:'QF', label:'Quart de finale', short:'Quart'}, {id:'SF', label:'Demi-finale', short:'Demi'}, {id:'FIN', label:'Finale', short:'Finale'},
+];
+const EURO_ROUND_ORDER = {}; EURO_ROUNDS.forEach((r,i)=>{ EURO_ROUND_ORDER[r.id]=i; });
+const EURO_VENUE_LABEL = {D:'dom.', E:'ext.', N:'neutre'};
+const EURO_W = [0.24,0.20,0.16,0.13,0.10,0.07,0.05,0.05];   // récence : le match le plus récent pèse le plus
+const EURO_HOME_ADV = 1.10;                                  // buts à domicile ≈ ×1,10 du niveau neutre
+const euroStore = {A:[], B:[]};                              // entrées {f, a, venue:'D'|'E'|'N', round}
+function euroCompPhrase(){ return ({ldc:'en Ligue des Champions', uel:'en Ligue Europa', uecl:'en Ligue Conférence', euro:'à l\'Euro', autre:'en compétition européenne'})[matchFlags.euroComp] || 'en compétition européenne'; }
+function euroSorted(T){
+  return euroStore[T].map((e,i)=>({e,i,o:(EURO_ROUND_ORDER[e.round]!=null?EURO_ROUND_ORDER[e.round]:99)}))
+    .sort((x,y)=>x.o-y.o||x.i-y.i).map(x=>x.e);
+}
+function euroPairs(T){ return euroSorted(T).map(e=>[e.f,e.a]); }
+function euroNeutralPairs(T){   // ramène chaque match au niveau « terrain neutre » (domicile/extérieur corrigés)
+  const H=EURO_HOME_ADV;
+  return euroSorted(T).map(e=> e.venue==='D' ? [e.f/H, e.a*H] : e.venue==='E' ? [e.f*H, e.a/H] : [e.f, e.a]);
+}
+function euroAnchorWeight(EU){ const m=EU.nA+EU.nB; return m===0 ? 0.80 : clamp(0.80-0.10*Math.min(1,m/8), 0.70, 0.80); }
+function computeEuroInputs(){
+  const nA=euroStore.A.length, nB=euroStore.B.length;
+  const pA=euroNeutralPairs('A'), pB=euroNeutralPairs('B');
+  const forA=weightedRecentAvg(pA,0,EURO_W), agA=weightedRecentAvg(pA,1,EURO_W);
+  const forB=weightedRecentAvg(pB,0,EURO_W), agB=weightedRecentAvg(pB,1,EURO_W);
+  const mean=(x,y)=>{ const v=[x,y].filter(z=>z!=null); return v.length ? v.reduce((s,z)=>s+z,0)/v.length : null; };
+  const hf = (matchFlags.stage==='finale') ? 1 : EURO_HOME_ADV;   // finale = terrain neutre
+  const baseA=mean(forA,agB), baseB=mean(forB,agA);
+  const m=nA+nB;
+  const w = m>0 ? 0.70*m/(m+4) : 0;                    // 1+1 match ≈ 23 % · 4+4 ≈ 47 % · plafond 70 %
+  const both = nA>0 && nB>0, nMin=Math.min(nA,nB);
+  return {nA, nB, w, lamA: baseA!=null ? baseA*hf : null, lamB: baseB!=null ? baseB/hf : null,
+    forA, agA, forB, agB,
+    // écart défensif : uniquement sur les matchs européens des DEUX équipes (jamais le championnat), atténué si peu de matchs
+    gap: both ? {aDomAg:agA, bExtAg:agB, scale:nMin/(nMin+2)} : {aDomAg:null, bExtAg:null, scale:0},
+    anchorW:null};
+}
+function euroRecap(T){
+  const es=euroSorted(T); if(!es.length) return null;
+  let w=0,d=0,l=0,gf=0,ga=0;
+  es.forEach(e=>{ gf+=e.f; ga+=e.a; if(e.f>e.a) w++; else if(e.f===e.a) d++; else l++; });
+  const list=es.map(e=>`${(EURO_ROUNDS.find(r=>r.id===e.round)||{short:e.round}).short} ${e.f}-${e.a} ${EURO_VENUE_LABEL[e.venue]||''}`.trim()).join(' · ');
+  return {n:es.length, w, d, l, gf, ga, list, gfAvg:gf/es.length, gaAvg:ga/es.length};
+}
+const fr1 = v => v.toFixed(1).replace('.',',');
+function euroNarrativeShort(nameA, nameB, EU){   // phrase pour le dossier enregistré (contextSentence)
+  if(!EU) return '';
+  let s='';
+  [['A',nameA],['B',nameB]].forEach(([T,nm])=>{
+    const r=euroRecap(T);
+    if(!r){ s+=`Aucun match européen saisi pour ${nm} : son profil ne repose que sur son championnat (non comparable), l'Elo prend le relais. `; return; }
+    s+=`${euroCompPhrase().replace(/^./,c=>c.toUpperCase())}, ${nm} compte ${r.n} match${r.n>1?'s':''} (${r.list}) : ${r.w}V ${r.d}N ${r.l}D, ${r.gf} but${r.gf>1?'s':''} marqué${r.gf>1?'s':''} pour ${r.ga} encaissé${r.ga>1?'s':''}. `;
+  });
+  if(EU.w>0) s+=`Ces matchs pèsent ${Math.round(EU.w*100)} % dans les buts attendus ; les stats de championnat ne désignent plus le favori. `;
+  return s;
+}
+function buildEuroInsights(nameA, nameB, EU, eloAnchor){   // section visible du commentaire
+  if(!EU) return '';
+  const rows=[['A',nameA,'a'],['B',nameB,'b']].map(([T,nm,side])=>{
+    const r=euroRecap(T);
+    if(!r) return `<p>${hl(nm,side)} : <strong>aucun match européen saisi</strong>. Ses scores de championnat ne sont pas comparables à ceux de l'adversaire : le modèle s'appuie surtout sur l'Elo pour cette équipe.</p>`;
+    return `<p>${hl(nm,side)} : ${r.n} match${r.n>1?'s':''} européen${r.n>1?'s':''} (${r.list}) — ${r.w}V ${r.d}N ${r.l}D, ${r.gf} but${r.gf>1?'s':''} marqué${r.gf>1?'s':''} (${fr1(r.gfAvg)}/match) et ${r.ga} encaissé${r.ga>1?'s':''} (${fr1(r.gaAvg)}/match).</p>`;
+  }).join('');
+  let weights='';
+  if(EU.w>0) weights+=`Ces matchs pèsent ${Math.round(EU.w*100)} % dans les buts attendus (échantillon réduit : plus il y a de journées saisies, plus ils comptent). `;
+  weights+= eloAnchor
+    ? `L'Elo fixe ensuite le partage des buts à ${Math.round(eloAnchor.weight*100)} %, car les championnats d'origine ne sont pas comparables entre eux.`
+    : `Elo non saisi pour les deux équipes : le verdict est plus fragile, saisissez-les.`;
+  return `<h4>🏆 ${euroCompPhrase().replace(/^./,c=>c.toUpperCase())}</h4>${rows}<p>${weights}</p>`;
+}
+
+// -- Interface de saisie --
+function syncEuroLabelsGe(){
+  const a=document.getElementById('nameA').value.trim()||'A', b=document.getElementById('nameB').value.trim()||'B';
+  const la=document.getElementById('euroLabelA'), lb=document.getElementById('euroLabelB');
+  if(la) la.firstChild.nodeValue=a+' '; if(lb) lb.firstChild.nodeValue=b+' ';
+}
+function renderEuroChips(T){
+  const el=document.getElementById('chips-euro'+T); if(!el) return;
+  const list=euroStore[T];
+  if(!list.length){ el.innerHTML='<span class="empty-hint">Aucun match européen saisi</span>'; return; }
+  el.innerHTML = list.map((e,i)=>{
+    const r=(EURO_ROUNDS.find(x=>x.id===e.round)||{short:e.round});
+    return `<span class="chip"><span style="color:var(--text-faint); font-size:10px;">${r.short} · ${EURO_VENUE_LABEL[e.venue]||''}</span><b>${e.f}</b>-<span>${e.a}</span><span class="x" data-euro="${T}" data-idx="${i}">×</span></span>`;
+  }).join('');
+}
+(function initEuroBlockGe(){
+  const host=document.getElementById('euroTeamsGe'); if(!host) return;
+  ['A','B'].forEach(T=>{
+    const g=document.createElement('div'); g.style.marginBottom='16px';
+    g.innerHTML = `<div class="field-label" id="euroLabel${T}">${T} <span class="tag">EUROPE</span></div>
+      <div class="field-row"><input type="text" id="in-euro${T}" placeholder="Ex: 3-1  (marqués-encaissés)"><button class="add-btn sfx-tap" data-euro="${T}">+</button></div>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <select id="euroVenue${T}" class="match-type-select" style="flex:1;"><option value="D">Domicile</option><option value="E">Extérieur</option><option value="N">Terrain neutre</option></select>
+        <select id="euroRound${T}" class="match-type-select" style="flex:1;">${EURO_ROUNDS.map(r=>`<option value="${r.id}"${r.id==='J1'?' selected':''}>${r.label}</option>`).join('')}</select>
+      </div>
+      <div class="paste-hint">💡 Un score à la fois (avec son lieu et sa journée), ou plusieurs d'un coup : « 3-1, 0-2 » (les journées se suivent).</div>
+      <div class="chips" id="chips-euro${T}"><span class="empty-hint">Aucun match européen saisi</span></div>`;
+    host.appendChild(g);
+  });
+  syncEuroLabelsGe();
+  document.getElementById('nameA').addEventListener('input', syncEuroLabelsGe);
+  document.getElementById('nameB').addEventListener('input', syncEuroLabelsGe);
+  const addEuro=(T)=>{
+    const input=document.getElementById('in-euro'+T), parsed=parseEntries(input.value);
+    if(!parsed.length){ input.classList.add('err'); try{AudioFX.error();}catch(e){} setTimeout(()=>input.classList.remove('err'),600); return; }
+    const venue=document.getElementById('euroVenue'+T).value, roundSel=document.getElementById('euroRound'+T);
+    const m=/^J(\d)$/.exec(roundSel.value), startJ=m?parseInt(m[1],10):null;
+    parsed.forEach((p,i)=>{
+      const round = startJ!=null ? 'J'+Math.min(8,startJ+i) : roundSel.value;
+      euroStore[T].push({f:p[0], a:p[1], venue, round});
+    });
+    if(startJ!=null) roundSel.value='J'+Math.min(8, startJ+parsed.length);
+    input.value=''; input.classList.remove('err'); renderEuroChips(T);
+  };
+  const block=document.getElementById('euroBlockGe');
+  block.addEventListener('click', e=>{
+    const t=e.target;
+    if(t.classList.contains('add-btn') && t.dataset.euro) addEuro(t.dataset.euro);
+    if(t.classList.contains('x') && t.dataset.euro){ euroStore[t.dataset.euro].splice(parseInt(t.dataset.idx,10),1); renderEuroChips(t.dataset.euro); }
+  });
+  block.addEventListener('keydown', e=>{ if(e.target.tagName==='INPUT' && e.key==='Enter' && e.target.id.indexOf('in-euro')===0) addEuro(e.target.id.replace('in-euro','')); });
+  document.getElementById('euroCompGe').addEventListener('change', e=>{ matchFlags.euroComp=e.target.value; });
+})();
+function euroResetGe(){
+  euroStore.A=[]; euroStore.B=[];
+  ['A','B'].forEach(T=>{ renderEuroChips(T); const i=document.getElementById('in-euro'+T); if(i) i.value='';
+    const v=document.getElementById('euroVenue'+T); if(v) v.value='D'; const r=document.getElementById('euroRound'+T); if(r) r.value='J1'; });
+  const c=document.getElementById('euroCompGe'); if(c) c.value='ldc'; matchFlags.euroComp='ldc';
+}
 ADV_FIELDS.forEach(id=> document.getElementById(id).addEventListener('input', e=>{ advStats[id]=e.target.value===''?null:parseFloat(e.target.value); }));
 document.getElementById('advToggleGe').addEventListener('click', ()=>{
   const grid=document.getElementById('advGridGe'), chevron=document.getElementById('advChevronGe');
@@ -7377,6 +7538,7 @@ document.getElementById('resetBtn').addEventListener('click', ()=>{
   document.getElementById('rankPreviewA').textContent=''; document.getElementById('rankPreviewB').textContent='';
   ADV_FIELDS.forEach(id=>{ document.getElementById(id).value=''; advStats[id]=null; });
   document.getElementById('matchTypeGe').value='championnat'; matchFlags.matchType='championnat';
+  euroResetGe();
   ['A','B'].forEach(T=>{ const el=document.getElementById('depth'+T); if(el) el.value='normale'; matchFlags['depth'+T]='normale'; });
   { const tg=document.getElementById('trendsGe'); if(tg) tg.innerHTML=''; }
   document.getElementById('stageGe').value='poules'; matchFlags.stage='poules';
@@ -7422,7 +7584,7 @@ const STAGE_SHRINK_K = 15;   // poids de l'a priori, en "matchs équivalents" �
 const STAGE_MIN_N = 8;       // en dessous, on ne calcule même pas d'observé (trop peu pour être autre chose que du bruit)
 const AGG_SHRINK_K = 15;
 const AGG_MIN_N = 8;
-const STAGE_LABELS_ALL = {poules:'phase de groupes', '32e':'32e de finale', '16e':'16e de finale', '8e':'8e de finale', quart:'quart de finale', demi:'demi-finale', finale:'finale'};
+const STAGE_LABELS_ALL = {poules:'phase de groupes', barrage:'barrage (play-offs)', '32e':'32e de finale', '16e':'16e de finale', '8e':'8e de finale', quart:'quart de finale', demi:'demi-finale', finale:'finale'};
 
 function stageTensionStoreKey(sport, league){ const s=leagueSlug(league); return 'ea_stagetension_'+sport+(s?('__'+s):''); }
 function aggSensStoreKey(sport, league){ const s=leagueSlug(league); return 'ea_aggsens_'+sport+(s?('__'+s):''); }
@@ -7498,7 +7660,7 @@ function getAggSensitivity(sport, league){
   return 1.0;
 }
 
-const STAGE_TENSION = {poules:1.0, '32e':1.0, '16e':1.02, '8e':1.04, quart:1.07, demi:1.11, finale:1.16};
+const STAGE_TENSION = {poules:1.0, barrage:1.01, '32e':1.0, '16e':1.02, '8e':1.04, quart:1.07, demi:1.11, finale:1.16};
 function stageAdjustment(stage, sport, league){
   // Plus l'enjeu monte, plus le jeu se resserre : moins de buts, moins de folie —
   // traduit par une légère baisse conjointe des lambdas ET un sigma Monte Carlo réduit
@@ -7535,6 +7697,8 @@ function computeGeneseLambdas(){
   const bSerieAdj=applyOpponentStrengthAdjustment(bSerieRaw, standings.oppStrengthB);
   const bSerieFor=bSerieAdj.adjusted, baFor=weightedRecentAvg(store.ba,0,H2H_DECAY_WEIGHTS);
   const W = loadAdaptiveWeights('football', matchFlags.league);
+  // Compétition européenne : les matchs saisis DANS la compétition sont traités à part (voir EA EURO SCORES).
+  const EU = (matchFlags.matchType==='europe') ? computeEuroInputs() : null;
   let lambdaA=weightedLambda([{v:aDomFor,w:W.domicile},{v:aSerieFor,w:W.serie},{v:abFor,w:W.h2h},{v:bExtAg,w:W.defense_adverse}]);
   let lambdaB=weightedLambda([{v:bExtFor,w:W.domicile},{v:bSerieFor,w:W.serie},{v:baFor,w:W.h2h},{v:aDomAg,w:W.defense_adverse}]);
   const geneseComponents = {domicileA:aDomFor, serieA:aSerieFor, h2hA:abFor, defense_adverseA:bExtAg, domicileB:bExtFor, serieB:bSerieFor, h2hB:baFor, defense_adverseB:aDomAg};
@@ -7604,6 +7768,11 @@ function computeGeneseLambdas(){
       lambdaB = lambdaB*(1-extWeight) + extPrior.avgAwayGoals*extWeight;
     }
   }
+  // Matchs européens saisis : mélangés aux λ des stats (poids selon leur nombre, voir computeEuroInputs).
+  if(EU && EU.w>0 && lambdaA!==null && lambdaB!==null){
+    if(EU.lamA!=null) lambdaA = lambdaA*(1-EU.w) + EU.lamA*EU.w;
+    if(EU.lamB!=null) lambdaB = lambdaB*(1-EU.w) + EU.lamB*EU.w;
+  }
   // Repli Elo : si vous n'avez pas rempli le champ Elo (optionnel) pour une équipe, on
   // regarde si l'app la reconnaît déjà (au moins 3 matchs vérifiés à son nom) et on utilise
   // sa force interne, construite au fil de VOS résultats validés — jamais l'inverse : un Elo
@@ -7628,8 +7797,12 @@ function computeGeneseLambdas(){
   // forcé à 0 comme s'il n'y avait rien, alors que la donnée existait et nourrissait déjà
   // le λ de B en coulisses. On compte maintenant les deux sens.
   const h2hCountGe = store.ab.length + store.ba.length;
-  const {h2hGap, defGap} = computeGapComponents({abFor, baFor, h2hCount: h2hCountGe, aDomAg, bExtAg});
-  const strengthGap = computeStrengthGap({qualityIdx, eloIdx:eIdx, trendDiffIdx, abFor, baFor, h2hCount: h2hCountGe, aDomAg, bExtAg});
+  // En Europe : l'écart défensif ne vient plus des moyennes de championnat (non comparables entre ligues)
+  // mais des matchs européens des deux équipes ; classement et forme de championnat comptent moitié moins.
+  const gapSrc = EU ? EU.gap : {aDomAg, bExtAg, scale:1};
+  const {h2hGap, defGap:defGapRaw} = computeGapComponents({abFor, baFor, h2hCount: h2hCountGe, aDomAg:gapSrc.aDomAg, bExtAg:gapSrc.bExtAg});
+  const defGap = defGapRaw*gapSrc.scale;
+  const strengthGap = computeStrengthGap({qualityIdx: qualityIdx*(EU?0.5:1), eloIdx:eIdx, trendDiffIdx: trendDiffIdx*(EU?0.5:1), abFor, baFor, h2hCount: h2hCountGe, aDomAg:gapSrc.aDomAg, bExtAg:gapSrc.bExtAg, defScale:gapSrc.scale});
   let totalAdj=0;
   if(lambdaA!==null && lambdaB!==null){
     // Le plafond n'est plus fixe à ±22% : il s'élargit avec l'ampleur réelle de l'écart de
@@ -7673,6 +7846,15 @@ function computeGeneseLambdas(){
     totalAdj = clamp(qualityIdx*.19*classementFactor + eIdx*.14 + enjeuIdx*.08*classementFactor + trendDiffIdx*.04 + h2hGap*.04 + defGap*.11, -dynCap, dynCap);
     lambdaA=Math.max(.15, lambdaA*(1+totalAdj)); lambdaB=Math.max(.15, lambdaB*(1-totalAdj));
   }
+  // Ancrage Elo : uniquement en coupe / compétition européenne, et seulement si LES DEUX Elo sont saisis
+  // à la main (jamais avec l'Elo interne de repli, moins fiable).
+  let eloAnchor = null;
+  if(heterogeneousComp && lambdaA!==null && lambdaB!==null && standings.eloA!=null && standings.eloB!=null){
+    const anchorW = EU ? euroAnchorWeight(EU) : ELO_ANCHOR_WEIGHT;
+    if(EU) EU.anchorW = anchorW;
+    eloAnchor = eloAnchorLambdas(lambdaA, lambdaB, standings.eloA, standings.eloB, anchorW);
+    if(eloAnchor){ lambdaA = eloAnchor.lambdaA; lambdaB = eloAnchor.lambdaB; }
+  }
   // Marqueurs contextuels déclaratifs : nudges modestes et transparents, jamais dominants.
   const fatigueScoreA = computeFatigueScore({restDays:matchFlags.restDaysA, matches7d:matchFlags.matches7dA, matches14d:matchFlags.matches14dA, extraTime:matchFlags.extraTimeA});
   const fatigueScoreB = computeFatigueScore({restDays:matchFlags.restDaysB, matches7d:matchFlags.matches7dB, matches14d:matchFlags.matches14dB, extraTime:matchFlags.extraTimeB});
@@ -7702,7 +7884,7 @@ function computeGeneseLambdas(){
   const aggAdj = aggregateAdjustment(matchFlags.leg, matchFlags.aggAllerA, matchFlags.aggAllerB, 'football', matchFlags.league);
   if(lambdaA!==null) lambdaA *= aggAdj.factorA;
   if(lambdaB!==null) lambdaB *= aggAdj.factorB;
-  return {lambdaA, lambdaB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, eloA:effStandings.eloA, eloB:effStandings.eloB, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:stageAdj.sigmaDamp, aggregateNote:aggAdj.note, components:geneseComponents,
+  return {lambdaA, lambdaB, eloAnchor, euro: EU, eloMissingEurope: (heterogeneousComp && (standings.eloA==null || standings.eloB==null)), totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, eloA:effStandings.eloA, eloB:effStandings.eloB, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:stageAdj.sigmaDamp, aggregateNote:aggAdj.note, components:geneseComponents,
     aSerieAdj, bSerieAdj, aSerieFor, aSerieRaw, bSerieFor, bSerieRaw, fatigueScoreA, fatigueScoreB,
     stage: stageIsKO ? matchFlags.stage : null, leg: matchFlags.leg, tensionUsed: stageIsKO ? stageAdj.tensionUsed : null,
     aggFactorUsed: matchFlags.leg==='retour' ? {factorA:aggAdj.factorA, factorB:aggAdj.factorB} : null, aggDiff: aggAdj.diff||0};
@@ -7799,12 +7981,12 @@ function computeGapComponents({abFor, baFor, h2hCount, aDomAg, bExtAg}){
   const defGap = hasDef ? Math.tanh((bExtAg-aDomAg)*0.5) : 0;
   return {h2hGap, defGap};
 }
-function computeStrengthGap({qualityIdx, eloIdx, trendDiffIdx, abFor, baFor, h2hCount, aDomAg, bExtAg}){
+function computeStrengthGap({qualityIdx, eloIdx, trendDiffIdx, abFor, baFor, h2hCount, aDomAg, bExtAg, defScale=1}){
   const {h2hGap, defGap} = computeGapComponents({abFor, baFor, h2hCount, aDomAg, bExtAg});
   // H2H ramené à .08 (contre .20 avant), redistribué sur classement/Elo/défense — même
   // raisonnement que DEFAULT_SOURCE_WEIGHTS : un face-à-face reste un signal réel mais
   // trop rare (souvent 1 à 3 matchs) pour peser presque autant que l'Elo ou le classement.
-  const raw = (qualityIdx||0)*.31 + (eloIdx||0)*.25 + h2hGap*.08 + defGap*.22 + (trendDiffIdx||0)*.14;
+  const raw = (qualityIdx||0)*.31 + (eloIdx||0)*.25 + h2hGap*.08 + defGap*defScale*.22 + (trendDiffIdx||0)*.14;
   return clamp(raw, -1, 1);
 }
 /* ================================================================
@@ -7829,6 +8011,26 @@ function eloWinProbabilities(eloA, eloB, homeAdv=60){
   const expectedA = 1/(1+Math.pow(10, -((eloA+homeAdv)-eloB)/400));
   const pDraw = clamp(0.30 - Math.abs(2*expectedA-1)*0.20, 0.06, 0.30);
   return {pHome: expectedA*(1-pDraw), pDraw, pAway:(1-expectedA)*(1-pDraw)};
+}
+// ANCRAGE ELO DES λ (EA ELO ANCHOR) — en coupe / compétition européenne, les moyennes de buts
+// viennent de championnats de niveaux différents (ex. Autriche vs Angleterre) et ne sont pas
+// comparables : l'Elo, lui, l'est. Avant, l'Elo ne déplaçait le λ que de ±14 % au maximum
+// (eIdx × .14) : avec 350 points d'écart, LASK restait favori face à Liverpool. Ici on
+// déduit du seul Elo (avec avantage du terrain) le PARTAGE des buts attendus (à total de buts
+// constant, tel que calculé par les stats), puis on le mélange en log aux λ des stats avec un
+// poids élevé. Le niveau global de buts reste piloté par les stats ; seul QUI domine est recalé.
+const ELO_ANCHOR_WEIGHT = 0.65;
+function poissonScoreAB(lA, lB){ let w=0, d=0, f=[1]; for(let k=1;k<=12;k++) f[k]=f[k-1]*k;
+  for(let i=0;i<=12;i++){ const pi=Math.exp(-lA)*Math.pow(lA,i)/f[i]; for(let j=0;j<=12;j++){ const p=pi*Math.exp(-lB)*Math.pow(lB,j)/f[j]; if(i>j) w+=p; else if(i===j) d+=p; } }
+  return w + 0.5*d; }
+function eloAnchorLambdas(lambdaA, lambdaB, eloA, eloB, weight=ELO_ANCHOR_WEIGHT, homeAdv=60){
+  if(eloA==null || eloB==null || !(lambdaA>0) || !(lambdaB>0)) return null;
+  const E = clamp(1/(1+Math.pow(10, -((eloA+homeAdv)-eloB)/400)), 0.03, 0.97), T = lambdaA+lambdaB;
+  let lo=0.04, hi=0.96;
+  for(let k=0;k<40;k++){ const x=(lo+hi)/2; if(poissonScoreAB(T*x, T*(1-x)) < E) lo=x; else hi=x; }
+  const x=(lo+hi)/2, eA=Math.max(0.15,T*x), eB=Math.max(0.15,T*(1-x));
+  const nA=Math.exp((1-weight)*Math.log(lambdaA)+weight*Math.log(eA)), nB=Math.exp((1-weight)*Math.log(lambdaB)+weight*Math.log(eB));
+  return {lambdaA:nA, lambdaB:nB, eloLambdaA:eA, eloLambdaB:eB, expectedScoreA:E, weight, beforeA:lambdaA, beforeB:lambdaB};
 }
 // Dévigage proportionnel (méthode standard, la plus simple) : chaque cote donne une
 // probabilité brute 1/cote ; leur somme dépasse 100% (marge du bookmaker, l'"overround") ;
@@ -8056,7 +8258,7 @@ function applyStrengthToResult(pHome, pDraw, pAway, strengthGap){
    la couche est absente et le verdict reste celui du modèle.
 ================================================================= */
 const TREND_CFG = { win:10, recent:5, recentBoost:1.5, minH2H:2, minTeamN:3, maxTotal:0.40, strongH2H:1.6, strongTeam:1.3, strongMinN:4,
-  src:{ form:{cap:0.18, k:8, label:'Forme'}, venue:{cap:0.14, k:6, label:'Dom./Ext.'}, h2h:{cap:0.22, k:4, label:'Face-à-face'} } };
+  src:{ form:{cap:0.18, k:8, label:'Forme'}, venue:{cap:0.14, k:6, label:'Dom./Ext.'}, h2h:{cap:0.22, k:4, label:'Face-à-face'}, euro:{cap:0.20, k:4, label:'Europe'} } };
 function trEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function trPairs(arr){ return (arr||[]).filter(p=>Array.isArray(p)&&isFinite(p[0])&&isFinite(p[1])).slice(-TREND_CFG.win); }
 function trTestsFor(key){
@@ -8110,13 +8312,16 @@ function trFacts(pairs){
 }
 function computeTrendLayer(nameA,nameB){
   const SA=trPairs(store.aSerie), SB=trPairs(store.bSerie), DA=trPairs(store.aDom), DB=trPairs(store.bExt);
+  const isEu = matchFlags.matchType==='europe';
+  const EA = isEu ? trPairs(euroPairs('A')) : [], EB = isEu ? trPairs(euroPairs('B')) : [];
   // « A vs B » est saisi du point de vue de A ; « B vs A » du point de vue de B → on le retourne
   const H=trPairs((store.ab||[]).concat((store.ba||[]).map(p=>[p[1],p[0]])));
-  if(SA.length+SB.length+DA.length+DB.length+H.length===0) return null;
+  if(SA.length+SB.length+DA.length+DB.length+H.length+EA.length+EB.length===0) return null;
   const sources=[{id:'form',A:SA,B:SB},{id:'venue',A:DA,B:DB},{id:'h2h',H:H}];
+  if(EA.length+EB.length>0) sources.push({id:'euro',A:EA,B:EB});
   function comp(key){
     const parts=[]; let sw=0, sr=0;
-    sources.forEach(s=>{ const x=trSourceRate(s,key); if(!x) return; const cfg=TREND_CFG.src[s.id], w=cfg.cap*x.n/(x.n+cfg.k)*x.mult;
+    sources.forEach(s=>{ const x=trSourceRate(s,key); if(!x) return; const cfg=TREND_CFG.src[s.id], w=cfg.cap*x.n/(x.n+cfg.k)*x.mult*((isEu && (s.id==='form'||s.id==='venue')) ? 0.6 : 1);   // en Europe, forme/dom.-ext. de championnat pèsent moins
       parts.push({id:s.id,label:cfg.label,r:x.r,n:x.n,w}); sw+=w; sr+=w*x.r; });
     if(!parts.length) return null;
     // Le face-à-face est LE signal spécifique à cette affiche : quand il est extrême (≤ 10 % ou ≥ 80 %)
@@ -8183,7 +8388,7 @@ function computeTrendLayer(nameA,nameB){
       else if(f.noWinRun>=f.n) pushT('🏟️',`${nm} sans victoire ${lbl} sur ses ${f.n} derniers matchs`,'neg'); });
     return out;
   }
-  return { sources, comp, blend, describe, slim, evKeys, signals, facts:{A:trFacts(SA),B:trFacts(SB),DA:trFacts(DA),DB:trFacts(DB),H:trFacts(H)}, n:{A:SA.length,B:SB.length,DA:DA.length,DB:DB.length,H:H.length} };
+  return { sources, comp, blend, describe, slim, evKeys, signals, facts:{A:trFacts(SA),B:trFacts(SB),DA:trFacts(DA),DB:trFacts(DB),H:trFacts(H),EA:trFacts(EA),EB:trFacts(EB)}, n:{A:SA.length,B:SB.length,DA:DA.length,DB:DB.length,H:H.length,EA:EA.length,EB:EB.length} };
 }
 // goals line : même 3 lignes candidates que pickGoalsLineMarket, mais avec la probabilité mélangée aux tendances
 function pickGoalsLineMarketTR(lambdaSum,matrix,TR){
@@ -8202,7 +8407,7 @@ function trendBetLine(b){
   const t=b.trend, st='font-family:\'IBM Plex Mono\',monospace; font-size:10px; margin:6px 0 2px; line-height:1.5;';
   if(t.pTrend==null || t.W<0.01) return `<div style="${st} color:var(--text-faint);">📈 Tendances : échantillon insuffisant pour ce pari (modèle seul)</div>`;
   const tag=t.tag==='agree'?'<span style="color:#7bd88f;">✅ tendances concordantes</span>':t.tag==='conflict'?'<span style="color:#ffb454;">⚠️ tendances contraires au modèle</span>':'<span style="color:var(--text-faint);">➖ tendances neutres</span>';
-  const pf=b.pRaw!=null?b.pRaw:b.p, src=(t.parts||[]).map(p=>`${p.label||({form:'Forme',venue:'Dom./Ext.',h2h:'H2H'})[p.id]} ${Math.round(p.r*100)} % (${p.n})`).join(' · ');
+  const pf=b.pRaw!=null?b.pRaw:b.p, src=(t.parts||[]).map(p=>`${p.label||({form:'Forme',venue:'Dom./Ext.',h2h:'H2H',euro:'Europe'})[p.id]} ${Math.round(p.r*100)} % (${p.n})`).join(' · ');
   return `<div style="${st} color:var(--text-dim,#aab);">📈 Modèle ${fmtPct(b.pModel)} · Tendances ${fmtPct(t.pTrend)} <span style="opacity:.7;">(poids ${Math.round(t.W*100)} %)</span> → <b>${fmtPct(pf)}</b> · ${tag}<br><span style="opacity:.65;">${trEsc(src)}</span></div>`;
 }
 function renderTrendsPanel(TR,nameA,nameB){
@@ -8216,7 +8421,7 @@ function renderTrendsPanel(TR,nameA,nameB){
   const sig=TR.signals(), col={pos:'#7bd88f',neg:'#ff8a80',draw:'#c8b6ff',under:'#8fc9ff',over:'#ffb454',btts:'#ffd166'};
   const sigHtml=sig.length?sig.map(s=>`<div style="margin:3px 0; color:${col[s.kind]||'inherit'};">${s.icon} ${trEsc(s.text)}</div>`).join(''):`<div style="${dim}">Aucun signal marqué dans les séries saisies.</div>`;
   return `<div class="section-title">📈 Tendances (analyse « humaine »)</div><div style="${st} border-left:3px solid var(--gold,#d4af37); padding:8px 12px; background:rgba(255,255,255,.03); border-radius:6px;">`
-    + line(nameA,TR.facts.A,'forme')+line(nameB,TR.facts.B,'forme')+line(nameA,TR.facts.DA,'à domicile')+line(nameB,TR.facts.DB,'à l\'extérieur')+h2h
+    + line(nameA,TR.facts.EA,'en Europe')+line(nameB,TR.facts.EB,'en Europe')+line(nameA,TR.facts.A,'forme')+line(nameB,TR.facts.B,'forme')+line(nameA,TR.facts.DA,'à domicile')+line(nameB,TR.facts.DB,'à l\'extérieur')+h2h
     + `<div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--line,#333);">${sigHtml}</div>`
     + `<div style="${dim} margin-top:8px; font-size:9.5px;">Poids des tendances plafonné à ${Math.round(TREND_CFG.maxTotal*100)} % et proportionnel à la taille de l'échantillon : le modèle (λ, forme, effectif) reste la base. Une série n'est jamais une garantie.</div></div>`;
 }
@@ -8283,6 +8488,7 @@ function buildFootballInsights(ctx){
     : `Le modèle donne ${hl(favName, favIsA?'a':'b')} favori à ${fmtPct(favP)} (nul ${fmtPct(ctx.pDraw)}, ${favIsA?nB:nA} ${fmtPct(favIsA?ctx.pAway:ctx.pHome)}), avec BTTS à ${fmtPct(ctx.pBTTSyes)}.`;
   contexteParts.push(favSentence);
   html += `<h4>📋 Contexte du match</h4><p>${contexteParts.join(' ')}</p>`;
+  if(ctx.euroHtml) html += ctx.euroHtml;
 
   // 2. Forme actuelle — capacité à marquer intégrée ici (registre varié, voir
   // formeSentence/scoringSentence : plusieurs formulations possibles par palier, pas
@@ -8300,7 +8506,7 @@ function buildFootballInsights(ctx){
     if(best||worst) s += ` (${best?`meilleure référence ${best[0]}-${best[1]}`:''}${best&&worst?', ':''}${worst?`plus faible ${worst[0]}-${worst[1]}`:''})`;
     formeParts.push(s + ' ' + scoringSentence(nB, ctx.lambdaB, narrSeed));
   }
-  if(formeParts.length) html += `<h4>📈 Forme actuelle</h4><p>${formeParts.join(' ')}</p>`;
+  if(formeParts.length) html += `<h4>📈 Forme actuelle${ctx.isEuro?' (championnat)':''}</h4><p>${formeParts.join(' ')}</p>`;
 
   // 3. Face-à-face
   if(ctx.h2hCount>0){
@@ -8309,13 +8515,14 @@ function buildFootballInsights(ctx){
 
   // 4. Aperçu des statistiques (domicile/extérieur, xG ou tirs cadrés en repli, possession, absences)
   let statsParts = [];
+  if(ctx.isEuro) statsParts.push(`Ces moyennes viennent du championnat : elles ne sont pas comparables d'une ligue à l'autre et ne désignent plus le favori en Europe.`);
   if(ctx.aDomFor!=null) statsParts.push(`${hl(nA)} affiche ${ctx.aDomFor.toFixed(1)} but(s) marqué(s) et ${ctx.aDomAg!=null?ctx.aDomAg.toFixed(1):'?'} encaissé(s) en moyenne à domicile.`);
   if(ctx.bExtFor!=null) statsParts.push(`${hl(nB,'b')} affiche ${ctx.bExtFor.toFixed(1)} but(s) marqué(s) et ${ctx.bExtAg!=null?ctx.bExtAg.toFixed(1):'?'} encaissé(s) en moyenne à l'extérieur.`);
   if(ctx.xgA!=null && ctx.xgB!=null) statsParts.push(`Les xG (buts attendus sous-jacents) confirment cette base : ${ctx.xgA.toFixed(1)} pour ${nA} contre ${ctx.xgB.toFixed(1)} pour ${nB}.`);
   else if(ctx.shotsA!=null && ctx.shotsB!=null) statsParts.push(`Les tirs cadrés vont dans le même sens : ${ctx.shotsA.toFixed(1)} pour ${nA} contre ${ctx.shotsB.toFixed(1)} pour ${nB}.`);
   const possTxt = possessionNote(ctx.possA, ctx.possB, nA, nB); if(possTxt) statsParts.push(possTxt.trim());
   if(ctx.absencesTxt) statsParts.push(ctx.absencesTxt);
-  if(statsParts.length) html += `<h4>📊 Aperçu des statistiques</h4><p>${statsParts.join(' ')}</p>`;
+  if(statsParts.length) html += `<h4>📊 Aperçu des statistiques${ctx.isEuro?' (championnat)':''}</h4><p>${statsParts.join(' ')}</p>`;
 
   // 5. Prédiction de synthèse
   html += `<h4>🎯 Prédiction de synthèse</h4>
@@ -8354,6 +8561,10 @@ function computeCompletenessFootball(){
     {label:'Face-à-face', on: (store.ab.length>0 || store.ba.length>0)},
     {label:'Classement', on: (standings.rankA!=null && standings.ptsA!=null && standings.rankB!=null && standings.ptsB!=null)},
   ];
+  if(matchFlags.matchType==='europe'){
+    sources.push({label:'Matchs européens A', on: euroStore.A.length>0});
+    sources.push({label:'Matchs européens B', on: euroStore.B.length>0});
+  }
   return {filled: sources.filter(s=>s.on).length, total: sources.length, sources};
 }
 function renderCompletenessBadge(elId, completeness){
@@ -8426,18 +8637,18 @@ function renderValueProPanel(ctx){
 }
 function runAnalysisGe(){
   const nameA=document.getElementById('nameA').value.trim()||'A', nameB=document.getElementById('nameB').value.trim()||'B';
-  const totalEntries=Object.values(store).reduce((s,a)=>s+a.length,0);
+  const totalEntries=Object.values(store).reduce((s,a)=>s+a.length,0) + (matchFlags.matchType==='europe' ? euroStore.A.length+euroStore.B.length : 0);
   // Plus aucun blocage strict (1.3) : le verdict se génère toujours, même avec peu ou pas
   // de données — computeGeneseLambdas() a son propre repli neutre pour ce cas. On informe
   // seulement, via la pastille de complétude affichée sur le résultat, jamais un mur.
   const completenessGe = computeCompletenessFootball();
 
-  const {lambdaA, lambdaB, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, eloA, eloB, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff, aSerieAdj, bSerieAdj, aSerieFor, aSerieRaw, bSerieFor, bSerieRaw, fatigueScoreA, fatigueScoreB}=computeGeneseLambdas();
+  const {lambdaA, lambdaB, eloAnchor, euro:euroInfo, eloMissingEurope, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, eloA, eloB, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff, aSerieAdj, bSerieAdj, aSerieFor, aSerieRaw, bSerieFor, bSerieRaw, fatigueScoreA, fatigueScoreB}=computeGeneseLambdas();
   const convictionIdx = computeConvictionIdx(enjeuIdx, trendDiffIdx, tensionUsed, aggDiff);
   if(lambdaA===null||lambdaB===null) return;
 
-  const entriesA=store.aSerie.length+store.aDom.length+store.ab.length;
-  const entriesB=store.bSerie.length+store.bExt.length+store.ba.length;
+  const entriesA=store.aSerie.length+store.aDom.length+store.ab.length+(euroInfo?euroStore.A.length:0);
+  const entriesB=store.bSerie.length+store.bExt.length+store.ba.length+(euroInfo?euroStore.B.length:0);
   const oneSided=(entriesA===0||entriesB===0);
   const advCount=ADV_FIELDS.filter(id=>advStats[id]!=null).length;
   const hasStandings=(standings.rankA!=null && standings.rankB!=null)?1:0;
@@ -8490,7 +8701,7 @@ function runAnalysisGe(){
   // "force" compte comme complet même si l'Elo n'a pas été tapé mais que l'app reconnaît déjà
   // l'équipe (force interne) — cohérent avec le repli déjà en place dans computeGeneseLambdas.
   const ishikawa = {
-    histo: store.aSerie.length>0 && store.bSerie.length>0 && store.aDom.length>0 && store.bExt.length>0,
+    histo: (store.aSerie.length>0 && store.bSerie.length>0 && store.aDom.length>0 && store.bExt.length>0) || (!!euroInfo && euroStore.A.length>0 && euroStore.B.length>0),
     h2h: store.ab.length>0 || store.ba.length>0,
     classement: standings.rankA!=null && standings.ptsA!=null && standings.rankB!=null && standings.ptsB!=null,
     force: eloA!=null && eloB!=null,
@@ -8559,13 +8770,14 @@ function runAnalysisGe(){
     {name:'Enjeu (40%)', on: zoneA!=null},
     {name:'Tendances', on: !!TR},
   ];
+  if(euroInfo) engines.push({name:'Matchs européens', on: euroStore.A.length+euroStore.B.length>0});
   document.getElementById('enginesRowGe').innerHTML = engines.map(e=>`<span class="engine-badge ${e.on?'on':''}">${e.on?'✓':'—'} ${e.name}</span>`).join('');
   renderCompletenessBadge('completenessGe', completenessGe);
 
   document.getElementById('scoresRowGe').innerHTML = top2.map((s,i)=>`
     <div class="score-card ${i===0?'primary':''}"><div class="rank">SCÉNARIO ${i+1}</div><div class="names">${nameA} — ${nameB}</div>
     <div class="score">${s.a} – ${s.b}</div><div class="prob">Probabilité estimée : ${fmtPct(s.p)}</div></div>`).join('');
-  document.getElementById('lambdaRowGe').innerHTML = `<span><b>λ ${nameA}</b> ${lambdaA.toFixed(2)} buts attendus</span><span><b>λ ${nameB}</b> ${lambdaB.toFixed(2)} buts attendus</span>`;
+  document.getElementById('lambdaRowGe').innerHTML = `<span><b>λ ${nameA}</b> ${lambdaA.toFixed(2)} buts attendus</span><span><b>λ ${nameB}</b> ${lambdaB.toFixed(2)} buts attendus</span>${euroInfo&&euroInfo.w>0?`<span style="flex-basis:100%; opacity:.75; font-size:10.5px;">🏆 Matchs européens saisis (${euroStore.A.length} + ${euroStore.B.length}) : poids ${Math.round(euroInfo.w*100)} % dans les λ.</span>`:''}${eloAnchor?`<span style="flex-basis:100%; opacity:.75; font-size:10.5px;">⚖️ Ancrage Elo appliqué (poids ${Math.round(eloAnchor.weight*100)} %) : λ des stats ${eloAnchor.beforeA.toFixed(2)} / ${eloAnchor.beforeB.toFixed(2)} → ${eloAnchor.lambdaA.toFixed(2)} / ${eloAnchor.lambdaB.toFixed(2)}. En coupe/Europe les stats de championnat ne sont pas comparables entre ligues ; l'Elo l'est.</span>`:(eloMissingEurope?`<span style="flex-basis:100%; color:#ffb454; font-size:10.5px;">⚠️ Elo non saisi pour les deux équipes : en coupe/Europe, les stats de championnat ne sont pas comparables entre ligues (ex. Autriche vs Angleterre). Verdict peu fiable — saisissez l'Elo des deux équipes.</span>`:'')}`;
 
   const recordId = uid();
   document.getElementById('betsListGe').innerHTML = finalBets.map((b,i)=>`
@@ -8583,6 +8795,7 @@ function runAnalysisGe(){
   let contextSentence = '';
   if(standings.rankA!=null && standings.totalTeams!=null) contextSentence += stakesSentence(nameA, standings.rankA, standings.totalTeams, phaseLabel, narrSeed) + ' ';
   if(standings.rankB!=null && standings.totalTeams!=null) contextSentence += stakesSentence(nameB, standings.rankB, standings.totalTeams, phaseLabel, narrSeed) + ' ';
+  if(euroInfo) contextSentence += euroNarrativeShort(nameA, nameB, euroInfo);
   contextSentence += formeSentence(nameA, trendA, narrSeed) + ' ' + formeSentence(nameB, trendB, narrSeed) + ' ';
   // Opponent Strength Adjustment (sections 37/43) : rendu transparent en une phrase plutôt
   // qu'un chiffre caché — FORM RAW vs FORM ADJUSTED, uniquement quand la donnée existe.
@@ -8601,7 +8814,7 @@ function runAnalysisGe(){
   const weatherImpact = computeWeatherImpact({wind:matchFlags.weatherWind, rain:matchFlags.weatherRain, pitch:matchFlags.weatherPitch});
   if(weatherImpact==='MEDIUM'||weatherImpact==='HIGH') contextSentence += `Conditions météo notées comme impact potentiel ${weatherImpact==='HIGH'?'ÉLEVÉ':'MOYEN'} (vent/pluie/terrain) : peut affecter le rythme, les tirs et les corners — aucune correction chiffrée appliquée faute de données historiques validées sur ce lien. `;
   contextSentence += scoringSentence(nameA, lambdaA, narrSeed) + ' ' + scoringSentence(nameB, lambdaB, narrSeed);
-  const STAGE_LABELS = {poules:'phase de groupes', '32e':'32e de finale', '16e':'16e de finale', '8e':'8e de finale', quart:'quart de finale', demi:'demi-finale', finale:'finale'};
+  const STAGE_LABELS = {poules:'phase de groupes', barrage:'barrage (play-offs)', '32e':'32e de finale', '16e':'16e de finale', '8e':'8e de finale', quart:'quart de finale', demi:'demi-finale', finale:'finale'};
   if((matchFlags.matchType==='coupe'||matchFlags.matchType==='europe') && STAGE_LABELS[matchFlags.stage]){
     contextSentence += ` Match de ${STAGE_LABELS[matchFlags.stage]} : l'enjeu resserre naturellement le jeu, moins de scénarios extrêmes que d'ordinaire.`;
   }
@@ -8641,6 +8854,8 @@ function runAnalysisGe(){
     hasFlags: matchFlags.injuryA||matchFlags.fatigueA||matchFlags.uncertainA||matchFlags.injuryB||matchFlags.fatigueB||matchFlags.uncertainB,
     bestBetP: meilleur.p,
   };
+  const euroMissing = euroInfo ? [euroStore.A.length===0?nameA:null, euroStore.B.length===0?nameB:null].filter(Boolean) : [];
+  const euroWarnTxt = euroMissing.length ? `<p style="color:#ffb454; font-family:'IBM Plex Mono',monospace; font-size:11.5px; margin-bottom:14px; border:1px dashed #ffb454; padding:10px 12px; border-radius:6px;">🏆 Aucun match ${euroCompPhrase().replace(/^en |^à /,'')} saisi pour ${euroMissing.join(' et ')} : ses scores de championnat ne sont pas comparables à ceux de l'adversaire. Le verdict repose surtout sur l'Elo — saisissez les journées déjà jouées dans la compétition pour l'affiner.</p>` : '';
   const fragilityTxt = `<p class="fragility-note">🔍 <b>Point de vigilance</b> — ${buildFragilityNote(fragilityCtx)}</p>`;
 
   // Aperçu enrichi façon "AI Insights" — sections structurées, contexte complet
@@ -8662,10 +8877,11 @@ function runAnalysisGe(){
     xgA: advStats.xgA, xgB: advStats.xgB, shotsA: advStats.shotsA, shotsB: advStats.shotsB,
     possA: advStats.possA, possB: advStats.possB,
     absencesTxt: absencesTxt.trim(),
+    isEuro: !!euroInfo, euroHtml: euroInfo ? buildEuroInsights(nameA, nameB, euroInfo, eloAnchor) : '',
   };
   const insightsHtml = `<div class="insights-block">${buildFootballInsights(insightsCtx)}</div>`;
 
-  document.getElementById('interpTextGe').innerHTML = `${avertissementTxt}${fragilityTxt}${insightsHtml}`;
+  document.getElementById('interpTextGe').innerHTML = `${avertissementTxt}${euroWarnTxt}${fragilityTxt}${insightsHtml}`;
   renderValueProPanel({resultBet, resultOdds, resultEV, edgeInfo, noBetVerdict, dataQualityPct, modelAgreementPct, breakEvenPct, probabilityEdgePts, uncertainty, pHomeStat, pDrawStat, pAwayStat, pEloModel, pMarketModel, pHome, pDraw, pAway});
 
 
@@ -8679,6 +8895,7 @@ function runAnalysisGe(){
     id: recordId, timestamp: Date.now(), nameA, nameB,
     league: matchFlags.league||'',
     stage, leg, tensionUsed, aggFactorUsed, aggDiff,
+    euro: euroInfo ? {comp: matchFlags.euroComp, A: euroSorted('A'), B: euroSorted('B'), weight: +euroInfo.w.toFixed(3)} : undefined,
     lambdaA: +lambdaA.toFixed(2), lambdaB: +lambdaB.toFixed(2),
     components, contextSentence, convictionIdx, ishikawa,
     odds: (advStats.coteHome>1 && advStats.coteDraw>1 && advStats.coteAway>1) ? {home:advStats.coteHome, draw:advStats.coteDraw, away:advStats.coteAway} : null,
