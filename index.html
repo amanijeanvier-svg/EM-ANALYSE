@@ -845,6 +845,15 @@ input{font-family:inherit;}
             <div id="euroTeamsGe"></div>
           </div>
 
+          <div class="field-group">
+            <div class="field-label">Ordre de saisie des séries <span class="tag">IMPORTANT</span></div>
+            <select id="seriesOrderGe" class="match-type-select">
+              <option value="recentFirst">Le plus récent en premier (comme sur les sites)</option>
+              <option value="oldestFirst">Le plus ancien en premier</option>
+            </select>
+            <p class="paste-hint" id="seriesOrderHintGe" style="margin-top:8px;"></p>
+          </div>
+
           <div id="fields"></div>
 
           <div class="adv-toggle-row" id="advToggleGe">
@@ -1019,6 +1028,15 @@ input{font-family:inherit;}
                 <div class="standing-inputs" style="margin-top:8px;"><div><label>Joueurs clés absents</label><input type="number" id="bkAbsB" min="0" max="5" placeholder="0"></div></div>
               </div>
             </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-label">Ordre de saisie des séries <span class="tag">IMPORTANT</span></div>
+            <select id="seriesOrderBk" class="match-type-select">
+              <option value="recentFirst">Le plus récent en premier (comme sur les sites)</option>
+              <option value="oldestFirst">Le plus ancien en premier</option>
+            </select>
+            <p class="paste-hint" id="seriesOrderHintBk" style="margin-top:8px;"></p>
           </div>
 
           <div id="bkFields"></div>
@@ -7154,6 +7172,23 @@ const standings = {rankA:null, ptsA:null, rankB:null, ptsB:null, totalTeams:null
 const advStats = {xgA:null,xgaA:null,shotsA:null,cornersA:null,cardsA:null,possA:null,chancesA:null, xgB:null,xgaB:null,shotsB:null,cornersB:null,cardsB:null,possB:null,chancesB:null, coteHome:null,coteDraw:null,coteAway:null};
 const ADV_FIELDS = Object.keys(advStats);
 
+/* ORDRE DE SAISIE DES SÉRIES — en interne, chaque liste est CHRONOLOGIQUE (le plus ancien en premier, le dernier
+   = le plus récent : c'est ce que supposent les poids de récence, la tendance et les séries). Avant, rien ne le
+   disait : taper les matchs « du plus récent au plus ancien » (comme sur les sites) inversait la dynamique.
+   Désormais un réglage (par défaut : le plus récent EN PREMIER) convertit à la saisie ; les données internes
+   restent chronologiques, donc le réglage peut être changé à tout moment sans rien fausser. */
+const SERIES_ORDER_KEY = 'ea_series_order';
+let seriesOrder = 'recentFirst';
+try{ const v=localStorage.getItem(SERIES_ORDER_KEY); if(v==='oldestFirst'||v==='recentFirst') seriesOrder=v; }catch(e){}
+function seriesAdd(arr, parsed){   // parsed = scores dans l'ordre où l'utilisateur les a tapés
+  if(seriesOrder==='recentFirst') arr.unshift(...parsed.slice().reverse());   // les nouveaux sont plus anciens : devant
+  else arr.push(...parsed);
+}
+function seriesChipOrder(arr){ const o=arr.map((p,i)=>[p,i]); return seriesOrder==='recentFirst' ? o.reverse() : o; }
+const SERIES_HINT = {
+  recentFirst: '💡 Tapez le plus RÉCENT en premier : « 2-1, 1-0, 3-2 » → 2-1 est le dernier match joué (comme sur les sites). Ajoutez ensuite les plus anciens.',
+  oldestFirst: '💡 Tapez le plus ANCIEN en premier : « 2-1, 1-0, 3-2 » → 3-2 est le dernier match joué.'
+};
 const fieldsEl = document.getElementById('fields');
 CATS.forEach(cat=>{
   const group=document.createElement('div'); group.className='field-group';
@@ -7166,13 +7201,13 @@ CATS.forEach(cat=>{
 function addEntry(key){
   const input=document.getElementById('in-'+key); const parsed=parseEntries(input.value);
   if(parsed.length===0){ input.classList.add('err'); try{AudioFX.error();}catch(e){} setTimeout(()=>input.classList.remove('err'),600); return; }
-  store[key].push(...parsed); input.value=''; input.classList.remove('err'); renderChips(key);
+  seriesAdd(store[key], parsed); input.value=''; input.classList.remove('err'); renderChips(key);
 }
 function removeEntry(key,idx){ store[key].splice(idx,1); renderChips(key); }
 function renderChips(key){
   const el=document.getElementById('chips-'+key);
   if(store[key].length===0){ el.innerHTML='<span class="empty-hint">Aucune donnée</span>'; return; }
-  el.innerHTML = store[key].map((pair,i)=>`<span class="chip"><b>${pair[0]}</b>-<span>${pair[1]}</span><span class="x" data-key="${key}" data-idx="${i}">×</span></span>`).join('');
+  el.innerHTML = seriesChipOrder(store[key]).map(([pair,i])=>`<span class="chip"><b>${pair[0]}</b>-<span>${pair[1]}</span><span class="x" data-key="${key}" data-idx="${i}">×</span></span>`).join('');
 }
 fieldsEl.addEventListener('click', e=>{
   if(e.target.classList.contains('add-btn')) addEntry(e.target.dataset.key);
@@ -7492,7 +7527,7 @@ function renderEuroChips(T){
         <select id="euroVenue${T}" class="match-type-select" style="flex:1;"><option value="D">Domicile</option><option value="E">Extérieur</option><option value="N">Terrain neutre</option></select>
         <select id="euroRound${T}" class="match-type-select" style="flex:1;">${EURO_ROUNDS.map(r=>`<option value="${r.id}"${r.id==='J1'?' selected':''}>${r.label}</option>`).join('')}</select>
       </div>
-      <div class="paste-hint">💡 Un score à la fois (avec son lieu et sa journée), ou plusieurs d'un coup : « 3-1, 0-2 » (les journées se suivent).</div>
+      <div class="paste-hint">💡 Un score à la fois, ou plusieurs d'un coup avec le lieu de chacun : « 3-1 D, 0-2 E, 1-1 N » (D = domicile, E = extérieur, N = neutre ; sans lettre, le lieu choisi ci-dessus est utilisé). Les journées se suivent.</div>
       <div class="chips" id="chips-euro${T}"><span class="empty-hint">Aucun match européen saisi</span></div>`;
     host.appendChild(g);
   });
@@ -7500,13 +7535,16 @@ function renderEuroChips(T){
   document.getElementById('nameA').addEventListener('input', syncEuroLabelsGe);
   document.getElementById('nameB').addEventListener('input', syncEuroLabelsGe);
   const addEuro=(T)=>{
-    const input=document.getElementById('in-euro'+T), parsed=parseEntries(input.value);
+    const input=document.getElementById('in-euro'+T);
+    // « 3-1 D, 0-2 E, 1-1 N » : lettre facultative après chaque score = lieu de CE match (D dom., E ext., N neutre)
+    const parsed=[]; const reScore=/(\d{1,3})\s*-\s*(\d{1,3})(?:\s*([DdEeNn])(?![A-Za-z]))?/g; let mm;
+    while((mm=reScore.exec(input.value))!==null) parsed.push([parseInt(mm[1],10), parseInt(mm[2],10), mm[3]?mm[3].toUpperCase():null]);
     if(!parsed.length){ input.classList.add('err'); try{AudioFX.error();}catch(e){} setTimeout(()=>input.classList.remove('err'),600); return; }
     const venue=document.getElementById('euroVenue'+T).value, roundSel=document.getElementById('euroRound'+T);
     const m=/^J(\d)$/.exec(roundSel.value), startJ=m?parseInt(m[1],10):null;
     parsed.forEach((p,i)=>{
       const round = startJ!=null ? 'J'+Math.min(8,startJ+i) : roundSel.value;
-      euroStore[T].push({f:p[0], a:p[1], venue, round});
+      euroStore[T].push({f:p[0], a:p[1], venue:p[2]||venue, round});
     });
     if(startJ!=null) roundSel.value='J'+Math.min(8, startJ+parsed.length);
     input.value=''; input.classList.remove('err'); renderEuroChips(T);
@@ -8942,19 +8980,28 @@ BK_CATS.forEach(cat=>{
 function bkAddEntry(key){
   const input=document.getElementById('bk-in-'+key); const parsed=parseEntries(input.value);
   if(parsed.length===0){ input.classList.add('err'); try{AudioFX.error();}catch(e){} setTimeout(()=>input.classList.remove('err'),600); return; }
-  bkStore[key].push(...parsed); input.value=''; input.classList.remove('err'); bkRenderChips(key);
+  seriesAdd(bkStore[key], parsed); input.value=''; input.classList.remove('err'); bkRenderChips(key);
 }
 function bkRemoveEntry(key,idx){ bkStore[key].splice(idx,1); bkRenderChips(key); }
 function bkRenderChips(key){
   const el=document.getElementById('bk-chips-'+key);
   if(bkStore[key].length===0){ el.innerHTML='<span class="empty-hint">Aucune donnée</span>'; return; }
-  el.innerHTML = bkStore[key].map((pair,i)=>`<span class="chip"><b>${pair[0]}</b>-<span>${pair[1]}</span><span class="x" data-key="${key}" data-idx="${i}">×</span></span>`).join('');
+  el.innerHTML = seriesChipOrder(bkStore[key]).map(([pair,i])=>`<span class="chip"><b>${pair[0]}</b>-<span>${pair[1]}</span><span class="x" data-key="${key}" data-idx="${i}">×</span></span>`).join('');
 }
 bkFieldsEl.addEventListener('click', e=>{
   if(e.target.classList.contains('add-btn')) bkAddEntry(e.target.dataset.key);
   if(e.target.classList.contains('x')) bkRemoveEntry(e.target.dataset.key, parseInt(e.target.dataset.idx,10));
 });
 bkFieldsEl.addEventListener('keydown', e=>{ if(e.target.tagName==='INPUT' && e.key==='Enter') bkAddEntry(e.target.id.replace('bk-in-','')); });
+function applySeriesOrderUI(){
+  ['Ge','Bk'].forEach(s=>{ const el=document.getElementById('seriesOrder'+s); if(el) el.value=seriesOrder;
+    const h=document.getElementById('seriesOrderHint'+s); if(h) h.textContent=SERIES_HINT[seriesOrder]; });
+  document.querySelectorAll('#fields .paste-hint, #bkFields .paste-hint').forEach(h=>{ h.textContent=SERIES_HINT[seriesOrder]; });
+  CATS.forEach(c=>renderChips(c.key)); BK_CATS.forEach(c=>bkRenderChips(c.key));
+}
+['Ge','Bk'].forEach(s=>{ const el=document.getElementById('seriesOrder'+s);
+  if(el) el.addEventListener('change', e=>{ seriesOrder=e.target.value; try{ localStorage.setItem(SERIES_ORDER_KEY, seriesOrder); }catch(err){} applySeriesOrderUI(); }); });
+applySeriesOrderUI();
 
 function bkUpdateRankPreview(prefix){
   const rank=bkStandings['rank'+prefix], total=bkStandings.totalTeams;

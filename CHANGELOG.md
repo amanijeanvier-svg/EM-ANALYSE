@@ -1,3 +1,31 @@
+## EA SERIES ORDER — ordre de saisie des séries (cache v36)
+**Constat** : en interne, chaque série (forme, domicile/extérieur, face-à-face) est CHRONOLOGIQUE : le dernier score tapé est traité comme le match le plus récent (poids de récence, tendance, séries d'invincibilité). Rien ne l'indiquait ; saisir « du plus récent au plus ancien » (comme sur les sites) inversait donc la dynamique de l'équipe.
+**Correctif (Genèse et Basket Analyse)**
+- Nouveau réglage « Ordre de saisie des séries » (mémorisé sur l'appareil), **par défaut : le plus récent en premier**. La saisie est convertie : « 2-1, 1-0, 3-2 » → 2-1 est le dernier match joué ; les scores ajoutés ensuite sont traités comme plus anciens. Les pastilles s'affichent dans le même ordre que la saisie, l'aide sous chaque case change avec le réglage.
+- Les données internes restent chronologiques : changer le réglage ne fausse rien. Matchs européens : triés par journée, donc non concernés.
+- ⚠ Changement de comportement : l'ancienne saisie « plus ancien d'abord » correspond au réglage « Le plus ancien en premier ».
+- Non touché : auto-remplissage par API (ordre renvoyé par le serveur supposé déjà chronologique).
+
+## EA EURO SCORES — saisie dédiée des matchs de la compétition européenne (cache v35)
+**Constat (cas LASK–Liverpool)** : en compétition européenne, les seuls scores saisis étaient ceux du CHAMPIONNAT (Autriche vs Angleterre, non comparables) : LASK paraissait dominant, et même avec l'ancrage Elo, Liverpool restait à ~54-58 %. Les moyennes de buts, l'écart défensif et la forme de championnat tiraient encore le verdict.
+**Nouveau (Genèse, football, uniquement quand « Compétition européenne » est choisie)**
+- **Bloc « 🏆 Matchs de la compétition européenne »** dans la saisie des scores : choix de la compétition (Ligue des Champions / Europa / Conférence / Euro / autre), puis pour chaque équipe les matchs déjà joués DANS la compétition : score, lieu (domicile / extérieur / neutre) et journée (J1 à J8, qualification, barrage, 16e, 8e, quart, demi, finale). Saisie d'un score à la fois ou de plusieurs (« 3-1, 0-2 », les journées se suivent), suppression par ×.
+- **Calcul** : ces matchs, ramenés à un niveau neutre (domicile/extérieur corrigés, match récent plus pesant), sont mélangés aux λ avec un poids qui croît avec leur nombre (1+1 match ≈ 23 %, 4+4 ≈ 47 %, plafond 70 %). L'écart défensif de l'écart de force vient désormais des matchs EUROPÉENS des deux équipes (plus du championnat) ; classement et forme de championnat comptent moitié moins. Les tendances ont une source « Europe », et la forme/dom.-ext. de championnat pèsent ×0,6.
+- **Ancrage Elo dynamique en Europe** : 80 % sans match européen saisi (les stats de championnat ne sont pas comparables), jusqu'à 70 % avec 4+4 matchs ou plus (`euroAnchorWeight`). Coupe nationale : inchangée (65 %).
+- **Commentaires** : section « 🏆 En Ligue des Champions » (bilan V/N/D, buts, journées, poids dans les λ, poids de l'Elo), « Forme actuelle » et « Aperçu des statistiques » étiquetés « (championnat) » avec la mise en garde, avertissement orange si une équipe n'a aucun match européen saisi, badge moteur « Matchs européens », complétude 8/8, ligne λ « 🏆 poids X % », phrase ajoutée au dossier enregistré (`euro` aussi sauvegardé dans l'enregistrement).
+- **Stades** : ajout de « Barrage (play-offs) » ; « Phase de ligue / groupes / qualifications » remplace « Phase de groupes ».
+- **Test (LASK 1576 / Liverpool 1926, séries de championnat très favorables à LASK)** : avant 57,9 % Liverpool ; après sans saisie Europe 65,5 % ; avec 2+2 matchs européens 67,9 %. Championnat et coupe : λ strictement identiques à la version précédente. 0 erreur JS (Chromium, 390 px).
+- Limites : le marché (~76 % pour Liverpool) reste au-dessus du modèle ; les 2+2 matchs de l'exemple sont fictifs. Basket non touché.
+
+## EA ELO ANCHOR — l'Elo pèse enfin sur les λ en coupe / Europe (cache v34)
+**Constat (cas LASK–Liverpool, 350 points d'Elo d'écart, LASK affiché favori à 47,5 %)** : dans `computeGeneseLambdas`, l'Elo n'entrait que par `eIdx × .14` dans `totalAdj`, soit au maximum ±14 % sur les λ (±10 % pour 350 points) ; les λ venaient à ~85-100 % des moyennes de buts de CHAMPIONNAT (Autriche vs Angleterre, non comparables). Le 1X2 ne corrigeait presque rien : l'Elo pur ne pesait que 25 % (`computeModelProbability`) et décalait `strengthGap` de 1,6 point. Recalculé à la main : 75 % × 60 % (stats) + 25 % × 13 % (Elo) ≈ 46-48 %, soit l'affichage.
+**Correctif**
+- Nouveau `eloAnchorLambdas` : en **coupe / compétition européenne** et si **les deux Elo sont saisis**, l'Elo (avec avantage du terrain +60) donne le partage des buts attendus à total constant (résolution Poisson), mélangé en log aux λ des stats avec un poids de 65 % (`ELO_ANCHOR_WEIGHT`, réglable). Le total de buts reste piloté par les stats.
+- Affichage sous les λ : « Ancrage Elo appliqué : λ stats → λ ancrés ». Si l'Elo manque en Europe : avertissement « verdict peu fiable ».
+- Championnat : strictement inchangé. Sans Elo saisi : inchangé (avertissement seulement).
+- Test navigateur (écart −350) : avant, double chance LASK/nul 67,8 % et λ 1,76/0,99 ; après, λ 0,82/1,67 et victoire Liverpool 54,4 %. Cas équilibré (1900/1900) quasi inchangé. 0 erreur JS.
+- Limite : 35 % du λ vient encore des stats de championnat, donc Liverpool reste sous le marché (~76 %). Augmenter `ELO_ANCHOR_WEIGHT` rapproche du marché.
+
 ## EA TREND LAYER — les tendances (séries, nuls, invincibilité, H2H) pèsent maintenant sur le choix des paris (cache v33)
 **Constat** : en Genèse, les paris retenus venaient uniquement du λ (Poisson / Dixon-Coles / Monte Carlo). Les scores saisis servaient à calculer le λ, mais jamais à regarder ce qui s'est *répété* (BTTS 5/5, +2.5 en H2H, série de nuls…).
 **Nouveau (Genèse, football)**
