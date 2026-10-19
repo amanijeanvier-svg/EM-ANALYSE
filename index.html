@@ -1365,7 +1365,7 @@ try {
 (function (g) {
   'use strict';
   var EA = g.EA = g.EA || {};
-  var VERSION = 'EA-VALUE-3.0.0';
+  var VERSION = 'EA-VALUE-3.0.1';
 
   // Tous les coefficients sont configurables. provisional:true = non validés sur données historiques.
   var DEFAULT_CONFIG = {
@@ -2178,7 +2178,57 @@ try {
     if (bestSingle && bestSingle.sharpe >= sharpe(best.pLow, best.odds)) { out.preferSingle = true; out.preferMessage = 'Le meilleur choix statistique est le pari simple.'; }
     return out;
   }
-  EA.parlay = { optimize: optimize, pairJoint: pairJoint, joint: joint, kind: kind, DEFAULTS: DEF };
+  // Coach EA Value : construit des combinés orientés probabilité, sans exiger une value bet.
+  // Par prudence, une seule sélection par match : les dépendances entre marchés du même match
+  // ne sont pas calculées précisément par ce mode et ne doivent pas être supposées indépendantes.
+  function coachOptimize(pool, options) {
+    options = options || {};
+    var minLegP = options.minLegP == null ? 0.50 : Math.max(0.01, Math.min(0.99, Number(options.minLegP)));
+    var targetOdds = options.targetOdds == null ? 2.00 : Math.max(1.01, Number(options.targetOdds));
+    var maxLegs = Math.max(2, Math.min(6, Number(options.maxLegs) || 4));
+    var maxPool = Math.max(8, Math.min(24, Number(options.maxPool) || 18));
+    var minDataQuality = options.minDataQuality == null ? 40 : Math.max(0, Math.min(100, Number(options.minDataQuality)));
+    var candidates = [], rejected = [];
+    (pool || []).forEach(function (l) {
+      var why = null;
+      if (!l || !(Number(l.odds) > 1)) why = 'cote absente ou invalide';
+      else if (!(Number(l.p) > 0 && Number(l.p) < 1)) why = 'probabilité absente ou invalide';
+      else if (Number(l.p) < minLegP) why = 'probabilité sous le seuil Coach (' + (minLegP * 100).toFixed(0) + ' %)';
+      else if (l.dataQuality != null && Number(l.dataQuality) < minDataQuality) why = 'qualité des données trop faible';
+      else if ((Number(l.uncertaintyHalfPts) || 0) > 18) why = 'incertitude très élevée';
+      if (why) rejected.push({ leg: l ? (l.label + ' · ' + l.market + ' ' + l.selection) : 'sélection inconnue', why: why });
+      else candidates.push(l);
+    });
+    // Garder un éventail de marchés et de matchs, sans dépendre de la valeur EV individuelle.
+    candidates.sort(function (a,b) { var pa = Number(a.p) - (Number(a.uncertaintyHalfPts)||0)/100; var pb = Number(b.p) - (Number(b.uncertaintyHalfPts)||0)/100; return pb-pa; });
+    candidates = candidates.slice(0, maxPool);
+    var bestTarget = null, bestAny = null, tested = 0;
+    function evaluate(cur) {
+      if (cur.length < 2) return;
+      tested++;
+      var odds = 1, p = 1, pLow = 1, seen = {};
+      for (var i=0;i<cur.length;i++) {
+        var l=cur[i], key=String(l.matchKey || l.label || ('leg'+i));
+        if (seen[key]) return; // pas de double marché d'un même match sans modèle conjoint validé
+        seen[key]=true;
+        odds *= Number(l.odds);
+        p *= Number(l.p);
+        pLow *= Math.max(0.001, Number(l.p) - (Number(l.uncertaintyHalfPts)||0)/100);
+      }
+      var item={ legs:cur.slice(), odds:odds, pJoint:p, pJointLow:pLow, targetOdds:targetOdds,
+        meetsTarget:odds >= targetOdds, risk:pLow >= .5 ? 'Modéré (estimation)' : pLow >= .3 ? 'Élevé' : 'Très élevé',
+        score:pLow - Math.max(0, targetOdds-odds)*0.025 - (cur.length-2)*0.012 };
+      if (!bestAny || item.score > bestAny.score) bestAny=item;
+      if (item.meetsTarget && (!bestTarget || item.score > bestTarget.score)) bestTarget=item;
+    }
+    (function rec(start,cur){ evaluate(cur); if(cur.length>=maxLegs)return; for(var i=start;i<candidates.length;i++){cur.push(candidates[i]);rec(i+1,cur);cur.pop();} })(0,[]);
+    var best=bestTarget || bestAny;
+    return { status:best?'COACH':'NO_CANDIDATE', mode:'HIGH_PROBABILITY', tested:tested, eligible:candidates.length,
+      rejected:rejected, targetOdds:targetOdds, meetsTarget:!!(best&&best.meetsTarget), best:best,
+      message:best ? (best.meetsTarget ? 'Combiné retenu : la cote cible est atteinte.' : 'Aucun combiné ne dépasse la cote cible ; affichage du meilleur compromis disponible.') : 'Pas assez de sélections avec cote et probabilité valides. Ajoutez des matchs ou des cotes.',
+      note:'Mode Coach : la value individuelle n’est pas obligatoire. Probabilités estimées, non garanties. Les sélections d’un même match sont limitées à une par combiné car leur dépendance n’est pas modélisée ici.' };
+  }
+  EA.parlay = { optimize: optimize, coachOptimize: coachOptimize, pairJoint: pairJoint, joint: joint, kind: kind, DEFAULTS: DEF };
   if (typeof module === 'object' && module.exports) module.exports = EA.parlay;
 })(typeof window !== 'undefined' ? window : global);
 
@@ -2933,7 +2983,7 @@ try {
   function fn(o, n) { return !!(o && typeof o[n] === 'function'); }
   function layers() {
     var L = [['DATA LAYER', EA.database, ['parseCSV', 'fromLegacy', 'fromMemory']], ['DATABASE LAYER', EA.database, ['createStore']], ['VALIDATION LAYER', EA.database, ['normalize']], ['FEATURE ENGINE', EA.database, ['aggregate', 'teamView']], ['BASELINE ENGINE', EA.dbintel, ['teamVsLeague']], ['TEAM ENGINE', EA.dbintel, ['dataQuality']], ['FORM ENGINE', EA.dbintel, ['horizons']], ['MATCHUP ENGINE', EA.dbintel, ['matchup', 'conflictScore']],
-      ['MODEL ENGINE', EA.models, ['poissonP', 'simulateFootball']], ['MARKET ENGINE', EA.value, ['marketFromOdds']], ['VALUE ENGINE', EA.value, ['valueLine', 'decide']], ['UNCERTAINTY ENGINE', EA.dbintel, ['stabilityTest']], ['RISK ENGINE', EA.risk, ['assess']], ['DECISION ENGINE', EA.dbfinal, ['analyzeFull']], ['COMBINATION ENGINE', EA.parlay, ['optimize', 'pairJoint']], ['LEARNING ENGINE', EA.postmortem, ['analyze', 'errorMemory']], ['MONITORING ENGINE', EA.dbintel, ['trendShift', 'modelHealth']]];
+      ['MODEL ENGINE', EA.models, ['poissonP', 'simulateFootball']], ['MARKET ENGINE', EA.value, ['marketFromOdds']], ['VALUE ENGINE', EA.value, ['valueLine', 'decide']], ['UNCERTAINTY ENGINE', EA.dbintel, ['stabilityTest']], ['RISK ENGINE', EA.risk, ['assess']], ['DECISION ENGINE', EA.dbfinal, ['analyzeFull']], ['COMBINATION ENGINE', EA.parlay, ['optimize', 'coachOptimize', 'pairJoint']], ['LEARNING ENGINE', EA.postmortem, ['analyze', 'errorMemory']], ['MONITORING ENGINE', EA.dbintel, ['trendShift', 'modelHealth']]];
     return L.map(function (x) { var miss = x[2].filter(function (f) { return !fn(x[1], f); }); return { layer: x[0], status: miss.length ? 'UNAVAILABLE' : 'ACTIVE', detail: x[2].join(', ') + (miss.length ? ' · manquant : ' + miss.join(', ') : '') }; });
   }
   function registry(store, records) {
@@ -3326,16 +3376,32 @@ try {
   // ---------------- FOOTBALL ----------------
   function selPredicate(market, sel) {
     if (market === '1X2') return sel === 'home' ? function (a, b) { return a > b; } : sel === 'draw' ? function (a, b) { return a === b; } : function (a, b) { return a < b; };
+    if (market === 'dc') return sel === '1X' ? function(a,b){return a>=b;} : sel === 'X2' ? function(a,b){return a<=b;} : sel === '12' ? function(a,b){return a!==b;} : null;
     if (market.indexOf('ou:') === 0) { var L = parseFloat(market.slice(3)); return sel === 'over' ? function (a, b) { return a + b > L; } : function (a, b) { return a + b < L; }; }
+    if (market.indexOf('teamA:') === 0) { var LA=parseFloat(market.slice(6)); return sel==='over'?function(a,b){return a>LA;}:function(a,b){return a<LA;}; }
+    if (market.indexOf('teamB:') === 0) { var LB=parseFloat(market.slice(6)); return sel==='over'?function(a,b){return b>LB;}:function(a,b){return b<LB;}; }
     if (market === 'btts') return sel === 'yes' ? function (a, b) { return a > 0 && b > 0; } : function (a, b) { return !(a > 0 && b > 0); };
     return null;
   }
   function footballOdds(inp) {
     var out = [], m = inp.markets || {}, x2 = m['1X2'];
     if (x2) { ['home', 'draw', 'away'].forEach(function (s) { out.push({ market: '1X2', selection: s, odds: C.num(x2[s]) }); }); }
+    if (m.dc) { ['1X','X2','12'].forEach(function(s){out.push({market:'dc',selection:s,odds:C.num(m.dc[s])});}); }
     if (m.ou && C.num(m.ou.line) != null) { ['over', 'under'].forEach(function (s) { out.push({ market: 'ou:' + m.ou.line, selection: s, odds: C.num(m.ou[s]) }); }); }
+    (m.ouLines || []).forEach(function(x){ ['over','under'].forEach(function(s){out.push({market:'ou:'+x.line,selection:s,odds:C.num(x[s])});}); });
+    if (m.teamTotalA) ['over','under'].forEach(function(s){out.push({market:'teamA:'+m.teamTotalA.line,selection:s,odds:C.num(m.teamTotalA[s])});});
+    if (m.teamTotalB) ['over','under'].forEach(function(s){out.push({market:'teamB:'+m.teamTotalB.line,selection:s,odds:C.num(m.teamTotalB[s])});});
+    if (m.teamTotalA15) ['over','under'].forEach(function(s){out.push({market:'teamA:'+m.teamTotalA15.line,selection:s,odds:C.num(m.teamTotalA15[s])});});
+    if (m.teamTotalB15) ['over','under'].forEach(function(s){out.push({market:'teamB:'+m.teamTotalB15.line,selection:s,odds:C.num(m.teamTotalB15[s])});});
     if (m.btts) { ['yes', 'no'].forEach(function (s) { out.push({ market: 'btts', selection: s, odds: C.num(m.btts[s]) }); }); }
+    ['corners','sot'].forEach(function(k){ if(m[k] && C.num(m[k].line)!=null) ['over','under'].forEach(function(sel){out.push({market:k+':'+m[k].line,selection:sel,odds:C.num(m[k][sel])});}); });
     return out;
+  }
+  function poissonOverLine(mean, line) {
+    if (!(C.num(mean) > 0) || C.num(line) == null || line < 0) return null;
+    var max = Math.floor(line), term = Math.exp(-mean), cdf = term;
+    for (var k=1;k<=max;k++) { term *= mean/k; cdf += term; }
+    return C.clamp(1-cdf,0,1);
   }
 
   function analyzeFootball(inp) {
@@ -3380,10 +3446,16 @@ try {
     var seen = {}; odds.forEach(function (o) { seen[o.market + '|' + o.selection] = o; });
     // sélections toujours évaluées (probabilités), cotes facultatives
     var ouLine = C.num(((inp.markets || {}).ou || {}).line) || 2.5;
-    var sels = [['1X2', 'home'], ['1X2', 'draw'], ['1X2', 'away'], ['ou:' + ouLine, 'over'], ['ou:' + ouLine, 'under'], ['btts', 'yes'], ['btts', 'no']];
+    var sels = [['1X2','home'],['1X2','draw'],['1X2','away'],['dc','1X'],['dc','X2'],['dc','12'],
+      ['ou:0.5','over'],['ou:0.5','under'],['ou:1.5','over'],['ou:1.5','under'],['ou:2.5','over'],['ou:2.5','under'],['ou:3.5','over'],['ou:3.5','under'],['ou:4.5','over'],['ou:4.5','under'],
+      ['teamA:0.5','over'],['teamA:0.5','under'],['teamA:1.5','over'],['teamA:1.5','under'],['teamB:0.5','over'],['teamB:0.5','under'],['teamB:1.5','over'],['teamB:1.5','under'],['btts','yes'],['btts','no']];
+    if (ouLine !== 2.5 && [0.5,1.5,2.5,3.5,4.5].indexOf(ouLine) < 0) sels.push(['ou:'+ouLine,'over'],['ou:'+ouLine,'under']);
+    ['corners','sot'].forEach(function(k){var st=(inp.markets||{})[k];if(st&&C.num(st.mean)>0&&C.num(st.line)!=null)sels.push([k+':'+st.line,'over'],[k+':'+st.line,'under']);});
     var entries = sels.map(function (sl) {
-      var pred = selPredicate(sl[0], sl[1]), pv = { poisson: M.sumWhere(mPo, pred), 'dixon-coles': M.sumWhere(mDC, pred), 'monte-carlo-fb': M.sumWhere(sim.rows, pred) };
-      var models = [{ id: 'poisson', name: 'Poisson', status: 'IMPLEMENTED', p: pv.poisson }, { id: 'dixon-coles', name: 'Dixon-Coles', status: 'IMPLEMENTED', p: pv['dixon-coles'] }, { id: 'monte-carlo-fb', name: 'Monte Carlo', status: 'IMPLEMENTED', p: pv['monte-carlo-fb'] }];
+      var pred = selPredicate(sl[0], sl[1]), stat = /^(corners|sot):([\d.]+)$/.exec(sl[0]);
+      var statOver = stat ? poissonOverLine(C.num(((inp.markets||{})[stat[1]]||{}).mean), Number(stat[2])) : null;
+      var pv = stat ? { 'manual-stat-poisson': statOver == null ? 0 : (sl[1] === 'over' ? statOver : 1-statOver) } : { poisson: M.sumWhere(mPo, pred), 'dixon-coles': M.sumWhere(mDC, pred), 'monte-carlo-fb': M.sumWhere(sim.rows, pred) };
+      var models = stat ? [{ id: 'manual-stat-poisson', name: 'Poisson statistique (provisoire)', status: 'PARTIAL', p: pv['manual-stat-poisson'] }] : [{ id: 'poisson', name: 'Poisson', status: 'IMPLEMENTED', p: pv.poisson }, { id: 'dixon-coles', name: 'Dixon-Coles', status: 'IMPLEMENTED', p: pv['dixon-coles'] }, { id: 'monte-carlo-fb', name: 'Monte Carlo', status: 'IMPLEMENTED', p: pv['monte-carlo-fb'] }];
       if (sl[0] === '1X2' && elo) models.push({ id: 'elo', name: 'Elo', status: 'PARTIAL', p: elo[sl[1]] }), pv.elo = elo[sl[1]];
       models.forEach(function (m) { m.health = (health[m.id] || {}).state || null; m.perf = perf[m.id] || null; });
       var cons = M.consensus(models, cfg), o = seen[sl[0] + '|' + sl[1]] || { odds: null };
@@ -3922,8 +3994,13 @@ try {
   function renderMarches() {
     var fb = S.sport === 'football', body;
     if (fb) body = '<div class="pro-card"><h3>1X2</h3><div class="pro-fields">' + field('p_o_h', 'Domicile', '1.90') + field('p_o_d', 'Nul', '3.40') + field('p_o_a', 'Extérieur', '4.20') + '</div></div>' +
-      '<div class="pro-card"><h3>Total de buts</h3><div class="pro-fields">' + field('p_o_ol', 'Ligne', '2.5') + '<div></div>' + field('p_o_ov', 'Plus de', '1.90') + field('p_o_un', 'Moins de', '1.90') + '</div></div>' +
-      '<div class="pro-card"><h3>BTTS</h3><div class="pro-fields">' + field('p_o_by', 'Oui', '1.80') + field('p_o_bn', 'Non', '1.95') + '</div></div>';
+      '<div class="pro-card"><h3>Double chance</h3><div class="pro-fields">' + field('p_o_dc1x', '1X', '') + field('p_o_dcx2', 'X2', '') + field('p_o_dc12', '12', '') + '</div></div>' +
+      '<div class="pro-card"><h3>Totaux de buts du match</h3><p class="pro-dim">Saisis uniquement les cotes disponibles. Les lignes vides restent indisponibles.</p><div class="pro-fields">' +
+      [0.5,1.5,2.5,3.5,4.5].map(function(L){return field('p_ou_'+String(L).replace('.','_')+'_o','Over '+L,'')+field('p_ou_'+String(L).replace('.','_')+'_u','Under '+L,'');}).join('') + '</div><details><summary>Ligne personnalisée (facultatif)</summary><div class="pro-fields">' + field('p_o_ol','Ligne personnalisée','2.5') + field('p_o_ov','Plus de','') + field('p_o_un','Moins de','') + '</div></details></div>' +
+      '<div class="pro-card"><h3>Totaux individuels des équipes</h3><div class="pro-fields">' + field('p_ta05_o','Domicile over 0.5','') + field('p_ta05_u','Domicile under 0.5','') + field('p_ta15_o','Domicile over 1.5','') + field('p_ta15_u','Domicile under 1.5','') + field('p_tb05_o','Extérieur over 0.5','') + field('p_tb05_u','Extérieur under 0.5','') + field('p_tb15_o','Extérieur over 1.5','') + field('p_tb15_u','Extérieur under 1.5','') + '</div></div>' +
+      '<div class="pro-card"><h3>BTTS</h3><div class="pro-fields">' + field('p_o_by', 'Oui', '1.80') + field('p_o_bn', 'Non', '1.95') + '</div></div>' +
+      '<div class="pro-card"><h3>Corners (estimation séparée)</h3><div class="pro-fields">' + field('p_c_mean','Moyenne totale attendue','') + field('p_c_line','Ligne (ex. 9.5)','9.5') + field('p_c_over','Over','') + field('p_c_under','Under','') + '</div><p class="pro-dim">La moyenne attendue doit venir de statistiques réelles récentes. Modèle Poisson provisoire, distinct du modèle de buts.</p></div>' +
+      '<div class="pro-card"><h3>Tirs cadrés (estimation séparée)</h3><div class="pro-fields">' + field('p_sot_mean','Moyenne totale attendue','') + field('p_sot_line','Ligne (ex. 8.5)','8.5') + field('p_sot_over','Over','') + field('p_sot_under','Under','') + '</div><p class="pro-dim">La moyenne attendue doit venir de statistiques réelles récentes. Modèle Poisson provisoire, distinct du modèle de buts.</p></div>';
     else body = '<div class="pro-card"><h3>Moneyline</h3><div class="pro-fields">' + field('p_o_mh', 'Domicile', '1.70') + field('p_o_ma', 'Extérieur', '2.20') + '</div></div>' +
       '<div class="pro-card"><h3>Handicap (ligne du domicile)</h3><div class="pro-fields">' + field('p_o_sl', 'Ligne (ex. -3.5)', '-3.5') + '<div></div>' + field('p_o_sh', 'Cote domicile', '1.91') + field('p_o_sa', 'Cote extérieur', '1.91') + '</div></div>' +
       '<div class="pro-card"><h3>Total de points</h3><div class="pro-fields">' + field('p_o_tl', 'Ligne', '224.5') + '<div></div>' + field('p_o_to', 'Plus de', '1.91') + field('p_o_tu', 'Moins de', '1.91') + '</div></div>';
@@ -3956,7 +4033,7 @@ try {
       bankroll: S.settings.bankroll, minStake: S.settings.minStake, config: cfg(), modelPerf: perf, modelHealth: health };
     if (S.sport === 'football') {
       base.league = { avgHome: nv('p_lgH'), avgAway: nv('p_lgA') };
-      base.markets = { '1X2': { home: nv('p_o_h'), draw: nv('p_o_d'), away: nv('p_o_a') }, ou: { line: nv('p_o_ol') || 2.5, over: nv('p_o_ov'), under: nv('p_o_un') }, btts: { yes: nv('p_o_by'), no: nv('p_o_bn') } };
+      base.markets = { '1X2': { home: nv('p_o_h'), draw: nv('p_o_d'), away: nv('p_o_a') }, dc:{'1X':nv('p_o_dc1x'),'X2':nv('p_o_dcx2'),'12':nv('p_o_dc12')}, ou: { line: nv('p_o_ol') || 2.5, over: nv('p_o_ov'), under: nv('p_o_un') }, btts: { yes: nv('p_o_by'), no: nv('p_o_bn') }, ouLines:[0.5,1.5,2.5,3.5,4.5].map(function(L){var k=String(L).replace('.','_');return {line:L,over:nv('p_ou_'+k+'_o'),under:nv('p_ou_'+k+'_u')};}), teamTotalA:{line:0.5,over:nv('p_ta05_o'),under:nv('p_ta05_u')}, teamTotalA15:{line:1.5,over:nv('p_ta15_o'),under:nv('p_ta15_u')}, teamTotalB:{line:0.5,over:nv('p_tb05_o'),under:nv('p_tb05_u')}, teamTotalB15:{line:1.5,over:nv('p_tb15_o'),under:nv('p_tb15_u')}, corners:{mean:nv('p_c_mean'),line:nv('p_c_line'),over:nv('p_c_over'),under:nv('p_c_under')}, sot:{mean:nv('p_sot_mean'),line:nv('p_sot_line'),over:nv('p_sot_over'),under:nv('p_sot_under')} };
       if (!$('p_o_h')) { base.markets = (S.lastInput && S.lastInput.markets) || {}; }
     } else {
       base.league = { pace: nv('p_lgPace'), ortg: nv('p_lgOrtg') }; base.homeAdvPts = nv('p_homeAdv'); base.sdMargin = nv('p_sdM'); base.sdTotal = nv('p_sdT');
@@ -3972,6 +4049,11 @@ try {
     if (mk === '1X2') return '1X2 · ' + (s === 'home' ? 'Victoire ' + h : s === 'draw' ? 'Match nul' : 'Victoire ' + a);
     if (mk.indexOf('ou:') === 0) return (s === 'over' ? 'Plus de ' : 'Moins de ') + mk.slice(3) + ' buts';
     if (mk === 'btts') return 'BTTS · ' + (s === 'yes' ? 'Oui' : 'Non');
+    if (mk === 'dc') return 'Double chance · ' + s;
+    if (mk.indexOf('teamA:')===0) return 'Buts domicile ' + (s==='over'?'over ':'under ') + mk.slice(6);
+    if (mk.indexOf('teamB:')===0) return 'Buts extérieur ' + (s==='over'?'over ':'under ') + mk.slice(6);
+    if (mk.indexOf('corners:')===0) return 'Corners ' + (s==='over'?'over ':'under ') + mk.slice(8);
+    if (mk.indexOf('sot:')===0) return 'Tirs cadrés ' + (s==='over'?'over ':'under ') + mk.slice(4);
     if (mk === 'ml') return 'Moneyline · ' + (s === 'home' ? h : a);
     if (mk.indexOf('spread:') === 0) { var L = parseFloat(mk.slice(7)); var v = s === 'home' ? L : -L; return 'Handicap · ' + (s === 'home' ? h : a) + ' ' + (v > 0 ? '+' : '') + v; }
     if (mk.indexOf('total:') === 0) return (s === 'over' ? 'Plus de ' : 'Moins de ') + mk.slice(6) + ' points';
@@ -4177,7 +4259,24 @@ try {
   }
   function parlayHtml() {
     if (!EA.parlay) return '';
-    var r = EA.parlay.optimize(S.pool, S.settings && S.settings.config), h = '<div class="pro-card pro-parlay"><h3>🔥 COMBINÉ RENTABLE</h3>';
+    var coachCfg = (S.settings && S.settings.config && S.settings.config.coachParlay) || {};
+    var cr = EA.parlay.coachOptimize(S.pool, coachCfg);
+    var h = '<div class="pro-card pro-parlay"><h3>🧠 COACH EA VALUE — COMBINÉ À PROBABILITÉ ÉLEVÉE</h3>';
+    h += '<p class="pro-dim">Sélections disponibles : ' + cr.eligible + ' · combinaisons testées : ' + cr.tested + ' · cote cible : ' + cr.targetOdds.toFixed(2) + ' · mode indépendant du moteur Value Bets.</p>';
+    if (cr.status !== 'COACH') h += '<div class="pro-dec NOBET">AUCUN CANDIDAT POUR LE MOMENT</div><p>' + esc(cr.message) + '</p>';
+    else {
+      h += '<div class="pro-dec BET">' + (cr.meetsTarget ? 'COMBINÉ COACH — COTE CIBLE ATTEINTE' : 'MEILLEUR COMPROMIS DISPONIBLE') + '</div>';
+      h += cr.best.legs.map(function(l,i){ return '<div class="pro-kv"><span>Sélection ' + (i+1) + ' · ' + esc(l.label) + '</span><span>' + esc(l.market + ' ' + l.selection) + ' @ ' + Number(l.odds).toFixed(2) + ' · P ' + (Number(l.p)*100).toFixed(1) + ' %</span></div>'; }).join('');
+      h += '<hr><div class="pro-kv"><span>Cote totale estimée</span><span>' + cr.best.odds.toFixed(2) + '</span></div>' +
+        '<div class="pro-kv"><span>Probabilité conjointe estimée</span><span>' + (cr.best.pJoint*100).toFixed(1) + ' %</span></div>' +
+        '<div class="pro-kv"><span>Estimation prudente (incertitude)</span><span>' + (cr.best.pJointLow*100).toFixed(1) + ' %</span></div>' +
+        '<div class="pro-kv"><span>Risque indicatif</span><span>' + esc(cr.best.risk) + '</span></div>';
+    }
+    h += '<p class="pro-dim">' + esc(cr.note) + '</p>';
+    if (cr.rejected.length) h += '<details><summary>Diagnostic Coach : sélections écartées (' + cr.rejected.length + ')</summary><ul class="pro-list">' + cr.rejected.slice(0,12).map(function(x){return '<li>' + esc(x.leg) + ' : ' + esc(x.why) + '</li>';}).join('') + '</ul></details>';
+    h += '</div>';
+    var r = EA.parlay.optimize(S.pool, S.settings && S.settings.config);
+    h += '<div class="pro-card pro-parlay"><h3>📊 MOTEUR VALUE BETS — COMBINÉ À AVANTAGE ESTIMÉ</h3>';
     h += '<p class="pro-dim">Pool : ' + new Set(S.pool.map(function (l) { return l.matchKey; })).size + ' match(s) analysé(s) avec cotes · ' + r.tested + ' combinaison(s) testée(s) en arrière-plan.</p>';
     if (r.status !== 'BET') {
       h += '<div class="pro-dec NOBET">🛑 PAS DE COMBINÉ RENTABLE</div><p>' + esc(r.message) + '</p>';
@@ -8167,7 +8266,7 @@ function refreshBetMarketMetrics(rec, idx){
    uniquement à calculer le prix, l'edge et l'EV. Les seuils sont volontairement
    prudents et les mises sont plafonnées.
 ================================================================= */
-const VALUE_ENGINE_VERSION = 'EA-VALUE-3.0.0';
+const VALUE_ENGINE_VERSION = 'EA-VALUE-3.0.1';
 const VALUE_DEFAULT_BANKROLL = 500;
 const VALUE_MAX_STAKE_PCT = 0.02;
 const VALUE_KELLY_FRACTION = 0.25;

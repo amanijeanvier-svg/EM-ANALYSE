@@ -1,3 +1,10 @@
+## EA-VALUE 3.0.1 — Coach combinés et marchés football étendus (2026-10-19)
+- Ajout du moteur **Coach EA Value** distinct du moteur Value Bets : il peut construire un combiné à partir des probabilités disponibles sans imposer une value bet/EV positive à chaque sélection. Il vise la probabilité jointe la plus élevée parmi les combinaisons qui atteignent la cote cible, et montre le meilleur compromis si aucune ne l’atteint.
+- Le Coach ne mélange pas deux marchés du même match, car la dépendance conjointe n’est pas modélisée de manière assez fiable pour ces marchés. Pour les matchs distincts, la probabilité jointe est le produit des probabilités estimées, sous hypothèse d’indépendance explicitée.
+- Extension des marchés football calculés : 1X2, double chance 1X/X2/12, over/under 0.5/1.5/2.5/3.5/4.5 buts, BTTS et totaux individuels des équipes over/under 0.5 et 1.5. Les cotes de ces marchés sont facultatives et doivent être saisies à partir du bookmaker ; une cote vide n’est pas supposée.
+- Le moteur Value Bets et ses garde-fous restent disponibles séparément. Version affichée mise à jour en 3.0.1 et cache service worker en v37.
+- Corners et tirs cadrés : ajout d’un mode Poisson provisoire basé sur la moyenne totale attendue saisie manuellement, avec avertissement explicite ; ces probabilités ne sont pas validées/calibrées tant qu’un historique suffisant n’a pas été testé. Le Coach ne garantit pas la réussite et la probabilité d’un combiné diminue généralement quand on ajoute des sélections.
+
 ## EA SERIES ORDER — ordre de saisie des séries (cache v36)
 **Constat** : en interne, chaque série (forme, domicile/extérieur, face-à-face) est CHRONOLOGIQUE : le dernier score tapé est traité comme le match le plus récent (poids de récence, tendance, séries d'invincibilité). Rien ne l'indiquait ; saisir « du plus récent au plus ancien » (comme sur les sites) inversait donc la dynamique de l'équipe.
 **Correctif (Genèse et Basket Analyse)**

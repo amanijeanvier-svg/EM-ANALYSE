@@ -1,4 +1,4 @@
-# EA Value Pro — EA-VALUE 3.0.0
+# EA Value Pro — EA-VALUE 3.0.1
 
 PWA d'analyse sportive (football, basketball). Moteur statistique, **pas de « fausse IA »** : STATISTICAL MODEL · MODEL ENGINE · DECISION ENGINE. Il préfère NO BET à un faux signal et DATA UNAVAILABLE à une donnée inventée.
 
@@ -9,11 +9,12 @@ Nouvel onglet **Pro 3.0** : ANALYSE · MARCHÉS · DÉCISION · HISTORIQUE · MO
 ## Utiliser Pro 3.0
 1. Choisir le sport et le mode (VALUE ou HIGH PROBABILITY). FAST MODE pour un téléphone faible (2 000 simulations, animations coupées).
 2. ANALYSE : saisir équipes, moyennes de buts (foot) ou pace/ORtg/DRtg (basket). Effectif / Fatigue / Rotation : 🟢🟡🟠🔴 ou ⚪ « Je ne sais pas » (= information manquante, jamais « normal »). Les champs facultatifs (saison précédente, xG, statistiques des absents, dates des derniers matchs) rendent le calcul plus précis.
-3. MARCHÉS : saisir les cotes (facultatif). Elles ne changent jamais la probabilité du modèle.
-4. DÉCISION : BET / CHECK / NO BET, commentaire (pour/contre/risques/prix), qualité des informations, evidence ledger. « Enregistrer dans EA Memory » fige la prédiction.
-5. HISTORIQUE : saisir cote de clôture et résultat après le match → ROI, CLV, mémoire par compétition/marché.
-6. MODEL LAB : statut des modèles, calibration, backtest walk-forward, Model Health, Auto Discovery (expérimental), réglages.
-7. BANKROLL : mise indicative et simulateur (toujours « SIMULATION — NOT A GUARANTEE »).
+3. MARCHÉS : saisir les cotes réellement proposées (facultatif). Pour le football, EA calcule aussi 1X, X2, 12, les totaux de buts 0.5/1.5/2.5/3.5/4.5 et les totaux individuels domicile/extérieur 0.5/1.5. Les marchés corners et tirs cadrés sont proposés en mode Poisson provisoire uniquement si une moyenne totale attendue est saisie à partir de données réelles ; seules les cotes saisies sont utilisées.
+Réglages avancés du Coach : dans Configuration avancée, utiliser par exemple `{"coachParlay":{"targetOdds":2.5,"minLegP":0.55,"maxLegs":3}}` pour régler la cote cible, la probabilité minimale par sélection et le nombre maximal de jambes.
+5. DÉCISION : le Coach EA Value construit séparément un combiné orienté probabilité, sans exiger que chaque sélection soit une value bet. Il n’utilise qu’une sélection par match lorsque la dépendance entre marchés du même match n’est pas modélisée. Le moteur Value Bets reste distinct. DÉCISION : BET / CHECK / NO BET, commentaire (pour/contre/risques/prix), qualité des informations, evidence ledger. « Enregistrer dans EA Memory » fige la prédiction.
+6. HISTORIQUE : saisir cote de clôture et résultat après le match → ROI, CLV, mémoire par compétition/marché.
+7. MODEL LAB : statut des modèles, calibration, backtest walk-forward, Model Health, Auto Discovery (expérimental), réglages.
+8. BANKROLL : mise indicative et simulateur (toujours « SIMULATION — NOT A GUARANTEE »).
 
 ## Sauvegarde
 L'export/import JSON existant inclut désormais EA Memory et les réglages Pro (`ea_pro_*`). Les migrations de stockage font un backup avant chaque étape et restaurent automatiquement en cas d'échec.
@@ -27,7 +28,7 @@ PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-mobile.js   # navigateur, 360/
 ```
 
 ## Déploiement
-Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v36`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
+Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v37`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
 
 ## Basketball V2
 Basket Analyse affiche maintenant le panneau « Analyse V2 — distribution unique » (voir CHANGELOG, EA-BK2). Tests : `node tests/run-bk2.js` ; navigateur : `PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-bk2.js`.
