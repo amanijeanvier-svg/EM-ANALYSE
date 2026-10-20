@@ -1,9 +1,18 @@
-## EA-VALUE 3.0.1 — Coach combinés et marchés football étendus (2026-10-19)
-- Ajout du moteur **Coach EA Value** distinct du moteur Value Bets : il peut construire un combiné à partir des probabilités disponibles sans imposer une value bet/EV positive à chaque sélection. Il vise la probabilité jointe la plus élevée parmi les combinaisons qui atteignent la cote cible, et montre le meilleur compromis si aucune ne l’atteint.
-- Le Coach ne mélange pas deux marchés du même match, car la dépendance conjointe n’est pas modélisée de manière assez fiable pour ces marchés. Pour les matchs distincts, la probabilité jointe est le produit des probabilités estimées, sous hypothèse d’indépendance explicitée.
-- Extension des marchés football calculés : 1X2, double chance 1X/X2/12, over/under 0.5/1.5/2.5/3.5/4.5 buts, BTTS et totaux individuels des équipes over/under 0.5 et 1.5. Les cotes de ces marchés sont facultatives et doivent être saisies à partir du bookmaker ; une cote vide n’est pas supposée.
-- Le moteur Value Bets et ses garde-fous restent disponibles séparément. Version affichée mise à jour en 3.0.1 et cache service worker en v37.
-- Corners et tirs cadrés : ajout d’un mode Poisson provisoire basé sur la moyenne totale attendue saisie manuellement, avec avertissement explicite ; ces probabilités ne sont pas validées/calibrées tant qu’un historique suffisant n’a pas été testé. Le Coach ne garantit pas la réussite et la probabilité d’un combiné diminue généralement quand on ajoute des sélections.
+## EA GENESE MARKETS — catalogue complet des marchés, cohérence mathématique, combinés (cache v37)
+**Constats (lecture du code réel)**
+- Les 5 « paris retenus » étaient recalibrés SÉPARÉMENT par type de marché (`applyMarketRecalibration`) : un Over et son Under, ou 1X et P(1)+P(X), pouvaient diverger. Aucun catalogue de marchés n'existait (ni buts par équipe, ni toutes les lignes 0,5 à 4,5).
+- Bets → Combinés n'affichait plus rien (message « retirés ») alors que `buildPrivateCombos` calculait toujours les tickets ; ils ne partaient que des 5 paris retenus.
+- Bug de cote : un pari « Match nul » avec cotes 1/N/2 saisies recevait la cote de la victoire EXTÉRIEURE (`legOddsFromRecord`).
+**Nouveau / corrigé**
+- Nouveau module pur `js/ea-markets.js` (aussi embarqué dans `index.html`, bloc `ea-markets`) : à chaque « Générer le verdict », une seule distribution de scores cohérente est construite (matrice Monte-Carlo/Dixon-Coles ajustée par IPF au 1X2 final, au BTTS, aux lignes de buts avec tendances, et à la probabilité des paris recalibrés). Tous les marchés en découlent exactement : 1/X/2, 1X/X2/12, plus/moins 0,5 à 4,5 buts, buts par équipe 0,5 et 1,5, BTTS oui/non.
+- Corners / tirs cadrés / cartons : calculés UNIQUEMENT si les moyennes des deux équipes sont saisies (Poisson sur la somme, marqués « fiabilité limitée ») ; sinon « non calculable », rien n'est inventé.
+- Section repliable « Tous les marchés calculés par Genèse » : probabilité, cote juste (1/p, théorique), champ pour saisir une cote bookmaker (écart et EV). Les cotes 1/N/2 saisies alimentent automatiquement 1/X/2 et double chance.
+- Les paris retenus affichent la probabilité de la même distribution. Une double chance de complément recalibrée à part est alignée sur P(1)+P(X) (signalé).
+- Les marchés sont enregistrés dans l'analyse (`rec.markets`, `rec.marketsMeta`), réglés après le score (`rec.marketHits`, hors calibration/TRACK) et archivés (`day.cat`). Anciennes analyses sans catalogue : inchangées et compatibles.
+- Bets → Combinés rétabli : tickets faible/modéré/élevé depuis paris retenus + catalogue, une sélection par match, au moins 2 matchs distincts, jambes ≤ 93 %, tranche élevée ≥ 35 %. Tranche de secours élargie de ±7 pts signalée sur le ticket (jamais silencieuse). Chaque ticket affiche matchs, sélections, probabilités, cote et provenance (bookmaker / juste), cote totale, probabilité conjointe (produit, hypothèse d'indépendance expliquée), limites des données, aucun gain garanti.
+- Actualisation : seule l'analyse la plus récente d'un match du jour compte ; les jambes figées sont recalées dessus ou retirées. Dossier sans aucune donnée saisie exclu des combinés.
+- Corrigé : cote du « Match nul ». Basket : tranches de combinés inchangées.
+- Tests : `node tests/run-markets.js` (module pur).
 
 ## EA SERIES ORDER — ordre de saisie des séries (cache v36)
 **Constat** : en interne, chaque série (forme, domicile/extérieur, face-à-face) est CHRONOLOGIQUE : le dernier score tapé est traité comme le match le plus récent (poids de récence, tendance, séries d'invincibilité). Rien ne l'indiquait ; saisir « du plus récent au plus ancien » (comme sur les sites) inversait donc la dynamique de l'équipe.
