@@ -27,7 +27,7 @@ PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-mobile.js   # navigateur, 360/
 ```
 
 ## Déploiement
-Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v37`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
+Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v39`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
 
 ## Basketball V2
 Basket Analyse affiche maintenant le panneau « Analyse V2 — distribution unique » (voir CHANGELOG, EA-BK2). Tests : `node tests/run-bk2.js` ; navigateur : `PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-bk2.js`.
@@ -40,3 +40,9 @@ Quand le type de match est « Compétition européenne », un bloc dédié s'ouv
 
 ## Marchés Genèse et combinés (EA GENESE MARKETS)
 Après « Générer le verdict », ouvrez « Tous les marchés calculés par Genèse » sous les paris retenus : probabilités et cotes justes (théoriques) de tous les marchés, avec saisie optionnelle d'une cote bookmaker. Les combinés sont dans Bets → Combinés, sans ressaisie (2 matchs distincts minimum). Tests : `node tests/run-markets.js`. Détail : CHANGELOG.md.
+
+## Coupes d'Europe : rotation, enjeu, verdict « aucune valeur » (EA EURO CONTEXT)
+Dans Genèse, choisissez « Compétition européenne » : sous les matchs saisis, le bloc « Contexte du match » permet d'indiquer pour chaque équipe la rotation probable et l'enjeu. Laissé vide, il n'a aucun effet. Sous les paris retenus, un encadré dit clairement s'il existe de la valeur (selon les cotes que vous saisissez) ou « Aucune valeur détectée : pas de pari ». Tests : `node tests/run-euro.js`.
+
+## Contexte du match pour tous les championnats
+Le bloc « Contexte du match » (enjeu et rotation par équipe) fonctionne désormais pour tous les matchs de football. Chaque situation d'enjeu a une gravité de 1 à 5 qui pondère son effet. Laissé vide : aucun effet.

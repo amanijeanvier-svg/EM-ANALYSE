@@ -1,3 +1,20 @@
+## EA EURO CONTEXT 2 — enjeu pour TOUS les championnats avec gravité ; style vs niveau (cache v39)
+- **Enjeu étendu à tout le football** : le bloc « Contexte du match » (enjeu + rotation par équipe) n'est plus réservé à la compétition européenne ; il s'applique en championnat, coupe et Europe.
+- **12 options d'enjeu tirées de situations réelles**, chacune avec une **gravité de 1 à 5** qui pondère l'effet (effet = effet maximal × gravité / 5) : enjeu normal, derby (gravité 3 : incertitude seulement), course européenne/qualification (3), course au titre (4), lutte pour le maintien (5), doit gagner (4), match couperet (5), crise (3), premier match d'un nouvel entraîneur (2), objectif atteint (3), plus rien à jouer (3). Effets plafonnés (buts marqués ×0,93 à ×1,03, encaissés ×0,98 à ×1,045 par équipe) et incertitude élargie. Réglages prudents, non calibrés sur historique.
+- L'enjeu de zone calculé automatiquement depuis le classement saisi reste en place ; le champ déclaré sert surtout aux situations que le classement ne montre pas (risque de double compte signalé à l'écran).
+- Encadré « Contexte déclaré » sous les paris retenus (toutes compétitions), contexte enregistré dans l'analyse.
+- **Style vs niveau en coupe d'Europe** : la forme et le domicile/extérieur de CHAMPIONNAT pèsent désormais ×0,6 seulement pour le niveau (1/X/2) mais ×0,9 pour le style (Over/Under, BTTS) — avant, ×0,6 pour tous les marchés alors que le championnat renseigne bien sur le style d'une équipe (réglage `TREND_CFG.euroDiscount`).
+- Tests : `node tests/run-euro.js` (17 tests).
+
+## EA EURO CONTEXT — rotation, enjeu, poids par équipe, verdict « aucune valeur » (cache v38)
+**Origine** : méthode d'analyse des matchs de coupe d'Europe (Ligue des champions / Europa / Conférence) validée avec l'utilisateur, appliquée à la saisie existante de Genèse (bloc « Compétition européenne »).
+**Nouveau (nouveau module `js/ea-euro.js`, embarqué dans `index.html`, bloc `ea-euro`)**
+- **Rotation probable** par équipe (aucune / légère / forte : match important dans ≤ 3 jours) et **enjeu de la journée** par équipe (en course / déjà assuré / doit gagner / plus rien à jouer). Corrections déclaratives, **plafonnées** (buts marqués entre ×0,93 et ×1,03, buts encaissés entre ×0,98 et ×1,045 par équipe) et qui **élargissent l'incertitude** de la probabilité. Champ vide = aucun effet ; ignoré hors compétition européenne. Les nudges (ex. rotation forte ×0,955 / ×1,03) sont des réglages prudents choisis, pas des valeurs calibrées sur historique : à recalibrer quand assez de matchs vérifiés existeront.
+- **Poids des matchs de la compétition par équipe**, avec rétrécissement : `0,70·n/(n+2)` par équipe (1 match ≈ 23 %, 2 ≈ 35 %, 4 ≈ 47 %, plafond 70 %). À nombre égal de matchs c'est exactement l'ancienne formule combinée ; une équipe sans match européen n'emprunte plus le poids de l'autre (avant : poids moyen commun).
+- **Verdict global « valeur »** sous les paris retenus : « Valeur : impossible à juger sans cote » (aucune cote saisie), « Aucune valeur détectée : pas de pari » (cotes saisies mais EV négative, edge trop fin ou écart dans l'incertitude), ou « Valeur possible à vérifier ». Utilise les cotes saisies sur les cartes ET dans le catalogue, avec le moteur de valeur existant. « Aucune valeur » est une sortie normale, aucun pari n'est forcé.
+- Le contexte est enregistré dans l'analyse (`rec.contextEuro`) et expliqué dans le commentaire (« Contexte déclaré … »).
+- Tests : `node tests/run-euro.js`.
+
 ## EA GENESE MARKETS — catalogue complet des marchés, cohérence mathématique, combinés (cache v37)
 **Constats (lecture du code réel)**
 - Les 5 « paris retenus » étaient recalibrés SÉPARÉMENT par type de marché (`applyMarketRecalibration`) : un Over et son Under, ou 1X et P(1)+P(X), pouvaient diverger. Aucun catalogue de marchés n'existait (ni buts par équipe, ni toutes les lignes 0,5 à 4,5).
