@@ -910,6 +910,7 @@ input{font-family:inherit;}
             <div style="padding:0 22px 22px;"><div class="section-title">Scores exacts probables</div><div class="scores-row" id="scoresRowGe"></div><div class="lambda-row" id="lambdaRowGe"></div></div>
             <div style="padding:0 22px 22px;"><div class="section-title">Paris retenus</div><div id="betsListGe"></div></div>
             <div style="padding:0 22px 8px;" id="contextNoteGe"></div>
+            <div style="padding:0 22px 14px;" id="readingGe"></div>
             <div style="padding:0 22px 14px;" id="valueGateGe"></div>
             <div style="padding:0 22px 22px;" id="catalogGe"></div>
             <div style="padding:0 22px 22px;" id="trendsGe"></div>
@@ -1170,6 +1171,7 @@ input{font-family:inherit;}
         <button class="sfx-tap" data-sub="value" data-group="be"><svg class="chest-ic" style="color:var(--sky)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Value Bets (edge réel)</button>
         <button class="sfx-tap" data-sub="score" data-group="be"><svg class="chest-ic" style="color:var(--violet)" viewBox="0 0 24 24" width="15" height="15"><path d="M3 10h18v8.5a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5V10z" fill="currentColor" opacity=".28"/><path d="M2 7.5A2.5 2.5 0 014.5 5h15A2.5 2.5 0 0122 7.5V10H2V7.5z" fill="currentColor"/><circle cx="12" cy="13" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg> Score Exact 15%+</button>
         <button class="sfx-tap" data-sub="combos" data-group="be">🎰 Combinés</button>
+        <button class="sfx-tap" data-sub="journal" data-group="be">📒 Mon suivi</button>
       </div>
       <div id="betsPanel"></div>
     </section>
@@ -4764,6 +4766,190 @@ try {
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
+<script id="ea-journal">
+/* ===== js/ea-journal.js — EA MON SUIVI =====
+   Journal de VOS paris réels (cote réelle, mise réelle, résultat) et statistiques honnêtes par type de pari et par source.
+   Objectif : savoir, avec des chiffres vérifiables, ce qui marche vraiment pour vous — pas ce que promet un modèle.
+   Module pur (aucun DOM, aucun stockage) : testable avec Node. */
+(function (root) {
+  'use strict';
+  var VERSION = 'EA-JOURNAL-1.0';
+  var MIN_BETS = 200;          // en dessous, la chance masque tout : aucune conclusion ferme
+  var TYPES = [
+    ['resultat', 'Victoire / résultat (1X2)'], ['dc', 'Double chance'], ['total', 'Total de buts (plus / moins)'],
+    ['btts', 'Les deux équipes marquent'], ['equipe', 'Buts d\'une équipe'], ['score', 'Score exact'], ['combine', 'Combiné'], ['autre', 'Autre']
+  ];
+  var SOURCES = [['app', 'Suggéré par l\'application'], ['moi', 'Mon propre choix']];
+  function isNum(x) { return typeof x === 'number' && isFinite(x); }
+  function typeLabel(k) { for (var i = 0; i < TYPES.length; i++) if (TYPES[i][0] === k) return TYPES[i][1]; return k; }
+  function sourceLabel(k) { for (var i = 0; i < SOURCES.length; i++) if (SOURCES[i][0] === k) return SOURCES[i][1]; return k; }
+
+  // Bénéfice d'un pari réglé : gagné = mise × (cote − 1) ; perdu = −mise ; remboursé = 0 ; en cours = null.
+  function profit(b) {
+    if (!b || !isNum(b.stake) || b.stake <= 0 || !isNum(b.odds) || b.odds <= 1) return null;
+    if (b.result === 'won') return Math.round(b.stake * (b.odds - 1) * 100) / 100;
+    if (b.result === 'lost') return -b.stake;
+    if (b.result === 'void') return 0;
+    return null;
+  }
+  // Intervalle de Wilson à 95 % du taux de réussite : montre à quel point le chiffre est incertain avec peu de paris.
+  function wilson(wins, n) {
+    if (!n) return null;
+    var z = 1.96, p = wins / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n));
+    return { lo: Math.max(0, (c - m) / d), hi: Math.min(1, (c + m) / d) };
+  }
+  function summarize(list) {
+    var settled = (list || []).filter(function (b) { return (b.result === 'won' || b.result === 'lost') && profit(b) != null; });
+    var voids = (list || []).filter(function (b) { return b.result === 'void'; }).length, pending = (list || []).filter(function (b) { return !b.result; }).length;
+    var n = settled.length, wins = settled.filter(function (b) { return b.result === 'won'; }).length;
+    var staked = settled.reduce(function (s, b) { return s + b.stake; }, 0), pl = settled.reduce(function (s, b) { return s + profit(b); }, 0);
+    var avgOdds = n ? settled.reduce(function (s, b) { return s + b.odds; }, 0) / n : null;
+    // taux de réussite nécessaire pour ne pas perdre, avec VOS cotes : moyenne des 1/cote
+    var breakEven = n ? settled.reduce(function (s, b) { return s + 1 / b.odds; }, 0) / n : null;
+    var hit = n ? wins / n : null, ci = wilson(wins, n);
+    var ordered = settled.slice().sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); });
+    var streak = 0, maxStreak = 0; ordered.forEach(function (b) { if (b.result === 'lost') { streak++; if (streak > maxStreak) maxStreak = streak; } else streak = 0; });
+    var label = n === 0 ? 'AUCUN PARI RÉGLÉ' : n < 30 ? 'TROP PEU DE PARIS POUR CONCLURE' : n < MIN_BETS ? 'INDICATIF SEULEMENT' : 'ÉCHANTILLON SUFFISANT POUR UN PREMIER BILAN';
+    // verdict prudent : on ne dit « rentable » que si l'intervalle de confiance du ROI ne contient plus le zéro (approximation simple)
+    var roi = staked > 0 ? pl / staked : null;
+    return { n: n, wins: wins, voids: voids, pending: pending, staked: Math.round(staked * 100) / 100, profit: Math.round(pl * 100) / 100, roi: roi, hitRate: hit, ci: ci, avgOdds: avgOdds, breakEven: breakEven,
+      beatsBreakEven: (hit != null && breakEven != null) ? hit - breakEven : null, maxLosingStreak: maxStreak, label: label, enough: n >= MIN_BETS };
+  }
+  function groupBy(list, key) {
+    var g = {}; (list || []).forEach(function (b) { var k = b[key] || 'autre'; (g[k] = g[k] || []).push(b); });
+    var out = {}; Object.keys(g).forEach(function (k) { out[k] = summarize(g[k]); }); return out;
+  }
+  // Détection de « rattrapage » : mise nettement plus grosse juste après une perte (règle d'or des parieurs sérieux : jamais).
+  function chaseAlerts(list) {
+    var ordered = (list || []).filter(function (b) { return (b.result === 'won' || b.result === 'lost') && isNum(b.stake); }).sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); });
+    var n = 0, last = null;
+    ordered.forEach(function (b, i) { if (i > 0 && ordered[i - 1].result === 'lost' && b.stake >= ordered[i - 1].stake * 1.5) { n++; last = b; } });
+    return { count: n, last: last };
+  }
+  // Mise exposée aujourd'hui / cette semaine, pour garder le contrôle.
+  function exposure(list, sinceTs) { return (list || []).filter(function (b) { return (b.ts || 0) >= sinceTs && isNum(b.stake); }).reduce(function (s, b) { return s + b.stake; }, 0); }
+  function toCSV(list) {
+    var head = ['date', 'type', 'source', 'description', 'cote', 'mise', 'resultat', 'benefice'];
+    var rows = (list || []).slice().sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); }).map(function (b) {
+      return [new Date(b.ts || 0).toISOString().slice(0, 10), b.type, b.source, '"' + String(b.desc || '').replace(/"/g, '""') + '"', b.odds, b.stake, b.result || 'en cours', profit(b) == null ? '' : profit(b)].join(',');
+    });
+    return head.join(',') + '\n' + rows.join('\n');
+  }
+  var api = { VERSION: VERSION, MIN_BETS: MIN_BETS, TYPES: TYPES, SOURCES: SOURCES, typeLabel: typeLabel, sourceLabel: sourceLabel, profit: profit, wilson: wilson, summarize: summarize,
+    groupBy: groupBy, chaseAlerts: chaseAlerts, exposure: exposure, toCSV: toCSV };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.EAJ = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script id="ea-reading">
+/* ===== js/ea-reading.js — EA LECTURE DU MATCH + FORCE DES ADVERSAIRES =====
+   1. FORCE DES ADVERSAIRES PAR MATCH : au lieu d'un pourcentage global impossible à estimer, on note chaque score de la série
+      avec le niveau de l'adversaire (faible / moyen / fort). Les buts marqués et encaissés sont ajustés match par match (±15 % max).
+   2. LECTURE DU MATCH : classe les marchés par SOLIDITÉ (et non par valeur) :
+      probabilité du modèle, puis test de résistance (que devient-elle si les buts attendus se trompent de ±15 % ?),
+      concordance avec les tendances de forme, qualité des données. Donne aussi la « cote minimale conseillée » :
+      en dessous, le pari ne vaut pas la peine même s'il est probable.
+   Module pur (aucun DOM) : testable avec Node. Aucune donnée n'est inventée : un score non noté n'est pas ajusté. */
+(function (root) {
+  'use strict';
+  var VERSION = 'EA-READING-1.0';
+  function isNum(x) { return typeof x === 'number' && isFinite(x); }
+  function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+  /* ---------- force des adversaires par match ---------- */
+  var LEVELS = {
+    F: { label: 'adversaire faible', emoji: '🟢', kFor: 0.85, kAg: 1.15 },   // marquer contre un faible vaut moins ; encaisser contre un faible est plus grave
+    M: { label: 'adversaire moyen',  emoji: '🟡', kFor: 1,    kAg: 1 },
+    T: { label: 'adversaire fort',   emoji: '🔴', kFor: 1.15, kAg: 0.85 }
+  };
+  var ORDER = [undefined, 'F', 'M', 'T'];
+  function cycle(level) { var i = ORDER.indexOf(level || undefined); return ORDER[(i + 1) % ORDER.length]; }
+  // Renvoie de nouvelles paires [marqués, encaissés] ajustées ; les scores non notés restent inchangés.
+  function adjustPairs(pairs) {
+    var tagged = 0, counts = { F: 0, M: 0, T: 0 };
+    var out = (pairs || []).map(function (p) {
+      var L = p && LEVELS[p[2]];
+      if (!L) return [p[0], p[1]];
+      tagged++; counts[p[2]]++;
+      return [p[0] * L.kFor, p[1] * L.kAg];
+    });
+    return { pairs: out, tagged: tagged, n: (pairs || []).length, counts: counts };
+  }
+
+  /* ---------- probabilités de Poisson pour le test de résistance ---------- */
+  function pois(l, k) { var f = 1, i; for (i = 2; i <= k; i++) f *= i; return Math.exp(-l) * Math.pow(l, k) / f; }
+  function grid(la, lb) { var r = [], a, b; for (a = 0; a < 11; a++) for (b = 0; b < 11; b++) r.push({ a: a, b: b, p: pois(la, a) * pois(lb, b) }); return r; }
+  function probEv(g, ev) {
+    var s = 0, i, c, ok;
+    for (i = 0; i < g.length; i++) {
+      c = g[i];
+      switch (ev.type) {
+        case 'result1x2': ok = ev.outcome === 'A' ? c.a > c.b : ev.outcome === 'B' ? c.a < c.b : c.a === c.b; break;
+        case 'resultDC': ok = ev.outcomes.indexOf(c.a > c.b ? 'A' : c.a < c.b ? 'B' : 'draw') >= 0; break;
+        case 'goalsLine': ok = ev.op === 'over' ? c.a + c.b > ev.line : c.a + c.b < ev.line; break;
+        case 'btts': ok = ev.side === 'yes' ? (c.a >= 1 && c.b >= 1) : !(c.a >= 1 && c.b >= 1); break;
+        case 'teamGoals': { var gg = ev.team === 'A' ? c.a : c.b; ok = ev.op === 'over' ? gg > ev.line : gg < ev.line; break; }
+        default: return null;
+      }
+      if (ok) s += c.p;
+    }
+    return s;
+  }
+  // Pire dérive de la probabilité si les buts attendus des deux équipes se trompent de ±pct (en combinaisons).
+  function stress(ev, lamA, lamB, pct) {
+    var base = probEv(grid(lamA, lamB), ev); if (base == null) return null;
+    var f = [1 - pct, 1 + pct], worst = 0, i, j;
+    for (i = 0; i < 2; i++) for (j = 0; j < 2; j++) { var d = probEv(grid(lamA * f[i], lamB * f[j]), ev) - base; if (d < worst) worst = d; }
+    return worst;   // ≤ 0
+  }
+
+  /* ---------- lecture ---------- */
+  // o.markets : catalogue [{id,family,label,p,eval,reliability,extreme,bookOdds,oddsSource}]
+  // o.lamA/lamB : buts attendus finaux ; o.trend(ev,p) → {pTrend,W,parts} ou null ; o.dataQualityPct
+  function read(o) {
+    var STRESS = 0.15, items = [];
+    (o.markets || []).forEach(function (m) {
+      if (m.reliability !== 'model' || !isNum(m.p) || m.p < 0.5) return;           // jamais les marchés statistiques non fiables, ni les côtés improbables
+      if (m.family === '1X2' && m.eval && m.eval.outcome === 'draw') return;       // le nul seul n'est jamais « solide »
+      var worst = stress(m.eval, o.lamA, o.lamB, STRESS);
+      var pRobust = clamp(m.p + (worst == null ? 0 : worst), 0, 1);
+      var tr = o.trend ? o.trend(m.eval, m.p) : null, conflict = false, support = false, trendTxt = 'pas de tendance saisie sur ce marché';
+      if (tr && isNum(tr.pTrend) && tr.W > 0) {
+        trendTxt = 'tendances de forme : ' + Math.round(tr.pTrend * 100) + ' %';
+        if (tr.W >= 0.10 && tr.pTrend < 0.40) { conflict = true; trendTxt += ' — contredisent le modèle'; }
+        else if (tr.pTrend >= 0.55) { support = true; trendTxt += ' — confirment le modèle'; }
+      }
+      var dqLow = isNum(o.dataQualityPct) && o.dataQualityPct < 40;
+      var score = pRobust - (conflict ? 0.06 : 0) - (dqLow ? 0.04 : 0) + (support ? 0.02 : 0);
+      var grade = (score >= 0.72 && !conflict) ? 'SOLIDE' : (score >= 0.60 && !conflict) ? 'CORRECT' : 'FRAGILE';
+      var minOdds = pRobust > 0 ? Math.round(1.05 / pRobust * 100) / 100 : null;   // cote en dessous de laquelle le pari ne paie plus, marge de 5 % comprise
+      items.push({ id: m.id, family: m.family, label: m.label, eval: m.eval, p: m.p, pRobust: pRobust, drift: worst, grade: grade, score: score, trendTxt: trendTxt, conflict: conflict, support: support,
+        fair: Math.round(100 / m.p) / 100, minOdds: minOdds, tooShort: m.p > 0.93, bookOdds: m.oddsSource === 'bookmaker' ? m.bookOdds : null });
+    });
+    // un seul marché par « famille logique » pour ne pas répéter 3 fois la même idée (ex. Plus de 1,5 / 2,5 / 0,5)
+    var rank = { SOLIDE: 0, CORRECT: 1, FRAGILE: 2 };
+    items.sort(function (a, b) { return rank[a.grade] - rank[b.grade] || b.score - a.score; });
+    var seen = {}, top = [];
+    items.forEach(function (it) {
+      if (it.tooShort) return;
+      var k = it.family === 'TOTAL' ? 'TOTAL:' + it.eval.op : it.family === 'TEAM' ? 'TEAM:' + it.eval.team + it.eval.op : it.family;
+      if (seen[k]) return; seen[k] = 1; top.push(it);
+    });
+    // lecture générale en une phrase
+    var tot = (o.lamA || 0) + (o.lamB || 0), notes = [];
+    var m1 = (o.markets || []).filter(function (m) { return m.family === '1X2'; }), best1 = m1.reduce(function (s, m) { return Math.max(s, m.p); }, 0);
+    notes.push(tot >= 2.9 ? 'Match plutôt ouvert (' + tot.toFixed(2) + ' buts attendus) : les marchés de buts sont les plus lisibles.' : tot <= 2.2 ? 'Match plutôt fermé (' + tot.toFixed(2) + ' buts attendus) : attention aux « plus de » ; « moins de » est plus lisible.' : 'Match équilibré côté buts (' + tot.toFixed(2) + ' buts attendus).');
+    notes.push(best1 >= 0.55 ? 'Un favori net se dégage au résultat.' : 'Le résultat est incertain (aucune issue au-dessus de 55 %) : privilégiez les marchés de buts ou la double chance, plutôt que la victoire sèche.');
+    return { top: top.slice(0, 6), all: items, notes: notes, version: VERSION };
+  }
+
+  var api = { VERSION: VERSION, LEVELS: LEVELS, cycle: cycle, adjustPairs: adjustPairs, stress: stress, probEv: probEv, grid: grid, read: read };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.EAR = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
 <script>
 /* ================================================================
    0. UTILS PARTAGÉS
@@ -7679,8 +7865,8 @@ function seriesAdd(arr, parsed){   // parsed = scores dans l'ordre où l'utilisa
 }
 function seriesChipOrder(arr){ const o=arr.map((p,i)=>[p,i]); return seriesOrder==='recentFirst' ? o.reverse() : o; }
 const SERIES_HINT = {
-  recentFirst: '💡 Tapez le plus RÉCENT en premier : « 2-1, 1-0, 3-2 » → 2-1 est le dernier match joué (comme sur les sites). Ajoutez ensuite les plus anciens.',
-  oldestFirst: '💡 Tapez le plus ANCIEN en premier : « 2-1, 1-0, 3-2 » → 3-2 est le dernier match joué.'
+  recentFirst: '💡 Tapez le plus RÉCENT en premier : « 2-1, 1-0, 3-2 » → 2-1 est le dernier match joué (comme sur les sites). Ajoutez ensuite les plus anciens. Touchez un score pour noter l\'adversaire : 🟢 faible · 🟡 moyen · 🔴 fort (⚪ = non noté, aucun effet).',
+  oldestFirst: '💡 Tapez le plus ANCIEN en premier : « 2-1, 1-0, 3-2 » → 3-2 est le dernier match joué. Touchez un score pour noter l\'adversaire : 🟢 faible · 🟡 moyen · 🔴 fort (⚪ = non noté, aucun effet).'
 };
 const fieldsEl = document.getElementById('fields');
 CATS.forEach(cat=>{
@@ -7700,11 +7886,14 @@ function removeEntry(key,idx){ store[key].splice(idx,1); renderChips(key); }
 function renderChips(key){
   const el=document.getElementById('chips-'+key);
   if(store[key].length===0){ el.innerHTML='<span class="empty-hint">Aucune donnée</span>'; return; }
-  el.innerHTML = seriesChipOrder(store[key]).map(([pair,i])=>`<span class="chip"><b>${pair[0]}</b>-<span>${pair[1]}</span><span class="x" data-key="${key}" data-idx="${i}">×</span></span>`).join('');
+  el.innerHTML = seriesChipOrder(store[key]).map(([pair,i])=>{ const L=(window.EAR&&EAR.LEVELS[pair[2]])||null; return `<span class="chip" data-key="${key}" data-idx="${i}" data-opp="1" style="cursor:pointer;" title="Touchez pour noter le niveau de l'adversaire">${L?L.emoji+' ':'⚪ '}<b>${pair[0]}</b>-<span>${pair[1]}</span><span class="x" data-key="${key}" data-idx="${i}">×</span></span>`; }).join('');
 }
 fieldsEl.addEventListener('click', e=>{
   if(e.target.classList.contains('add-btn')) addEntry(e.target.dataset.key);
   if(e.target.classList.contains('x')) removeEntry(e.target.dataset.key, parseInt(e.target.dataset.idx,10));
+  else { const chip=e.target.closest ? e.target.closest('.chip[data-opp]') : null;
+    if(chip && window.EAR){ const k=chip.dataset.key, ix=parseInt(chip.dataset.idx,10), p=store[k] && store[k][ix];
+      if(p){ const nxt=EAR.cycle(p[2]); p.length=2; if(nxt) p[2]=nxt; renderChips(k); } } }
 });
 fieldsEl.addEventListener('keydown', e=>{ if(e.target.tagName==='INPUT' && e.key==='Enter') addEntry(e.target.id.replace('in-','')); });
 
@@ -8079,7 +8268,7 @@ document.getElementById('resetBtn').addEventListener('click', ()=>{
   euroResetGe();
   ['A','B'].forEach(T=>{ const el=document.getElementById('depth'+T); if(el) el.value='normale'; matchFlags['depth'+T]='normale'; });
   { const tg=document.getElementById('trendsGe'); if(tg) tg.innerHTML=''; }
-  { const cn=document.getElementById('contextNoteGe'); if(cn) cn.innerHTML=''; const cg=document.getElementById('catalogGe'); if(cg) cg.innerHTML=''; const vg=document.getElementById('valueGateGe'); if(vg) vg.innerHTML=''; }
+  { const cn=document.getElementById('contextNoteGe'); if(cn) cn.innerHTML=''; const rg=document.getElementById('readingGe'); if(rg) rg.innerHTML=''; const cg=document.getElementById('catalogGe'); if(cg) cg.innerHTML=''; const vg=document.getElementById('valueGateGe'); if(vg) vg.innerHTML=''; }
   document.getElementById('stageGe').value='poules'; matchFlags.stage='poules';
   document.getElementById('legGe').value='sec'; matchFlags.leg='sec';
   document.getElementById('aggAllerA').value=''; document.getElementById('aggAllerB').value='';
@@ -8227,13 +8416,19 @@ function aggregateAdjustment(leg, aggAllerA, aggAllerB, sport, league){
 }
 
 function computeGeneseLambdas(){
-  const aDomFor=avg(store.aDom,0), aDomAg=avg(store.aDom,1);
-  const aSerieRaw=weightedRecentAvg(store.aSerie,0);
-  const aSerieAdj=applyOpponentStrengthAdjustment(aSerieRaw, standings.oppStrengthA);
+  // EA LECTURE : niveau de l'adversaire noté MATCH PAR MATCH (🟢/🟡/🔴). Un score non noté n'est pas ajusté. Si une série contient des notes,
+  // elles remplacent le pourcentage global « force adversaires » de cette série (pas de double correction).
+  const oppOn = !!window.EAR;
+  const adjAS=oppOn?EAR.adjustPairs(store.aSerie):{pairs:store.aSerie,tagged:0,n:store.aSerie.length,counts:{F:0,M:0,T:0}}, adjAD=oppOn?EAR.adjustPairs(store.aDom):{pairs:store.aDom,tagged:0,n:store.aDom.length,counts:{F:0,M:0,T:0}};
+  const adjBS=oppOn?EAR.adjustPairs(store.bSerie):{pairs:store.bSerie,tagged:0,n:store.bSerie.length,counts:{F:0,M:0,T:0}}, adjBE=oppOn?EAR.adjustPairs(store.bExt):{pairs:store.bExt,tagged:0,n:store.bExt.length,counts:{F:0,M:0,T:0}};
+  const oppAdj={A:{serie:adjAS,dom:adjAD}, B:{serie:adjBS,ext:adjBE}, active:(adjAS.tagged+adjAD.tagged+adjBS.tagged+adjBE.tagged)>0};
+  const aDomFor=avg(adjAD.pairs,0), aDomAg=avg(adjAD.pairs,1);
+  const aSerieRaw=weightedRecentAvg(adjAS.pairs,0);
+  const aSerieAdj=applyOpponentStrengthAdjustment(aSerieRaw, adjAS.tagged>0 ? null : standings.oppStrengthA);
   const aSerieFor=aSerieAdj.adjusted, abFor=weightedRecentAvg(store.ab,0,H2H_DECAY_WEIGHTS);
-  const bExtFor=avg(store.bExt,0), bExtAg=avg(store.bExt,1);
-  const bSerieRaw=weightedRecentAvg(store.bSerie,0);
-  const bSerieAdj=applyOpponentStrengthAdjustment(bSerieRaw, standings.oppStrengthB);
+  const bExtFor=avg(adjBE.pairs,0), bExtAg=avg(adjBE.pairs,1);
+  const bSerieRaw=weightedRecentAvg(adjBS.pairs,0);
+  const bSerieAdj=applyOpponentStrengthAdjustment(bSerieRaw, adjBS.tagged>0 ? null : standings.oppStrengthB);
   const bSerieFor=bSerieAdj.adjusted, baFor=weightedRecentAvg(store.ba,0,H2H_DECAY_WEIGHTS);
   const W = loadAdaptiveWeights('football', matchFlags.league);
   // Compétition européenne : les matchs saisis DANS la compétition sont traités à part (voir EA EURO SCORES).
@@ -8431,7 +8626,7 @@ function computeGeneseLambdas(){
   const aggAdj = aggregateAdjustment(matchFlags.leg, matchFlags.aggAllerA, matchFlags.aggAllerB, 'football', matchFlags.league);
   if(lambdaA!==null) lambdaA *= aggAdj.factorA;
   if(lambdaB!==null) lambdaB *= aggAdj.factorB;
-  return {lambdaA, lambdaB, eloAnchor, ctx: ctxAll, euro: EU, eloMissingEurope: (heterogeneousComp && (standings.eloA==null || standings.eloB==null)), totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, eloA:effStandings.eloA, eloB:effStandings.eloB, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:stageAdj.sigmaDamp, aggregateNote:aggAdj.note, components:geneseComponents,
+  return {lambdaA, lambdaB, eloAnchor, oppAdj, ctx: ctxAll, euro: EU, eloMissingEurope: (heterogeneousComp && (standings.eloA==null || standings.eloB==null)), totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx:eIdx, eloA:effStandings.eloA, eloB:effStandings.eloB, qualityIdx, enjeuIdx, trendDiffIdx, leagueStats, sigmaDamp:stageAdj.sigmaDamp, aggregateNote:aggAdj.note, components:geneseComponents,
     aSerieAdj, bSerieAdj, aSerieFor, aSerieRaw, bSerieFor, bSerieRaw, fatigueScoreA, fatigueScoreB,
     stage: stageIsKO ? matchFlags.stage : null, leg: matchFlags.leg, tensionUsed: stageIsKO ? stageAdj.tensionUsed : null,
     aggFactorUsed: matchFlags.leg==='retour' ? {factorA:aggAdj.factorA, factorB:aggAdj.factorB} : null, aggDiff: aggAdj.diff||0};
@@ -9221,11 +9416,39 @@ function renderCatalogGe(rec){
 }
 /* EA EURO CONTEXT — verdict « valeur » global : s'appuie sur les mêmes cotes SAISIES (cartes + catalogue) et sur le même moteur de valeur ;
    « aucune valeur » est une sortie normale, jamais un pari forcé. */
-function renderContextNoteGe(ctx, nameA, nameB){
+function renderContextNoteGe(ctx, nameA, nameB, opp){
   const host=document.getElementById('contextNoteGe'); if(!host) return;
-  if(!ctx || !(ctx.A.active||ctx.B.active||ctx.uncPts>0)){ host.innerHTML=''; return; }
+  let oppHtml='';
+  if(opp && opp.active){
+    const f=(nm,parts)=>{ const t=parts.reduce((s,x)=>s+x.tagged,0), n=parts.reduce((s,x)=>s+x.n,0); if(!t) return ''; const c={F:0,M:0,T:0}; parts.forEach(x=>{ c.F+=x.counts.F; c.M+=x.counts.M; c.T+=x.counts.T; }); return `<div style="margin-top:4px;"><b>${trEsc(nm)}</b> : ${t} score${t>1?'s':''} noté${t>1?'s':''} sur ${n} (🟢${c.F} 🟡${c.M} 🔴${c.T})</div>`; };
+    oppHtml=`<div style="border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:11.5px; color:var(--text-dim); margin-bottom:8px;"><b>🎚️ Force des adversaires</b>${f(nameA,[opp.A.serie,opp.A.dom])}${f(nameB,[opp.B.serie,opp.B.ext])}<div style="margin-top:6px; font-size:10.5px; color:var(--text-faint);">Buts marqués et encaissés ajustés match par match (marquer contre un adversaire faible compte moins, contre un fort plus ; ±15 % maximum). Un score non noté n'est pas ajusté.</div></div>`;
+  }
+  if(!ctx || !(ctx.A.active||ctx.B.active||ctx.uncPts>0)){ host.innerHTML=oppHtml; return; }
   const line=(nm,c)=> c.notes.length ? `<div style="margin-top:4px;"><b>${trEsc(nm)}</b> : ${c.notes.map(trEsc).join(' ; ')} <span style="color:var(--text-faint);">(buts marqués ×${c.att.toFixed(3)}, encaissés ×${c.conc.toFixed(3)})</span></div>` : '';
-  host.innerHTML=`<div style="border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:11.5px; color:var(--text-dim);"><b>⚖️ Contexte déclaré</b>${line(nameA,ctx.A)}${line(nameB,ctx.B)}<div style="margin-top:6px; font-size:10.5px; color:var(--text-faint);">Corrections pondérées par la gravité et plafonnées ; l'incertitude des probabilités est élargie de ±${ctx.uncPts.toFixed(1)} pt. Réglages prudents, non calibrés sur historique.</div></div>`;
+  host.innerHTML=oppHtml+`<div style="border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:11.5px; color:var(--text-dim);"><b>⚖️ Contexte déclaré</b>${line(nameA,ctx.A)}${line(nameB,ctx.B)}<div style="margin-top:6px; font-size:10.5px; color:var(--text-faint);">Corrections pondérées par la gravité et plafonnées ; l'incertitude des probabilités est élargie de ±${ctx.uncPts.toFixed(1)} pt. Réglages prudents, non calibrés sur historique.</div></div>`;
+}
+/* EA LECTURE DU MATCH — marchés classés par SOLIDITÉ (pas par valeur) : voir js/ea-reading.js. */
+function renderReadingGe(rec){
+  const host=document.getElementById('readingGe'); if(!host) return;
+  const r=rec && rec.reading; if(!r || !r.top || !r.top.length){ host.innerHTML=''; return; }
+  const byId={}; (rec.markets||[]).forEach(m=>{ byId[m.id]=m; });
+  const col=g=>g==='SOLIDE'?'var(--teal,#6EE7B7)':g==='CORRECT'?'#ffb454':'var(--red,#F2545B)';
+  const ico=g=>g==='SOLIDE'?'🟢':g==='CORRECT'?'🟡':'🔴';
+  let h=`<div style="border:1px solid var(--line); border-radius:10px; padding:12px 14px;">
+    <div style="font-weight:700; font-size:13px; margin-bottom:4px;">🧭 Lecture du match <span style="font-weight:400; font-size:10.5px; color:var(--text-faint);">solidité, pas valeur</span></div>
+    ${r.notes.map(n=>`<div style="font-size:11px; color:var(--text-dim); margin-top:3px;">${trEsc(n)}</div>`).join('')}`;
+  r.top.forEach(it=>{
+    const m=byId[it.id]||{}; const bo=m.oddsSource==='bookmaker'&&m.bookOdds>1?m.bookOdds:null;
+    let verdict='';
+    if(bo!=null && it.minOdds!=null) verdict = bo>=it.minOdds ? `<span style="color:var(--teal,#6EE7B7);">cote saisie ${bo.toFixed(2)} ≥ minimale : acceptable</span>` : `<span style="color:var(--red,#F2545B);">cote saisie ${bo.toFixed(2)} &lt; minimale : ne paie pas assez</span>`;
+    h+=`<div style="padding:9px 0; border-top:1px dashed var(--line); font-size:11.5px;">
+      <div style="display:flex; justify-content:space-between; gap:8px;"><b>${ico(it.grade)} ${trEsc(it.label)}</b><span style="color:${col(it.grade)}; font-weight:700;">${it.grade}</span></div>
+      <div style="color:var(--text-dim); margin-top:2px;">Probabilité ${(it.p*100).toFixed(1)} % · <b>résistante ${(it.pRobust*100).toFixed(1)} %</b> (si les buts attendus se trompent de ±15 %) · cote juste ${it.fair.toFixed(2)}</div>
+      <div style="color:var(--text-faint); font-size:10.5px; margin-top:2px;">${trEsc(it.trendTxt)}</div>
+      <div style="font-size:10.5px; margin-top:2px;">Cote minimale conseillée : <b>${it.minOdds!=null?it.minOdds.toFixed(2):'—'}</b> ${verdict?'· '+verdict:'<span style="color:var(--text-faint);">· saisissez la cote réelle dans le catalogue pour la comparer</span>'}</div></div>`;
+  });
+  h+=`<div style="font-size:10.5px; color:var(--text-faint); margin-top:8px; border-top:1px dashed var(--line); padding-top:8px;">« Solide » veut dire que la lecture résiste aux erreurs d'estimation, <b>pas</b> que le pari est gagnant : une probabilité élevée ne vaut rien si la cote est trop basse, et aucun pari n'est garanti. Pour un combiné de cotes basses, la cote minimale conseillée de chaque jambe compte autant que sa probabilité.</div></div>`;
+  host.innerHTML=h;
 }
 function renderValueGateGe(rec){
   const host=document.getElementById('valueGateGe'); if(!host) return;
@@ -9256,7 +9479,7 @@ document.addEventListener('change',(e)=>{
   if(v>1){ m.bookOdds=v; m.oddsSource='bookmaker'; } else { m.bookOdds=null; m.oddsSource=null; }
   try{ persistDB(); }catch(err){}
   const row=el.closest('.cat-row'); const t=row && row.querySelector('.cat-val'); if(t) t.textContent=catValueText(m);
-  try{ renderValueGateGe(rec); }catch(err){ console.error(err); }
+  try{ renderValueGateGe(rec); renderReadingGe(rec); }catch(err){ console.error(err); }
 });
 function runAnalysisGe(){
   const nameA=document.getElementById('nameA').value.trim()||'A', nameB=document.getElementById('nameB').value.trim()||'B';
@@ -9266,7 +9489,7 @@ function runAnalysisGe(){
   // seulement, via la pastille de complétude affichée sur le résultat, jamais un mur.
   const completenessGe = computeCompletenessFootball();
 
-  const {lambdaA, lambdaB, eloAnchor, ctx:ctxInfo, euro:euroInfo, eloMissingEurope, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, eloA, eloB, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff, aSerieAdj, bSerieAdj, aSerieFor, aSerieRaw, bSerieFor, bSerieRaw, fatigueScoreA, fatigueScoreB}=computeGeneseLambdas();
+  const {lambdaA, lambdaB, eloAnchor, oppAdj:oppInfo, ctx:ctxInfo, euro:euroInfo, eloMissingEurope, totalAdj, strengthGap, zoneA, zoneB, phaseLabel, trendA, trendB, eloIdx, eloA, eloB, qualityIdx, enjeuIdx, trendDiffIdx, sigmaDamp, aggregateNote, components, stage, leg, tensionUsed, aggFactorUsed, aggDiff, aSerieAdj, bSerieAdj, aSerieFor, aSerieRaw, bSerieFor, bSerieRaw, fatigueScoreA, fatigueScoreB}=computeGeneseLambdas();
   const convictionIdx = computeConvictionIdx(enjeuIdx, trendDiffIdx, tensionUsed, aggDiff);
   if(lambdaA===null||lambdaB===null) return;
 
@@ -9405,6 +9628,14 @@ function runAnalysisGe(){
       });
     }
   }catch(e){ console.error('EA marchés', e); marketsCatalog=null; }
+  // EA LECTURE DU MATCH : classement des marchés par solidité (test de résistance ±15 % sur les buts attendus + concordance des tendances).
+  let readingRes=null;
+  try{
+    if(window.EAR && marketsCatalog){
+      const rd=EAR.read({markets:marketsCatalog.cat.markets, lamA:lambdaA, lamB:lambdaB, dataQualityPct, trend:(ev,p)=>{ try{ return TR?TR.describe(ev,p):null; }catch(e){ return null; } }});
+      readingRes={top:rd.top.map(x=>({id:x.id,family:x.family,label:x.label,p:+x.p.toFixed(4),pRobust:+x.pRobust.toFixed(4),grade:x.grade,fair:x.fair,minOdds:x.minOdds,trendTxt:x.trendTxt})), notes:rd.notes};
+    }
+  }catch(e){ console.error('EA lecture', e); readingRes=null; }
 
   const engines=[
     {name:'Forme récente', on: store.aSerie.length>0||store.bSerie.length>0},
@@ -9557,10 +9788,11 @@ function runAnalysisGe(){
     topScores: top2.map(s=>({label:`${s.a}-${s.b}`, p:s.p, eval:{type:'exactScore', a:s.a, b:s.b}})),
     bets: finalBets.map(b=>({label:b.label, p:b.p, cat:b.cat, eval:b.eval, valueMeta:b.valueMeta})),
     markets: marketsCatalog ? marketsCatalog.cat.markets.map(m=>({id:m.id, family:m.family, label:m.label, p:m.p, eval:m.eval, marketType:m.marketType, reliability:m.reliability, extreme:m.extreme, note:m.note, bookOdds:m.bookOdds, oddsSource:m.oddsSource})) : undefined,
+    reading: readingRes || undefined,
     marketsMeta: marketsCatalog ? {engine:EAM.VERSION, maxFitErr:+marketsCatalog.cat.fit.maxErr.toFixed(6), recalDropped:marketsCatalog.cat.fit.recalDropped, auditOk:marketsCatalog.audit.ok, auditIssues:marketsCatalog.audit.issues, unavailable:marketsCatalog.cat.unavailable} : undefined,
   });
   lastRecordGe = DB.football[0];
-  try{ renderContextNoteGe(ctxInfo, nameA, nameB); renderCatalogGe(lastRecordGe); renderValueGateGe(lastRecordGe); }catch(e){ console.error('EA catalogue', e); }
+  try{ renderContextNoteGe(ctxInfo, nameA, nameB, oppInfo); renderCatalogGe(lastRecordGe); renderReadingGe(lastRecordGe); renderValueGateGe(lastRecordGe); }catch(e){ console.error('EA catalogue', e); }
   const cpBtnGe = document.getElementById('communityPublishBtnGe');
   if(cpBtnGe){ cpBtnGe.disabled = false; document.getElementById('communityPublishStatusGe').textContent = ''; }
 }
@@ -10535,7 +10767,7 @@ document.addEventListener('change', (e)=>{
     outEl.style.color=b.value?.decision==='NO_BET'?'var(--red)':c&&c.clvProbPts>0?'var(--green)':b.value?.decision==='STRONG_VALUE'?'var(--gold)':'var(--green)';
   }
   persistDB(); renderBets(sport);
-  if(sport==='football'){ try{ renderValueGateGe(rec); }catch(err){ console.error(err); } }
+  if(sport==='football'){ try{ renderValueGateGe(rec); renderReadingGe(rec); }catch(err){ console.error(err); } }
 });
 
 function tierBadge(p){
@@ -10547,7 +10779,97 @@ function tierBadge(p){
   if(p>=0.60) return {label:'CONFIANT', color};
   return {label:'SPÉCULATIF', color};
 }
+
+/* ================================================================
+   EA MON SUIVI — journal de VOS paris réels (js/ea-journal.js). Stocké sur cet appareil (localStorage).
+   But : des chiffres vérifiables, par type de pari et par source (application / votre choix), avec honnêteté sur la taille de l'échantillon.
+================================================================= */
+const MYBETS_KEY = 'ea_mybets_v1';
+let MYBETS = [];
+function loadMyBets(){ try{ const a=JSON.parse(localStorage.getItem(MYBETS_KEY)||'[]'); MYBETS=Array.isArray(a)?a:[]; }catch(e){ MYBETS=[]; } }
+function persistMyBets(){ try{ localStorage.setItem(MYBETS_KEY, JSON.stringify(MYBETS)); }catch(e){} }
+loadMyBets();
+function jPct(x){ return x==null?'—':(x*100).toFixed(1)+' %'; }
+function jNum(x){ return x==null?'—':(Math.round(x*100)/100).toLocaleString('fr-FR'); }
+function jSummaryRow(label, m){
+  if(!m.n) return `<div style="padding:7px 0; border-bottom:1px dashed var(--line); font-size:11.5px; color:var(--text-faint);">${trEsc(label)} : aucun pari réglé</div>`;
+  const col = m.profit>0 ? 'var(--teal,#6EE7B7)' : m.profit<0 ? 'var(--red,#F2545B)' : 'var(--text-dim)';
+  return `<div style="padding:8px 0; border-bottom:1px dashed var(--line); font-size:11.5px;">
+    <div style="display:flex; justify-content:space-between; gap:8px;"><b>${trEsc(label)}</b><span style="color:${col}; font-weight:700;">${m.profit>0?'+':''}${jNum(m.profit)}</span></div>
+    <div style="color:var(--text-dim); margin-top:2px;">${m.n} pari${m.n>1?'s':''} réglé${m.n>1?'s':''} · ${m.wins} gagné${m.wins>1?'s':''} · réussite ${jPct(m.hitRate)} <span style="color:var(--text-faint);">(entre ${jPct(m.ci.lo)} et ${jPct(m.ci.hi)})</span></div>
+    <div style="color:var(--text-faint); margin-top:2px;">Cote moyenne ${jNum(m.avgOdds)} → il faut gagner ${jPct(m.breakEven)} du temps pour ne pas perdre · rendement ${m.roi==null?'—':(m.roi>=0?'+':'')+jPct(m.roi)}</div>
+    <div style="color:#ffb454; margin-top:2px; font-size:10.5px;">${m.label}</div></div>`;
+}
+function renderJournalPanel(){
+  const panel=document.getElementById('betsPanel'); if(!panel) return;
+  const all=MYBETS.slice();
+  const tot=EAJ.summarize(all), byType=EAJ.groupBy(all,'type'), bySrc=EAJ.groupBy(all,'source');
+  const chase=EAJ.chaseAlerts(all);
+  const startDay=new Date(); startDay.setHours(0,0,0,0);
+  const weekAgo=Date.now()-7*86400000;
+  const expDay=EAJ.exposure(all,startDay.getTime()), expWeek=EAJ.exposure(all,weekAgo);
+  const prog=Math.min(100,Math.round(tot.n/EAJ.MIN_BETS*100));
+  const typeOpts=EAJ.TYPES.map(t=>`<option value="${t[0]}">${t[1]}</option>`).join('');
+  const srcOpts=EAJ.SOURCES.map(t=>`<option value="${t[0]}">${t[1]}</option>`).join('');
+  const inp='style="width:100%; box-sizing:border-box;" class="odds-input-bet"';
+  let h=`<div class="glass" style="padding:12px 14px; margin-bottom:12px; font-size:11.5px; color:var(--text-dim); line-height:1.5;"><b>📒 Mon suivi réel</b> : notez chaque pari avec la <b>cote réelle</b> et la <b>mise réelle</b>, y compris ceux de l'application que vous ne jouez pas. C'est la seule façon de savoir ce qui marche vraiment pour vous. Aucune conclusion avant <b>${EAJ.MIN_BETS} paris réglés</b> : en dessous, la chance masque tout. Les données restent sur cet appareil.</div>`;
+  h+=`<div class="glass" style="padding:14px; margin-bottom:12px;"><div style="font-weight:700; font-size:13px; margin-bottom:8px;">Ajouter un pari</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      <div style="grid-column:1 / span 2;"><input id="jDesc" type="text" placeholder="Ex : Juventus–Rennes, plus de 1,5 but" ${inp}></div>
+      <div><select id="jType" class="match-type-select">${typeOpts}</select></div>
+      <div><select id="jSrc" class="match-type-select">${srcOpts}</select></div>
+      <div><input id="jOdds" type="number" step="0.01" min="1.01" placeholder="Cote réelle" ${inp}></div>
+      <div><input id="jStake" type="number" step="any" min="0" placeholder="Mise" ${inp}></div>
+    </div>
+    <button class="glow-btn sfx-confirm" data-j="add" style="margin-top:10px; width:100%;">Ajouter</button>
+    <div id="jMsg" style="font-size:10.5px; color:#ffb454; margin-top:6px;"></div></div>`;
+  h+=`<div class="glass" style="padding:14px; margin-bottom:12px;"><div style="font-weight:700; font-size:13px; margin-bottom:4px;">Bilan global</div>
+    <div style="height:6px; background:var(--line); border-radius:4px; margin:6px 0 8px;"><div style="height:6px; width:${prog}%; background:var(--gold); border-radius:4px;"></div></div>
+    <div style="font-size:10.5px; color:var(--text-faint); margin-bottom:6px;">${tot.n} / ${EAJ.MIN_BETS} paris réglés avant un premier bilan fiable · ${tot.pending} en cours</div>
+    ${jSummaryRow('Tous les paris',tot)}
+    <div style="font-size:10.5px; color:var(--text-faint); margin-top:8px;">Plus longue série de pertes : ${tot.maxLosingStreak} · Mise engagée aujourd'hui : ${jNum(expDay)} · sur 7 jours : ${jNum(expWeek)}</div></div>`;
+  if(chase.count>0) h+=`<div class="glass" style="padding:12px 14px; margin-bottom:12px; border:1px solid var(--red,#F2545B); font-size:11.5px; color:var(--text-dim);">⚠️ <b>Rattrapage détecté</b> : ${chase.count} fois, vous avez misé au moins 50 % de plus juste après une perte. C'est le chemin le plus rapide pour perdre plus. Gardez une mise constante et faites une pause après une perte.</div>`;
+  h+=`<div class="glass" style="padding:14px; margin-bottom:12px;"><div style="font-weight:700; font-size:13px; margin-bottom:4px;">Par type de pari</div>${EAJ.TYPES.map(t=>byType[t[0]]?jSummaryRow(t[1],byType[t[0]]):'').join('')||'<div style="font-size:11px; color:var(--text-faint);">Aucun pari encore.</div>'}</div>`;
+  h+=`<div class="glass" style="padding:14px; margin-bottom:12px;"><div style="font-weight:700; font-size:13px; margin-bottom:4px;">Application ou vous ?</div>${EAJ.SOURCES.map(t=>jSummaryRow(t[1],bySrc[t[0]]||EAJ.summarize([]))).join('')}</div>`;
+  const rows=all.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,40);
+  h+=`<div class="glass" style="padding:14px; margin-bottom:12px;"><div style="font-weight:700; font-size:13px; margin-bottom:6px;">Mes derniers paris</div>`+
+    (rows.length ? rows.map(b=>{
+      const pr=EAJ.profit(b); const st=b.result==='won'?'✓ gagné':b.result==='lost'?'✗ perdu':b.result==='void'?'↺ remboursé':'⏳ en cours';
+      const col=b.result==='won'?'var(--teal,#6EE7B7)':b.result==='lost'?'var(--red,#F2545B)':'var(--text-faint)';
+      return `<div style="padding:8px 0; border-bottom:1px dashed var(--line); font-size:11.5px;">
+        <div style="display:flex; justify-content:space-between; gap:8px;"><span>${trEsc(b.desc||'(sans description)')}</span><span style="color:${col}; font-weight:700;">${st}${pr!=null?' '+(pr>0?'+':'')+jNum(pr):''}</span></div>
+        <div style="color:var(--text-faint); font-size:10.5px;">${trEsc(EAJ.typeLabel(b.type))} · ${trEsc(EAJ.sourceLabel(b.source))} · cote ${jNum(b.odds)} · mise ${jNum(b.stake)} · ${new Date(b.ts).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})}</div>
+        <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">${!b.result?`<button class="journal-day-chip sfx-tap" data-j="won" data-id="${b.id}">Gagné</button><button class="journal-day-chip sfx-tap" data-j="lost" data-id="${b.id}">Perdu</button><button class="journal-day-chip sfx-tap" data-j="void" data-id="${b.id}">Remboursé</button>`:`<button class="journal-day-chip sfx-tap" data-j="reopen" data-id="${b.id}">Rouvrir</button>`}<button class="journal-day-chip sfx-tap" data-j="del" data-id="${b.id}">Supprimer</button></div></div>`; }).join('') : '<div style="font-size:11px; color:var(--text-faint);">Aucun pari noté pour le moment.</div>')+
+    `<button class="journal-day-chip sfx-tap" data-j="csv" style="margin-top:10px;">Exporter en CSV</button></div>`;
+  panel.innerHTML=h;
+}
+document.addEventListener('click',(e)=>{
+  const el=e.target && e.target.closest ? e.target.closest('[data-j]') : null; if(!el || subState.be!=='journal') return;
+  const act=el.dataset.j, id=el.dataset.id;
+  if(act==='add'){
+    const desc=(document.getElementById('jDesc').value||'').trim(), type=document.getElementById('jType').value, source=document.getElementById('jSrc').value;
+    const odds=parseFloat(document.getElementById('jOdds').value), stake=parseFloat(document.getElementById('jStake').value);
+    const msg=document.getElementById('jMsg');
+    if(!desc){ msg.textContent='Décrivez le pari (match et marché).'; return; }
+    if(!(odds>1)){ msg.textContent='Saisissez la cote réelle (supérieure à 1).'; return; }
+    if(!(stake>0)){ msg.textContent='Saisissez la mise réelle (supérieure à 0).'; return; }
+    MYBETS.push({id:'b'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:Date.now(), desc, type, source, odds, stake, result:null});
+    persistMyBets(); renderJournalPanel(); return;
+  }
+  const b=MYBETS.find(x=>x.id===id);
+  if(act==='csv'){
+    const csv=EAJ.toCSV(MYBETS);
+    try{ const blob=new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='mon-suivi-paris.csv'; document.body.appendChild(a); a.click(); a.remove(); }catch(err){ console.error(err); }
+    return;
+  }
+  if(!b) return;
+  if(act==='won'||act==='lost'||act==='void') b.result=act;
+  else if(act==='reopen') b.result=null;
+  else if(act==='del') MYBETS=MYBETS.filter(x=>x.id!==id);
+  persistMyBets(); renderJournalPanel();
+});
 function renderBets(sport){
+  if(subState.be==='journal'){ renderJournalPanel(); return; }
   const isBasket = sport==='basketball';
   const group = isBasket ? 'bb' : 'be'; // mémoire de sous-onglet (best/safe/value/score/combos) gardée séparée par sport
   const panel = document.getElementById('betsPanel');

@@ -27,7 +27,7 @@ PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-mobile.js   # navigateur, 360/
 ```
 
 ## Déploiement
-Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v39`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
+Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v41`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
 
 ## Basketball V2
 Basket Analyse affiche maintenant le panneau « Analyse V2 — distribution unique » (voir CHANGELOG, EA-BK2). Tests : `node tests/run-bk2.js` ; navigateur : `PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-bk2.js`.
@@ -46,3 +46,9 @@ Dans Genèse, choisissez « Compétition européenne » : sous les matchs saisis
 
 ## Contexte du match pour tous les championnats
 Le bloc « Contexte du match » (enjeu et rotation par équipe) fonctionne désormais pour tous les matchs de football. Chaque situation d'enjeu a une gravité de 1 à 5 qui pondère son effet. Laissé vide : aucun effet.
+
+## Mon suivi (Bets › 📒 Mon suivi)
+Notez chaque pari avec la cote et la mise réelles, puis réglez-le. Le journal calcule votre bénéfice, votre rendement et votre taux de réussite par type de pari et selon que le pari vient de l'application ou de vous. Aucune conclusion avant 200 paris réglés.
+
+## Force des adversaires et Lecture du match
+Dans la saisie des séries, touchez un score pour noter l'adversaire : 🟢 faible, 🟡 moyen, 🔴 fort (⚪ = non noté, aucun effet). Après « Générer le verdict », le panneau « Lecture du match » classe les marchés par solidité et donne la cote minimale conseillée pour chacun. Il ne dit pas qu'un pari est gagnant.
