@@ -27,7 +27,7 @@ PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-mobile.js   # navigateur, 360/
 ```
 
 ## Déploiement
-Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v41`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
+Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v42`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
 
 ## Basketball V2
 Basket Analyse affiche maintenant le panneau « Analyse V2 — distribution unique » (voir CHANGELOG, EA-BK2). Tests : `node tests/run-bk2.js` ; navigateur : `PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-bk2.js`.
@@ -52,3 +52,6 @@ Notez chaque pari avec la cote et la mise réelles, puis réglez-le. Le journal 
 
 ## Force des adversaires et Lecture du match
 Dans la saisie des séries, touchez un score pour noter l'adversaire : 🟢 faible, 🟡 moyen, 🔴 fort (⚪ = non noté, aucun effet). Après « Générer le verdict », le panneau « Lecture du match » classe les marchés par solidité et donne la cote minimale conseillée pour chacun. Il ne dit pas qu'un pari est gagnant.
+
+## Stats dans la force des équipes
+xG, tirs cadrés et possession entrent désormais dans l'indice de force (xG le plus, possession très peu). Un xG saisi sans xGA adverse est maintenant utilisé. Sans aucune stat saisie, le calcul est inchangé.
