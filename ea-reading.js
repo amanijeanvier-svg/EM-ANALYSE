@@ -1,6 +1,7 @@
 /* ===== js/ea-reading.js — EA LECTURE DU MATCH + FORCE DES ADVERSAIRES =====
    1. FORCE DES ADVERSAIRES PAR MATCH : au lieu d'un pourcentage global impossible à estimer, on note chaque score de la série
       avec le niveau de l'adversaire (faible / moyen / fort). Les buts marqués et encaissés sont ajustés match par match (±15 % max).
+   1bis. STATS DANS LA FORCE : xG, tirs cadrés et possession entrent dans l'indice de force des équipes (statStrength).
    2. LECTURE DU MATCH : classe les marchés par SOLIDITÉ (et non par valeur) :
       probabilité du modèle, puis test de résistance (que devient-elle si les buts attendus se trompent de ±15 % ?),
       concordance avec les tendances de forme, qualité des données. Donne aussi la « cote minimale conseillée » :
@@ -59,6 +60,24 @@
     return worst;   // ≤ 0
   }
 
+
+  /* ---------- statistiques de match dans la FORCE des équipes ---------- */
+  // Indice de force issu des stats saisies (xG, tirs cadrés, possession) : de -1 (B nettement supérieure) à +1 (A nettement supérieure).
+  // xG pèse le plus (qualité des occasions), les tirs cadrés ensuite, la possession très peu (contrôle ≠ danger). Poids renormalisés sur ce qui est saisi.
+  // Rien n'est inventé : aucune stat saisie = indice 0 et used=false (comportement inchangé).
+  function statStrength(s) {
+    s = s || {}; var parts = [];
+    if (isNum(s.xgA) && isNum(s.xgaA) && isNum(s.xgB) && isNum(s.xgaB)) parts.push({ name: 'xG − xGA', idx: clamp(((s.xgA - s.xgaA) - (s.xgB - s.xgaB)) / 1.5, -1, 1), w: 0.6 });
+    else if (isNum(s.xgA) && isNum(s.xgB)) parts.push({ name: 'xG (attaque seule)', idx: clamp((s.xgA - s.xgB) / 1.5, -1, 1) * 0.7, w: 0.6 });
+    if (isNum(s.shotsA) && isNum(s.shotsB) && s.shotsA + s.shotsB > 0) parts.push({ name: 'tirs cadrés', idx: clamp((s.shotsA - s.shotsB) / (s.shotsA + s.shotsB) * 1.5, -1, 1), w: 0.3 });
+    if (isNum(s.possA) && isNum(s.possB)) parts.push({ name: 'possession', idx: clamp((s.possA - s.possB) / 40, -1, 1), w: 0.1 });
+    if (!parts.length) return { idx: 0, used: false, parts: [] };
+    // Normalisation plancher à 0,6 : un xG seul compte pleinement, des tirs seuls à moitié, la possession seule à 1/6 (elle ne devient jamais un signal fort par défaut).
+    var tw = Math.max(0.6, parts.reduce(function (a, p) { return a + p.w; }, 0));
+    var idx = parts.reduce(function (a, p) { return a + p.idx * p.w / tw; }, 0);
+    return { idx: clamp(idx, -1, 1), used: true, parts: parts };
+  }
+
   /* ---------- lecture ---------- */
   // o.markets : catalogue [{id,family,label,p,eval,reliability,extreme,bookOdds,oddsSource}]
   // o.lamA/lamB : buts attendus finaux ; o.trend(ev,p) → {pTrend,W,parts} ou null ; o.dataQualityPct
@@ -99,7 +118,7 @@
     return { top: top.slice(0, 6), all: items, notes: notes, version: VERSION };
   }
 
-  var api = { VERSION: VERSION, LEVELS: LEVELS, cycle: cycle, adjustPairs: adjustPairs, stress: stress, probEv: probEv, grid: grid, read: read };
+  var api = { VERSION: VERSION, statStrength: statStrength, LEVELS: LEVELS, cycle: cycle, adjustPairs: adjustPairs, stress: stress, probEv: probEv, grid: grid, read: read };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.EAR = api;
 })(typeof window !== 'undefined' ? window : globalThis);
