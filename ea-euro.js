@@ -3,7 +3,9 @@
    0. Fonctionne pour TOUS les matchs de football (championnat, coupe nationale, Europe).
    1. ROTATION probable (match important dans les jours qui suivent) — correction déclarative et plafonnée.
    2. ENJEU : 10 situations réelles (titre, maintien, derby, couperet, crise…) pondérées par leur GRAVITÉ (1 à 5) — correction déclarative et plafonnée.
-   3. POIDS des matchs de la compétition PAR ÉQUIPE, avec rétrécissement : peu de matchs saisis = faible poids.
+   3. POIDS des matchs de la compétition PAR ÉQUIPE, avec rétrécissement (plafond 55 %), et RECADRAGE des scores de championnat par
+      l'Elo, ou à défaut par le niveau du championnat (grand / bon / moyen / modeste) : une équipe en méforme dans un grand championnat
+      n'est pas aussi faible qu'une équipe en forme d'un championnat modeste.
    4. VERDICT « aucune valeur » : sortie claire quand rien ne dépasse l'incertitude du modèle (ou qu'aucune cote n'est saisie).
    Module pur (aucun DOM) : testable avec Node. Aucune donnée n'est inventée : un champ vide = aucun effet. */
 (function (root) {
@@ -52,10 +54,39 @@
     return { att: att, conc: conc, uncPts: r.unc + s.unc, notes: notes, active: att !== 1 || conc !== 1 };
   }
 
-  // Poids des matchs de la compétition dans les buts attendus d'UNE équipe : 70 % max, rétréci quand n est petit.
-  // n = nombre de matchs saisis pour cette équipe. 0 match = 0 % (jamais de poids emprunté à l'autre équipe).
-  // Pour deux équipes à n égal, c'est exactement l'ancienne formule combinée 0,70·m/(m+4) (m = 2n).
-  function euroWeight(n) { return isNum(n) && n > 0 ? 0.70 * n / (n + 2) : 0; }
+  // Poids des matchs de la compétition dans les buts attendus d'UNE équipe, avec rétrécissement : 55 % max, croissance lente.
+  // 1 match ≈ 14 % · 2 ≈ 22 % · 4 ≈ 31 % · 8 ≈ 40 %. Peu de matchs européens (souvent 2 à 4) contre beaucoup de matchs de championnat :
+  // le championnat reste la base, l'Elo / le niveau du championnat le recadrent. 0 match = 0 % (jamais de poids emprunté à l'autre équipe).
+  function euroWeight(n) { return isNum(n) && n > 0 ? 0.55 * n / (n + 3) : 0; }
+
+  /* ---------- NIVEAU DU CHAMPIONNAT → repère d'Elo, quand l'Elo réel n'est pas saisi ---------- */
+  // Valeurs d'ORIENTATION (hiérarchie générale des championnats européens), pas des Elo mesurés : elles servent uniquement à recadrer
+  // les scores de championnat quand l'Elo réel manque, avec une pondération réduite, et sont remplacées dès que l'Elo est saisi.
+  var LEAGUE_TIERS = {
+    '':   { base: null, label: 'Non précisé' },
+    'T1': { base: 1800, label: 'Grand championnat (Angleterre, Espagne, Allemagne, Italie, France)' },
+    'T2': { base: 1650, label: 'Bon championnat (Pays-Bas, Portugal, Belgique, Turquie, Écosse…)' },
+    'T3': { base: 1550, label: 'Championnat moyen (Autriche, Suisse, Grèce, Danemark, Tchéquie, Croatie, Serbie, Norvège…)' },
+    'T4': { base: 1450, label: 'Championnat modeste (Bulgarie, Israël, Chypre, Kazakhstan, Azerbaïdjan, Moldavie…)' }
+  };
+  var TIER_ORDER = ['', 'T1', 'T2', 'T3', 'T4'];
+  var ANCHOR_APPROX = 0.50;     // poids de l'ancrage Elo quand au moins un Elo vient du niveau du championnat (contre 0,70 à 0,80 avec Elo saisis)
+  // Repère d'Elo = base du championnat ± 120 selon le rang dans ce championnat (1er = +120, dernier = −120) si rang et nombre d'équipes sont saisis.
+  function tierElo(tier, rank, total) {
+    var t = LEAGUE_TIERS[tier || '']; if (!t || t.base == null) return null;
+    var adj = (isNum(rank) && isNum(total) && total >= 4 && rank >= 1 && rank <= total) ? 120 * (1 - 2 * (rank - 1) / (total - 1)) : 0;
+    return { elo: Math.round(t.base + adj), base: t.base, adj: Math.round(adj), approx: true };
+  }
+  // Elo saisi prioritaire ; sinon repère issu du niveau du championnat ; sinon rien (aucun recadrage inventé).
+  function resolveElo(o) {
+    o = o || {};
+    var mA = isNum(o.eloA) ? o.eloA : null, mB = isNum(o.eloB) ? o.eloB : null;
+    var tA = mA == null ? tierElo(o.tierA, o.rankA, o.totalTeams) : null, tB = mB == null ? tierElo(o.tierB, o.rankB, o.totalTeams) : null;
+    var eloA = mA != null ? mA : (tA ? tA.elo : null), eloB = mB != null ? mB : (tB ? tB.elo : null);
+    if (eloA == null || eloB == null) return { eloA: null, eloB: null, source: null, approx: false };
+    var aApprox = mA == null, bApprox = mB == null;
+    return { eloA: eloA, eloB: eloB, source: (!aApprox && !bApprox) ? 'saisi' : (aApprox && bApprox) ? 'niveau' : 'mixte', approx: aApprox || bApprox, tierInfoA: tA, tierInfoB: tB };
+  }
 
   // Verdict global « valeur » à partir de paris portant une cote bookmaker SAISIE.
   // items : [{label, p, odds, decision, ev, edgePts, uncertaintyHalf}] (decision = sortie du moteur de valeur : NO_BET/VALUE/STRONG_VALUE/BET)
@@ -78,7 +109,7 @@
     return { state: 'VALEUR_POSSIBLE', title: 'Valeur possible à vérifier', lines: cands.map(function (x) { return x.label + ' @' + x.odds + ' : ' + x.decision + (isNum(x.ev) ? ' · EV ' + (x.ev * 100).toFixed(1) + ' %' : ''); }), candidates: cands };
   }
 
-  var api = { VERSION: VERSION, ROTATION: ROTATION, STAKE: STAKE, STAKE_ORDER: STAKE_ORDER, stakeOptionLabel: stakeOptionLabel, CAP: CAP, contextMult: contextMult, euroWeight: euroWeight, valueGate: valueGate };
+  var api = { LEAGUE_TIERS: LEAGUE_TIERS, TIER_ORDER: TIER_ORDER, ANCHOR_APPROX: ANCHOR_APPROX, tierElo: tierElo, resolveElo: resolveElo, VERSION: VERSION, ROTATION: ROTATION, STAKE: STAKE, STAKE_ORDER: STAKE_ORDER, stakeOptionLabel: stakeOptionLabel, CAP: CAP, contextMult: contextMult, euroWeight: euroWeight, valueGate: valueGate };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.EAE = api;
   if (root.EA) root.EA.euro = api;
