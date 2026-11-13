@@ -1,3 +1,33 @@
+## EA BASKET — correction complète du moteur de projection (cache v44)
+**Symptômes** (captures de l'utilisateur) : Lakers 149,3 – Hawks 80,1, marge +69, victoire à 99 %, handicaps de −2,5 à −20,5 tous à 99 %, « gagne par 21+ » comme pari principal.
+**Audit complet du moteur basket (saisie → projection → simulation → paris) ; causes trouvées et reproduites avec des données NBA réalistes**
+1. **Ajustement multiplicatif hérité du football** (`totalAdj`, plafond dynamique de ± 18 à 60 % des points) : en basket 1 % de correction ≈ 2,3 pts de marge. Avec classement + Elo + face-à-face le moteur sortait **170 – 60** (marge +110) pour deux équipes réalistes ; sans aucune info supplémentaire, +27 au lieu de +5.
+2. **Double comptage** : forme, face-à-face et défense adverse étaient déjà dans les points de base, puis recomptés dans l'ajustement ; le module de distribution (BK2) réinjectait encore l'écart de force une 2e fois.
+3. **Indices saturés** : `computeGapComponents` (face-à-face, défense) est calibré pour des buts (0-3) : appliqué à des points (≈ 110) il valait ±1 pour la moindre différence de 6 pts.
+4. **Aucune régression vers la moyenne** au-delà de 3 matchs : 6 matchs étaient pris à 100 %.
+5. **Pénalités trop fortes** : blessure grave ×0,85 (−17 pts), fatigue forte ×0,90, doute sur l'effectif ×0,88.
+6. **Équipe sans données** : 100 pts « neutres » arbitraires face à une équipe à 115 = faux écart de +15.
+7. **Bruit gonflé** : `teamMissingExtra` +14 par équipe faisait monter l'écart-type de marge à 17-30 pts (réel ≈ 12-13) et aplatissait les probabilités.
+8. **« Gagne par 21+ »** (tranche ouverte regroupant toute la queue) battait toujours les tranches fermées de 5 pts et devenait le « meilleur pari » même avec +5 de marge ; **« Score ≈ 110-110 »** ressemblait à un nul.
+**Corrigé**
+- Nouveau module pur `js/ea-basket.js` (embarqué dans `index.html`, bloc `ea-basket`) : projection de la **marge en points** : marge observée (base inchangée) → **rétrécie** par fiabilité n/(n+7) vers un a priori classement/Elo (0 si absent) → avantage du terrain +2 pts (0 sur terrain neutre / finale) → enjeu ± 1 pt → **plafond doux ≈ 25 pts** ; le total de points est conservé. Plus de double comptage (forme/H2H/défense restent dans la base ; l'écart de force n'est plus réinjecté dans BK2, qui ne rétrécit plus une 2e fois).
+- Pénalités basket : blessure ×0,99 / 0,97 / 0,94, fatigue ×0,995 / 0,985 / 0,97, doute ×0,995 / 0,98 / 0,96 ; plafond doux final après tous les ajustements.
+- Équipe sans données : valeur d'un match typique de l'autre équipe. Écart-type de marge ≈ 13-14 avec peu de données.
+- Tranche « 21+ » exclue de la sélection du meilleur pari de marge ; libellé « Score serré ≈ 110 chacun » (aucun nul en basket).
+**Résultat sur le cas de test** (équipe ≈ +5 net contre ≈ −3) : avant 127-100 (+27), 139-89 avec H2H, 170-60 avec tout ; après 116-111 (+5, victoire 65 %), 119-108 (+11, 82 %) avec classement + Elo + H2H. Échelle de handicap strictement décroissante (87 / 81 / 69 / 54 / 39 %).
+- Coefficients PROVISOIRES (fiabilité, a priori, avantage du terrain, plafond), à valider sur historique de matchs vérifiés.
+- Tests : `node tests/run-basket.js` (20 tests) et cas basket de `tests/browser-regression.py` (10 cas).
+
+## EA NIVEAU DU CHAMPIONNAT — recadrage des scores de championnat en Europe (cache v43)
+**Constat mesuré** (même match, scores de championnat réels, sans Elo saisi) : une équipe d'un grand championnat en méforme (ex. 0,6 but/match marqué, 1,6 encaissé) sortait **5 fois plus faible** (rapport de buts attendus 0,21) qu'une équipe d'un championnat modeste en forme, car les scores de championnat étaient pris tels quels. Avec les deux Elo saisis à la main le rapport s'inversait (≈ 4) : le recadrage existait, mais UNIQUEMENT si les deux Elo étaient tapés à la main. Les scores européens, eux, changeaient peu le résultat (≈ 20 % sur un cas test).
+**Corrigé / ajouté**
+- **Niveau du championnat** (nouveau champ par équipe dans le bloc « Compétition européenne ») : grand championnat / bon / moyen / modeste. À défaut d'Elo saisi, un **repère d'Elo** (1800 / 1650 / 1550 / 1450, ± 120 selon le rang dans le championnat si le rang et le nombre d'équipes sont saisis) recadre les scores de championnat : une équipe en méforme d'un grand championnat n'est plus jugée plus faible qu'une équipe en forme d'un championnat modeste. Même cas test : rapport 0,21 → 1,8 ; 0,7 si l'équipe est 18e sur 20 face au 1er d'un championnat modeste.
+- Les **Elo saisis restent prioritaires** (pondération 70-80 %) ; le repère de niveau est **approximatif** et pondéré à 50 % seulement, avec un indice de force réduit (×0,6), signalé dans le commentaire (« Recadrage par le niveau du championnat »). Un seul côté renseigné : aucun recadrage (rien d'inventé).
+- **Poids des matchs européens plus prudent** : 0,55·n/(n+3) au lieu de 0,70·n/(n+2) (1 match ≈ 14 %, 2 ≈ 22 %, 4 ≈ 31 %, plafond 55 %). Le championnat reste la base ; l'Elo ou le niveau le recadrent.
+- **Tendances** : la forme de championnat compte ×0,8 (au lieu de ×0,6) pour le résultat quand un recadrage (Elo ou niveau) existe pour les deux équipes ; ×0,9 pour le style (buts, BTTS) comme avant.
+- Valeurs de niveau = orientation générale de la hiérarchie des championnats européens, **non mesurées ni calibrées** : à remplacer par l'Elo réel dès que possible.
+- Tests : `node tests/run-euro.js` (26 tests) et `tests/browser-regression.py` (cas Europe ajoutés).
+
 ## EA STATS DANS LA FORCE — xG, tirs cadrés, possession (cache v42)
 **Constat (code réel + test exécuté)** : l'indice de force des équipes (`computeStrengthGap`, qui pilote le 1X2 et l'ajustement des buts) n'utilisait ni xG, ni tirs cadrés, ni possession. Le xG n'entrait que dans les buts attendus et UNIQUEMENT si l'xGA de l'adversaire était aussi saisi : un xG saisi seul était ignoré, tout en comptant comme « donnée avancée présente » dans la qualité des données, et il bloquait même le repli par les tirs cadrés. La possession n'était jamais utilisée (simple phrase de commentaire).
 **Corrigé**
