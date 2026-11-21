@@ -84,7 +84,7 @@
   function read(o) {
     var STRESS = 0.15, items = [];
     (o.markets || []).forEach(function (m) {
-      if (m.reliability !== 'model' || !isNum(m.p) || m.p < 0.5) return;           // jamais les marchés statistiques non fiables, ni les côtés improbables
+      if (m.reliability !== 'model' || !isNum(m.p) || m.p < (isNum(o.minP) ? o.minP : 0.25)) return;   // jamais les marchés statistiques non fiables, ni les paris trop improbables (< 25 %) ; le profil de risque choisit ensuite dans cette liste
       if (m.family === '1X2' && m.eval && m.eval.outcome === 'draw') return;       // le nul seul n'est jamais « solide »
       var worst = stress(m.eval, o.lamA, o.lamB, STRESS);
       var pRobust = clamp(m.p + (worst == null ? 0 : worst), 0, 1);
