@@ -899,6 +899,11 @@ input{font-family:inherit;}
             </div>
           </div>
 
+          <div class="field-group" style="margin-bottom:14px;">
+            <div class="field-label">🎚️ Profil de paris <span class="tag">VOUS DÉCIDEZ</span></div>
+            <div id="riskProfileRow" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+            <p class="cup-hint" id="riskProfileHint" style="margin:8px 0 0;"></p>
+          </div>
           <div class="actions">
             <button class="btn-primary sfx-confirm" id="generateBtn">Générer le verdict</button>
             <button class="btn-secondary sfx-tap" id="resetBtn">Réinitialiser le dossier</button>
@@ -4967,7 +4972,7 @@ try {
   function read(o) {
     var STRESS = 0.15, items = [];
     (o.markets || []).forEach(function (m) {
-      if (m.reliability !== 'model' || !isNum(m.p) || m.p < 0.5) return;           // jamais les marchés statistiques non fiables, ni les côtés improbables
+      if (m.reliability !== 'model' || !isNum(m.p) || m.p < (isNum(o.minP) ? o.minP : 0.25)) return;   // jamais les marchés statistiques non fiables, ni les paris trop improbables (< 25 %) ; le profil de risque choisit ensuite dans cette liste
       if (m.family === '1X2' && m.eval && m.eval.outcome === 'draw') return;       // le nul seul n'est jamais « solide »
       var worst = stress(m.eval, o.lamA, o.lamB, STRESS);
       var pRobust = clamp(m.p + (worst == null ? 0 : worst), 0, 1);
@@ -5084,6 +5089,163 @@ try {
   var api = { VERSION: VERSION, CFG: CFG, project: project, capFinal: capFinal, reliability: reliability, classementPrior: classementPrior, eloPrior: eloPrior, softCap: softCap, neutralPoints: neutralPoints };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.EAB = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script id="ea-profile">
+/* ===== js/ea-profile.js — EA PROFIL DE RISQUE =====
+   L'application ne décide plus à votre place d'être prudente. VOUS choisissez le profil ; EA donne alors, pour chaque marché, la ligne
+   qui correspond à ce profil — au lieu de toujours choisir la ligne la plus probable (donc la plus éloignée de ce que le match annonce :
+   « moins de 5,5 buts » pour un match à 4,2 buts attendus ; doubles chances à cote 1,18).
+   Profil = fourchette de probabilité du MODÈLE (la cote juste = 1 / p est indicative, jamais une cote bookmaker).
+   Audace ne veut pas dire meilleure précision : à probabilité plus basse, on perd plus souvent. Seul le journal « Mon suivi » dit ce qui rapporte.
+   Module pur (aucun DOM) : testable avec Node. */
+(function (root) {
+  'use strict';
+  var VERSION = 'EA-PROFILE-1.0';
+  var PROFILES = {
+    prudent:        { label: 'Prudent',        icon: '🛡️', lo: 0.78, hi: 0.95, center: 0.85, fair: 'cote juste ≈ 1,05 à 1,30' },
+    equilibre:      { label: 'Équilibré',      icon: '⚖️', lo: 0.62, hi: 0.78, center: 0.70, fair: 'cote juste ≈ 1,30 à 1,60' },
+    audacieux:      { label: 'Audacieux',      icon: '🔥', lo: 0.48, hi: 0.62, center: 0.55, fair: 'cote juste ≈ 1,60 à 2,10' },
+    tres_audacieux: { label: 'Très audacieux', icon: '🚀', lo: 0.30, hi: 0.48, center: 0.40, fair: 'cote juste ≈ 2,10 à 3,30' }
+  };
+  var ORDER = ['prudent', 'equilibre', 'audacieux', 'tres_audacieux'];
+  var DEFAULT = 'audacieux';
+  var DIRECTION_BONUS = 0.03;   // nudge de cohérence de direction (3 points de probabilité)
+  var BOOK_MARGIN = 0.94;   // marge type d'un bookmaker (≈ 6 %) : sert UNIQUEMENT aux cotes estimées, toujours signalées comme telles
+
+  function isNum(x) { return typeof x === 'number' && isFinite(x); }
+  function norm(profile) { return PROFILES[profile] ? profile : DEFAULT; }
+
+  // Choisit, parmi des candidats {p,...}, celui dont la probabilité est dans la fourchette du profil et la plus proche de son centre.
+  // Aucun candidat dans la fourchette : le plus proche du centre (jamais « le plus probable » par défaut).
+  // bonus(c) (optionnel) : nombre ≥ 0 retiré à la distance d'un candidat pour départager des paris de probabilité presque égale en faveur de
+  // celui qui va dans le SENS du match (ex. plus de buts pour un match à 4,2 buts attendus) : cohérence avec ce que l'analyse annonce.
+  function pick(cands, profile, getP, bonus) {
+    var P = PROFILES[norm(profile)], g = getP || function (c) { return c.p; };
+    var list = (cands || []).filter(function (c) { return isNum(g(c)); });
+    if (!list.length) return null;
+    var dist = function (c) { return Math.abs(g(c) - P.center) - (bonus ? (bonus(c) || 0) : 0); };
+    var inBand = list.filter(function (c) { return g(c) >= P.lo && g(c) <= P.hi; });
+    var pool = inBand.length ? inBand : list;
+    return pool.slice().sort(function (a, b) { return dist(a) - dist(b); })[0];
+  }
+  // Cohérence de direction OBLIGATOIRE : si des candidats vont dans le sens du match (preferFn), on choisit parmi eux ; sinon parmi tous.
+  // Ex. match à 4,2 buts attendus : seulement des « plus de » ; l'application ne propose plus « moins de 5,5 » ni « moins de 3,5 » pour un match ouvert.
+  function pickAligned(cands, profile, preferFn) {
+    if (!preferFn) return pick(cands, profile);
+    var aligned = (cands || []).filter(preferFn);
+    return pick(aligned.length ? aligned : cands, profile);
+  }
+  // Sens du match d'après les buts attendus : « over » (ouvert), « under » (fermé) ou null (équilibré : aucune préférence).
+  function direction(mu) { return !isNum(mu) ? null : mu >= 2.9 ? 'over' : mu <= 2.5 ? 'under' : null; }
+  function bttsDirection(mu) { return !isNum(mu) ? null : mu >= 2.9 ? 'yes' : mu <= 2.3 ? 'no' : null; }
+  // Classe les candidats par proximité au centre du profil (les plus « dans l'esprit » du profil d'abord).
+  function rank(cands, profile, getP) {
+    var P = PROFILES[norm(profile)], g = getP || function (c) { return c.p; };
+    return (cands || []).filter(function (c) { return isNum(g(c)); }).sort(function (a, b) { return Math.abs(g(a) - P.center) - Math.abs(g(b) - P.center); });
+  }
+  function inBand(p, profile) { var P = PROFILES[norm(profile)]; return isNum(p) && p >= P.lo && p <= P.hi; }
+
+  /* ---------- coupons par cote cible ---------- */
+  // La cote d'une jambe : cote bookmaker saisie, sinon cote ESTIMÉE = marge type / probabilité (signalée « estimée »).
+  function legOdds(l) {
+    if (isNum(l.cote) && l.cote > 1 && l.oddsSource === 'bookmaker') return { odds: l.cote, estimated: false };
+    return { odds: Math.max(1.01, BOOK_MARGIN / l.p), estimated: true };
+  }
+  /* perMatch : [{matchKey, options:[{p, label, ...}]}] ; target : cote totale visée (2, 3, 5, 10…).
+     Cherche les coupons de 2 à maxLegs jambes (UNE par match, au moins 2 matchs) dont la cote totale tombe dans [target×0,92 ; target×1,45]
+     et renvoie celui de plus forte probabilité conjointe, à égalité celui qui a le moins de jambes.
+     Principe : pour une même cote totale, MOINS de jambes plus audacieuses battent beaucoup de jambes prudentes, car chaque jambe
+     ajoute sa marge de bookmaker (6 %) et son risque d'erreur. */
+  function targetCombo(perMatch, target, opts) {
+    opts = opts || {};
+    var maxLegs = opts.maxLegs || 4, topN = opts.topN || 5, lo = target * 0.92, hi = target * 1.45, best = null;
+    var matches = (perMatch || []).map(function (m) {
+      var opt = (m.options || []).filter(function (o) { return isNum(o.p) && o.p > 0.02 && o.p < 0.96; }).map(function (o) { var lo2 = legOdds(o); return Object.assign({}, o, { _odds: lo2.odds, _est: lo2.estimated, matchKey: m.matchKey }); });
+      // on garde, par match, les options les plus utiles pour une cote cible : un éventail de probabilités
+      opt.sort(function (a, b) { return b.p - a.p; });
+      var keep = [], step = Math.max(1, Math.floor(opt.length / topN));
+      for (var i = 0; i < opt.length && keep.length < topN; i += step) keep.push(opt[i]);
+      return { matchKey: m.matchKey, options: keep };
+    }).filter(function (m) { return m.options.length; });
+    if (matches.length < 2) return null;
+    function rec(startIdx, chosen, odds, p) {
+      if (chosen.length >= 2 && odds >= lo && odds <= hi) {
+        if (!best || p > best.joint + 1e-12 || (Math.abs(p - best.joint) <= 1e-12 && chosen.length < best.legs.length)) best = { legs: chosen.slice(), odds: odds, joint: p };
+      }
+      if (chosen.length >= maxLegs || odds > hi) return;
+      for (var i = startIdx; i < matches.length; i++) {
+        for (var j = 0; j < matches[i].options.length; j++) {
+          var o = matches[i].options[j]; chosen.push(o);
+          rec(i + 1, chosen, odds * o._odds, p * o.p);
+          chosen.pop();
+        }
+      }
+    }
+    rec(0, [], 1, 1);
+    if (!best) return null;
+    best.estimated = best.legs.some(function (l) { return l._est; });
+    best.target = target;
+    best.ev = best.joint * best.odds - 1;      // espérance par unité misée si les probabilités du modèle sont justes ET si les cotes sont celles affichées
+    return best;
+  }
+
+  var api = { pickAligned: pickAligned, direction: direction, bttsDirection: bttsDirection, VERSION: VERSION, PROFILES: PROFILES, ORDER: ORDER, DEFAULT: DEFAULT, BOOK_MARGIN: BOOK_MARGIN, DIRECTION_BONUS: DIRECTION_BONUS, norm: norm, pick: pick, rank: rank, inBand: inBand, legOdds: legOdds, targetCombo: targetCombo };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.EAP = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script id="ea-maturity">
+/* ===== js/ea-maturity.js — EA MATURITÉ (jauges BDEEA) =====
+   Les anciennes jauges mesuraient surtout le VOLUME et le TAUX DE RÉUSSITE : or le taux de réussite monte tout seul quand on joue des paris
+   très probables à cote 1,18 (sans rapporter d'argent). Les mesures ci-dessous évaluent à la place :
+   - la QUALITÉ DES PROBABILITÉS (score de Brier comparé au hasard « climatologique ») : les % annoncés étaient-ils honnêtes ?
+   - la CALIBRATION DES COMBINÉS : probabilité annoncée du coupon contre réussite réelle ;
+   - le RENDEMENT RÉEL (journal « Mon suivi » : cotes et mises réelles) ;
+   Aucune valeur illustrative : sans assez de données, la mesure vaut « neutre » (50 %) et le dit. Module pur : testable avec Node. */
+(function (root) {
+  'use strict';
+  var VERSION = 'EA-MATURITY-1.0';
+  function isNum(x) { return typeof x === 'number' && isFinite(x); }
+  function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+  // evals : [{p, hit}] avec hit true/false (null ignoré)
+  function brierSkill(evals) {
+    var v = (evals || []).filter(function (e) { return e && isNum(e.p) && (e.hit === true || e.hit === false); });
+    var n = v.length; if (n < 10) return { skill: null, n: n };
+    var br = v.reduce(function (s, e) { var h = e.hit ? 1 : 0; return s + (e.p - h) * (e.p - h); }, 0) / n;
+    var base = v.reduce(function (s, e) { return s + (e.hit ? 1 : 0); }, 0) / n, climo = base * (1 - base);
+    if (climo < 1e-9) return { skill: null, n: n };
+    return { skill: 1 - br / climo, brier: br, climo: climo, baseRate: base, n: n };   // > 0 : meilleur que le hasard ; 0 : équivalent ; < 0 : pire
+  }
+  function skillScore(skill) { return skill == null ? 50 : clamp(50 + skill * 200, 0, 100); }
+  // Tendance de qualité : compare la 2e moitié (récente) à la 1re. evals triées par temps.
+  function skillTrend(evals) {
+    var v = (evals || []).filter(function (e) { return e && isNum(e.p) && (e.hit === true || e.hit === false); });
+    if (v.length < 30) return { score: 50, label: 'pas encore assez de recul', delta: null };
+    var mid = Math.floor(v.length / 2), a = brierSkill(v.slice(0, mid)).skill, b = brierSkill(v.slice(mid)).skill;
+    if (a == null || b == null) return { score: 50, label: 'pas encore assez de recul', delta: null };
+    var d = b - a;
+    return { score: clamp(50 + d * 200, 0, 100), label: d > 0.03 ? 'les probabilités s\'améliorent' : d < -0.03 ? 'les probabilités se dégradent : à surveiller' : 'stable', delta: d };
+  }
+  // combos : [{p (probabilité annoncée), won (bool)}] ; score = 100 − écart entre probabilité moyenne annoncée et réussite réelle (×400).
+  function comboCalibration(combos) {
+    var v = (combos || []).filter(function (c) { return c && isNum(c.p) && (c.won === true || c.won === false); });
+    if (v.length < 10) return { score: 50, n: v.length, gap: null };
+    var pred = v.reduce(function (s, c) { return s + c.p; }, 0) / v.length, real = v.filter(function (c) { return c.won; }).length / v.length;
+    return { score: clamp(100 - Math.abs(pred - real) * 400, 0, 100), n: v.length, gap: pred - real, predicted: pred, real: real };
+  }
+  // bets : [{stake, odds, result}] du journal réel.
+  function realRoi(bets) {
+    var s = (bets || []).filter(function (b) { return (b.result === 'won' || b.result === 'lost') && isNum(b.stake) && b.stake > 0 && isNum(b.odds) && b.odds > 1; });
+    if (s.length < 30) return { score: 50, n: s.length, roi: null };
+    var staked = s.reduce(function (a, b) { return a + b.stake; }, 0), pl = s.reduce(function (a, b) { return a + (b.result === 'won' ? b.stake * (b.odds - 1) : -b.stake); }, 0), roi = pl / staked;
+    return { score: clamp(50 + roi * 200, 0, 100), n: s.length, roi: roi };
+  }
+  var api = { VERSION: VERSION, brierSkill: brierSkill, skillScore: skillScore, skillTrend: skillTrend, comboCalibration: comboCalibration, realRoi: realRoi };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.EAMAT = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -6787,6 +6949,34 @@ function buildArchivedCombos(sport, dayKey){
   return combos;
 }
 const COMBO_ODDS_TXT = {bookmaker:'cotes bookmaker saisies', mixte:'mélange de cotes bookmaker saisies et de cotes justes du modèle', modele:'cote juste théorique du modèle (1/probabilité) — PAS une cote bookmaker'};
+/* ================================================================
+   EA COUPONS PAR COTE CIBLE (2 / 3 / 5 / 10) — comme on parie vraiment : on vise une cote, EA cherche le coupon de plus forte probabilité.
+   Pour une même cote totale, MOINS de jambes plus audacieuses battent beaucoup de jambes prudentes (chaque jambe ajoute la marge du
+   bookmaker, ≈ 6 %, et son risque d'erreur). Cotes estimées (marge type 6 %) tant que la vraie cote n'est pas saisie : toujours signalées.
+================================================================= */
+function buildTargetCombos(sport){
+  if(!window.EAP || !window.EAM) return [];
+  const today=todayISO(), seen={}, list=[];
+  (DB[sport]||[]).filter(r=>dayKey(r.timestamp)===today).sort((x,y)=>y.timestamp-x.timestamp).forEach(r=>{ const k=r.nameA+'|'+r.nameB; if(seen[k]) return; seen[k]=1; if(!(EAM.hasNoData && EAM.hasNoData(r))) list.push(r); });
+  const perMatch=list.map(r=>({matchKey:r.id, nameA:r.nameA, nameB:r.nameB, options: EAM.poolFromRecord(r,{marketType:marketTypeFromEval}).filter(o=>o.reliability==='model' && o.p>=0.25 && o.p<=0.93)}));
+  const out=[];
+  [2,3,5,10].forEach(T=>{ const c=EAP.targetCombo(perMatch,T,{maxLegs:T>=10?4:3}); if(c) out.push({target:T, ...c}); });
+  return out;
+}
+function renderTargetCombosHtml(sport){
+  let tc=[]; try{ tc=buildTargetCombos(sport); }catch(e){ console.error('EA coupons cible',e); }
+  let h=`<div class="glass" style="padding:14px; margin:14px 0 12px;"><div style="font-weight:700; font-size:13px; margin-bottom:4px;">🎯 Coupons par cote cible</div>
+    <div style="font-size:10.5px; color:var(--text-faint); line-height:1.5; margin-bottom:8px;">Vous visez une cote, EA cherche le coupon <b>le plus probable</b> qui l'atteint (une jambe par match, au moins 2 matchs). Pour une même cote, <b>moins de jambes plus audacieuses</b> valent mieux que beaucoup de jambes prudentes : chaque jambe ajoute la marge du bookmaker (≈ 6 %). Cotes <b>estimées</b> tant que vous n'avez pas saisi les vraies. Aucun coupon n'est garanti.</div>`;
+  if(!tc.length) return h+`<div style="font-size:11px; color:#ffb454;">Pas assez de matchs analysés aujourd'hui (il en faut au moins 2) ou aucun marché dans la zone exigée. Rien n'est inventé.</div></div>`;
+  tc.forEach(c=>{
+    const ev=c.ev; const evTxt = c.estimated ? `<span style="color:var(--text-faint);">EV avec cotes estimées : ${(ev*100).toFixed(1)} % (la marge du bookmaker est déjà comptée)</span>` : `<span style="color:${ev>0?'var(--teal,#6EE7B7)':'#ffb454'};">EV avec vos cotes saisies : ${(ev*100).toFixed(1)} %</span>`;
+    h+=`<div style="padding:10px 0; border-top:1px dashed var(--line);">
+      <div style="display:flex; justify-content:space-between; font-size:12.5px;"><b>Cote visée ≈ ${c.target}</b><span>cote ${c.odds.toFixed(2)} ${c.estimated?'<span style="font-size:9.5px; color:var(--text-faint);">(estimée)</span>':''} · probabilité <b>${(c.joint*100).toFixed(1)} %</b></span></div>
+      ${c.legs.map(l=>`<div style="font-size:11px; color:var(--text-dim); margin-top:4px;">• ${trEsc(l.nameA)} – ${trEsc(l.nameB)} : <b>${trEsc(l.label)}</b> <span style="color:var(--text-faint);">${(l.p*100).toFixed(0)} % · ${l._est?'≈':'📊'}${l._odds.toFixed(2)}</span></div>`).join('')}
+      <div style="font-size:10.5px; margin-top:5px;">${evTxt}</div></div>`;
+  });
+  return h+`</div>`;
+}
 function renderPrivateComboCard(combo){
   const risk = RISK_LABELS[combo.riskLevel] || {label:combo.riskLevel, color:'var(--text)'};
   const status = STATUS_LABELS[combo.status] || STATUS_LABELS.en_cours;
@@ -6917,21 +7107,37 @@ function poissonDist(total,maxK){
   }
   rows.forEach(r=>r.p/=sum); return rows;
 }
+/* ================================================================
+   EA PROFIL DE RISQUE — c'est VOUS qui choisissez la prudence, pas l'application. Chaque marché (total de buts, BTTS, corners, tirs, cartons,
+   remplissages) donne la ligne qui correspond au profil choisi (js/ea-profile.js), au lieu de toujours choisir la ligne la plus probable —
+   donc la plus éloignée de ce que le match annonce (« moins de 5,5 buts » pour un match à 4,2 buts attendus).
+================================================================= */
+const RISK_KEY='ea_risk_profile_v1';
+let RISK_PROFILE = (()=>{ try{ return window.EAP ? EAP.norm(localStorage.getItem(RISK_KEY)) : 'audacieux'; }catch(e){ return 'audacieux'; } })();
+function riskPreferTotal(mu){ const d=window.EAP?EAP.direction(mu):null; return d ? (c=>c.eval && c.eval.op===d) : null; }
+function riskDirBonus(mu){ const pref = mu>=2.9 ? 'over' : mu<=2.5 ? 'under' : null; return c=> (pref && c.eval && c.eval.op===pref) ? EAP.DIRECTION_BONUS : 0; }
+function goalsLadder(matrix,TR){
+  const out=[];
+  [0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5].forEach(line=>{
+    const pOverM=sumWhereMatrix(matrix,(a,b)=>a+b>line);
+    [['over',pOverM,`Plus de ${line} buts`],['under',1-pOverM,`Moins de ${line} buts`]].forEach(([op,pm,label])=>{
+      const bl=TR?TR.blend(op+':'+line,pm):null, cand={label,p:bl?bl.p:pm,eval:{type:'goalsLine',op,line}};
+      if(bl){ cand.pModel=pm; cand.trend=bl.pTrend==null?null:TR.slim({r:bl.pTrend,W:bl.W,parts:bl.parts},pm); }
+      out.push(cand); });
+  });
+  return out;
+}
 function pickTotalLineMarket(total,minLine,unitLabel){
-  const dist=poissonDist(total); const baseLine=Math.max(minLine,Math.floor(total)-0.5); const lineOptions=[baseLine,baseLine+1,baseLine+2];
-  let best=null;
-  for(const line of lineOptions){ const pOver=dist.filter(r=>r.k>line).reduce((s,r)=>s+r.p,0); const pUnder=1-pOver;
-    const cand=pOver>=pUnder ? {label:`Plus de ${line} ${unitLabel}`,p:pOver,eval:{type:'goalsLine',op:'over',line}} : {label:`Moins de ${line} ${unitLabel}`,p:pUnder,eval:{type:'goalsLine',op:'under',line}};
-    if(!best||cand.p>best.p) best=cand; }
-  return best;
+  const dist=poissonDist(total); const base=Math.floor(total)-0.5; const cands=[];
+  for(let k=-3;k<=3;k++){ const line=base+k; if(line<minLine) continue;
+    const pOver=dist.filter(r=>r.k>line).reduce((s,r)=>s+r.p,0);
+    cands.push({label:`Plus de ${line} ${unitLabel}`,p:pOver,eval:{type:'goalsLine',op:'over',line}});
+    cands.push({label:`Moins de ${line} ${unitLabel}`,p:1-pOver,eval:{type:'goalsLine',op:'under',line}}); }
+  if(!cands.length){ const line=Math.max(minLine,Math.floor(total)-0.5); const pOver=dist.filter(r=>r.k>line).reduce((s,r)=>s+r.p,0); return pOver>=0.5?{label:`Plus de ${line} ${unitLabel}`,p:pOver,eval:{type:'goalsLine',op:'over',line}}:{label:`Moins de ${line} ${unitLabel}`,p:1-pOver,eval:{type:'goalsLine',op:'under',line}}; }
+  return window.EAP ? EAP.pick(cands,RISK_PROFILE) : cands.sort((x,y)=>y.p-x.p)[0];
 }
 function pickGoalsLineMarket(lambdaSum,matrix){
-  const baseLine=Math.max(0.5,Math.floor(lambdaSum)-0.5); const lineOptions=[baseLine,baseLine+1,baseLine+2];
-  let best=null;
-  for(const line of lineOptions){ const pOver=sumWhereMatrix(matrix,(a,b)=>a+b>line); const pUnder=1-pOver;
-    const cand=pOver>=pUnder ? {label:`Plus de ${line} buts`,p:pOver,eval:{type:'goalsLine',op:'over',line}} : {label:`Moins de ${line} buts`,p:pUnder,eval:{type:'goalsLine',op:'under',line}};
-    if(!best||cand.p>best.p) best=cand; }
-  return best;
+  return window.EAP ? EAP.pickAligned(goalsLadder(matrix,null),RISK_PROFILE,riskPreferTotal(lambdaSum)) : goalsLadder(matrix,null).sort((x,y)=>y.p-x.p)[0];
 }
 
 /* -- indices contextuels génériques (réutilisés football + basketball) -- */
@@ -9297,14 +9503,7 @@ function computeTrendLayer(nameA,nameB){
 // goals line : même 3 lignes candidates que pickGoalsLineMarket, mais avec la probabilité mélangée aux tendances
 function pickGoalsLineMarketTR(lambdaSum,matrix,TR){
   if(!TR) return pickGoalsLineMarket(lambdaSum,matrix);
-  const baseLine=Math.max(0.5,Math.floor(lambdaSum)-0.5); let best=null;
-  for(const line of [baseLine,baseLine+1,baseLine+2]){
-    const pOverM=sumWhereMatrix(matrix,(a,b)=>a+b>line);
-    [['over',pOverM,`Plus de ${line} buts`],['under',1-pOverM,`Moins de ${line} buts`]].forEach(([op,pm,label])=>{
-      const bl=TR.blend(op+':'+line,pm), cand={label,p:bl.p,eval:{type:'goalsLine',op,line},pModel:pm,trend:bl.pTrend==null?null:TR.slim({r:bl.pTrend,W:bl.W,parts:bl.parts},pm)};
-      if(!best||cand.p>best.p) best=cand; });
-  }
-  return best;
+  return window.EAP ? EAP.pickAligned(goalsLadder(matrix,TR),RISK_PROFILE,riskPreferTotal(lambdaSum)) : goalsLadder(matrix,TR).sort((x,y)=>y.p-x.p)[0];
 }
 function trendBetLine(b){
   if(b.pModel==null || !b.trend) return '';
@@ -9333,6 +9532,8 @@ function renderTrendsPanel(TR,nameA,nameB){
 function pickResultMarket(pHome,pDraw,pAway,nameA,nameB){
   const favIsA=pHome>=pAway, favP=Math.max(pHome,pAway), dogP=Math.min(pHome,pAway);
   const favName=favIsA?nameA:nameB, gap=favP-dogP;
+  // Profils audacieux : la victoire sèche dès qu'un favori existe (au lieu de se replier sur une double chance à cote ≈ 1,2).
+  if(window.EAP && (RISK_PROFILE==='audacieux' || RISK_PROFILE==='tres_audacieux') && favP>=(RISK_PROFILE==='audacieux'?.42:.36) && gap>=.06) return {label:`Victoire ${favName}`, p:favP, cat:'résultat', eval:{type:'result1x2', outcome:favIsA?'A':'B'}};
   if(favP>=.48 && gap>=.15) return {label:`Victoire ${favName}`, p:favP, cat:'résultat', eval:{type:'result1x2', outcome:favIsA?'A':'B'}};
   if(pDraw<.22 && gap<.08) return {label:`Double chance ${nameA} / ${nameB}`, p:pHome+pAway, cat:'résultat', eval:{type:'resultDC', outcomes:['A','B']}};
   return {label:`Double chance ${favName} / nul`, p:favP+pDraw, cat:'résultat', eval:{type:'resultDC', outcomes:[favIsA?'A':'B','draw']}};
@@ -9588,27 +9789,58 @@ function renderContextNoteGe(ctx, nameA, nameB, opp){
   host.innerHTML=oppHtml+`<div style="border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:11.5px; color:var(--text-dim);"><b>⚖️ Contexte déclaré</b>${line(nameA,ctx.A)}${line(nameB,ctx.B)}<div style="margin-top:6px; font-size:10.5px; color:var(--text-faint);">Corrections pondérées par la gravité et plafonnées ; l'incertitude des probabilités est élargie de ±${ctx.uncPts.toFixed(1)} pt. Réglages prudents, non calibrés sur historique.</div></div>`;
 }
 /* EA LECTURE DU MATCH — marchés classés par SOLIDITÉ (pas par valeur) : voir js/ea-reading.js. */
+function renderRiskProfileRows(){
+  if(!window.EAP) return;
+  const html = EAP.ORDER.map(k=>{ const P=EAP.PROFILES[k], on=(k===RISK_PROFILE);
+    return `<button type="button" data-rp="${k}" class="sfx-tap" style="padding:7px 10px; border-radius:18px; font-size:11.5px; cursor:pointer; border:1px solid ${on?'var(--gold,#d4af37)':'var(--line)'}; background:${on?'rgba(212,175,55,.18)':'transparent'}; color:${on?'var(--gold,#d4af37)':'var(--text-dim)'};">${P.icon} ${P.label}</button>`; }).join('');
+  ['riskProfileRow','riskProfileRowRead'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=html; });
+  const P=EAP.PROFILES[RISK_PROFILE], hint=document.getElementById('riskProfileHint');
+  if(hint) hint.innerHTML=`<b>${P.icon} ${P.label}</b> : EA donne pour chaque marché la ligne dont la probabilité du modèle est d'environ ${Math.round(P.lo*100)} à ${Math.round(P.hi*100)} % (${P.fair}). C'est vous qui décidez de la prudence, pas l'application. <b>Audace ne veut pas dire plus juste</b> : plus la probabilité est basse, plus on perd souvent. S'applique aux 5 paris retenus à la prochaine analyse ; la « Lecture du match » se met à jour tout de suite.`;
+}
+function setRiskProfile(k){
+  if(!window.EAP) return;
+  RISK_PROFILE=EAP.norm(k); try{ localStorage.setItem(RISK_KEY, RISK_PROFILE); }catch(e){}
+  renderRiskProfileRows();
+  try{ renderReadingGe(lastRecordGe); }catch(e){ console.error(e); }
+}
+document.addEventListener('click',(e)=>{ const b=e.target && e.target.closest ? e.target.closest('[data-rp]') : null; if(b) setRiskProfile(b.dataset.rp); });
+renderRiskProfileRows();
+/* EA LECTURE DU MATCH — ce que le match annonce et les marchés classés selon VOTRE profil de risque (js/ea-reading.js, js/ea-profile.js). */
 function renderReadingGe(rec){
   const host=document.getElementById('readingGe'); if(!host) return;
-  const r=rec && rec.reading; if(!r || !r.top || !r.top.length){ host.innerHTML=''; return; }
-  const byId={}; (rec.markets||[]).forEach(m=>{ byId[m.id]=m; });
-  const col=g=>g==='SOLIDE'?'var(--teal,#6EE7B7)':g==='CORRECT'?'#ffb454':'var(--red,#F2545B)';
-  const ico=g=>g==='SOLIDE'?'🟢':g==='CORRECT'?'🟡':'🔴';
+  const r=rec && rec.reading; if(!r || !(r.all||r.top) || !window.EAP){ host.innerHTML=''; return; }
+  const P=EAP.PROFILES[RISK_PROFILE], byId={}; (rec.markets||[]).forEach(m=>{ byId[m.id]=m; });
+  const dirB = null;
+  const dTot = window.EAP ? EAP.direction(r.mu) : null, dBtts = window.EAP ? EAP.bttsDirection(r.mu) : null;
+  // cohérence avec ce que le match annonce : pas de « moins de » sur un match ouvert, pas de BTTS « non » sur un match très ouvert (et inversement)
+  const pool=(r.all||r.top).filter(x=>{ if(x.tooShort || x.id==='1x2:draw') return false; const ev=x.eval||{};
+    if(x.family==='TOTAL' && dTot && ev.op!==dTot) return false;
+    if(x.family==='BTTS' && dBtts && ev.side!==dBtts) return false;
+    return true; });
+  const ranked=pool.slice().sort((a,b)=> (Math.abs(a.p-P.center)-(dirB?dirB(a):0)) - (Math.abs(b.p-P.center)-(dirB?dirB(b):0)) );
+  const seen={}, top=[];
+  ranked.forEach(it=>{ const ev=it.eval||{}; const k = it.family==='TOTAL' ? 'TOTAL' : it.family==='TEAM' ? 'TEAM:'+ev.team : it.family==='1X2'||it.family==='DC' ? 'RES' : it.family; if(seen[k]) return; seen[k]=1; top.push(it); });
+  const picks=top.slice(0,6);
+  const ladderTxt = (r.ladder||[]).map(x=>`${x.line} : <b>${Math.round(x.pOver*100)} %</b>`).join(' · ');
   let h=`<div style="border:1px solid var(--line); border-radius:10px; padding:12px 14px;">
-    <div style="font-weight:700; font-size:13px; margin-bottom:4px;">🧭 Lecture du match <span style="font-weight:400; font-size:10.5px; color:var(--text-faint);">solidité, pas valeur</span></div>
-    ${r.notes.map(n=>`<div style="font-size:11px; color:var(--text-dim); margin-top:3px;">${trEsc(n)}</div>`).join('')}`;
-  r.top.forEach(it=>{
-    const m=byId[it.id]||{}; const bo=m.oddsSource==='bookmaker'&&m.bookOdds>1?m.bookOdds:null;
+    <div style="font-weight:700; font-size:13px; margin-bottom:6px;">🧭 Lecture du match <span style="font-weight:400; font-size:10.5px; color:var(--text-faint);">selon votre profil — pas selon la prudence d'EA</span></div>
+    <div id="riskProfileRowRead" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;"></div>
+    ${r.mu!=null?`<div style="font-size:11.5px; color:var(--text-dim);"><b>Le match annonce environ ${r.mu.toFixed(2)} buts.</b> Probabilité de « plus de » : ${ladderTxt}</div>`:''}
+    ${(r.notes||[]).map(n=>`<div style="font-size:11px; color:var(--text-dim); margin-top:3px;">${trEsc(n)}</div>`).join('')}`;
+  picks.forEach(it=>{
+    const m=byId[it.id]||{}, bo=m.oddsSource==='bookmaker'&&m.bookOdds>1?m.bookOdds:null, drift=it.p-it.pRobust;
+    const res = drift<=0.035 ? ['résistance forte','var(--teal,#6EE7B7)'] : drift<=0.07 ? ['résistance moyenne','#ffb454'] : ['sensible aux erreurs d\'estimation','var(--red,#F2545B)'];
     let verdict='';
     if(bo!=null && it.minOdds!=null) verdict = bo>=it.minOdds ? `<span style="color:var(--teal,#6EE7B7);">cote saisie ${bo.toFixed(2)} ≥ minimale : acceptable</span>` : `<span style="color:var(--red,#F2545B);">cote saisie ${bo.toFixed(2)} &lt; minimale : ne paie pas assez</span>`;
     h+=`<div style="padding:9px 0; border-top:1px dashed var(--line); font-size:11.5px;">
-      <div style="display:flex; justify-content:space-between; gap:8px;"><b>${ico(it.grade)} ${trEsc(it.label)}</b><span style="color:${col(it.grade)}; font-weight:700;">${it.grade}</span></div>
-      <div style="color:var(--text-dim); margin-top:2px;">Probabilité ${(it.p*100).toFixed(1)} % · <b>résistante ${(it.pRobust*100).toFixed(1)} %</b> (si les buts attendus se trompent de ±15 %) · cote juste ${it.fair.toFixed(2)}</div>
-      <div style="color:var(--text-faint); font-size:10.5px; margin-top:2px;">${trEsc(it.trendTxt)}</div>
-      <div style="font-size:10.5px; margin-top:2px;">Cote minimale conseillée : <b>${it.minOdds!=null?it.minOdds.toFixed(2):'—'}</b> ${verdict?'· '+verdict:'<span style="color:var(--text-faint);">· saisissez la cote réelle dans le catalogue pour la comparer</span>'}</div></div>`;
+      <div style="display:flex; justify-content:space-between; gap:8px;"><b>${trEsc(it.label)}</b><span style="color:${res[1]}; font-weight:700; font-size:10.5px;">${res[0]}</span></div>
+      <div style="color:var(--text-dim); margin-top:2px;">Probabilité ${(it.p*100).toFixed(1)} % · résistante ${(it.pRobust*100).toFixed(1)} % (buts attendus ±15 %) · <b>cote juste ${it.fair.toFixed(2)}</b></div>
+      <div style="color:var(--text-faint); font-size:10.5px; margin-top:2px;">${it.conflict?'⚠️ ':''}${trEsc(it.trendTxt||'')}</div>
+      <div style="font-size:10.5px; margin-top:2px;">Cote minimale conseillée : <b>${it.minOdds!=null?it.minOdds.toFixed(2):'—'}</b> ${verdict?'· '+verdict:(byId[it.id]?'<span style="color:var(--text-faint);">· saisissez la cote réelle dans le catalogue pour la comparer</span>':'<span style="color:var(--text-faint);">· ligne hors catalogue : comparez avec la cote de votre bookmaker</span>')}</div></div>`;
   });
-  h+=`<div style="font-size:10.5px; color:var(--text-faint); margin-top:8px; border-top:1px dashed var(--line); padding-top:8px;">« Solide » veut dire que la lecture résiste aux erreurs d'estimation, <b>pas</b> que le pari est gagnant : une probabilité élevée ne vaut rien si la cote est trop basse, et aucun pari n'est garanti. Pour un combiné de cotes basses, la cote minimale conseillée de chaque jambe compte autant que sa probabilité.</div></div>`;
+  h+=`<div style="font-size:10.5px; color:var(--text-faint); margin-top:8px; border-top:1px dashed var(--line); padding-top:8px;">La cote juste (1 / probabilité) est une valeur du modèle, <b>pas une cote bookmaker</b>. Plus un pari est audacieux, moins il passe souvent : seul votre journal « Mon suivi » dira ce qui rapporte vraiment. Aucun pari n'est garanti.</div></div>`;
   host.innerHTML=h;
+  renderRiskProfileRows();
 }
 function renderValueGateGe(rec){
   const host=document.getElementById('valueGateGe'); if(!host) return;
@@ -9748,20 +9980,30 @@ function runAnalysisGe(){
   const goalsBet={...pickGoalsLineMarketTR(lambdaA+lambdaB, matrix, TR), cat:'buts'};
   const bBy=TR?TR.blend('btts:yes',pBTTSyes):null, bBn=TR?TR.blend('btts:no',pBTTSno):null;
   const pBY=bBy?bBy.p:pBTTSyes, pBN=bBn?bBn.p:pBTTSno;
-  const bttsBet= pBY>=pBN ? {label:'Les deux équipes marquent', p:pBY, cat:'btts', eval:{type:'btts',side:'yes'}, ...(bBy?{pModel:pBTTSyes, trend:trOf(bBy)}:{})} : {label:'Au moins une équipe muette', p:pBN, cat:'btts', eval:{type:'btts',side:'no'}, ...(bBn?{pModel:pBTTSno, trend:trOf(bBn)}:{})};
+  const bttsYesC={label:'Les deux équipes marquent', p:pBY, cat:'btts', eval:{type:'btts',side:'yes'}, ...(bBy?{pModel:pBTTSyes, trend:trOf(bBy)}:{})};
+  const bttsNoC={label:'Au moins une équipe muette', p:pBN, cat:'btts', eval:{type:'btts',side:'no'}, ...(bBn?{pModel:pBTTSno, trend:trOf(bBn)}:{})};
+  const bttsDir = window.EAP ? EAP.bttsDirection(lambdaA+lambdaB) : null;
+  const bttsBet= window.EAP ? EAP.pickAligned([bttsYesC,bttsNoC], RISK_PROFILE, bttsDir ? (c=>c.eval.side===bttsDir) : null) : (pBY>=pBN ? bttsYesC : bttsNoC);
 
   const chosen=[resultBet, goalsBet, bttsBet];
   const cornersBet=pickCornersMarket(), shotsBet=pickShotsMarket(), cardsBet=pickCardsMarket();
   if(cornersBet) chosen.push(cornersBet);
   if(shotsBet) chosen.push(shotsBet);
   if(cardsBet) chosen.push(cardsBet);
-  const o15m=sumWhereMatrix(matrix,(a,b)=>a+b>=2), o15=TR?TR.blend('over:1.5',o15m):null;
-  const fillers=[
-    {label:'Plus de 1.5 buts', p:o15?o15.p:o15m, cat:'buts', eval:{type:'goalsLine',op:'over',line:1.5}, ...(o15?{pModel:o15m, trend:trOf(o15)}:{})},
+  const mkUnder=(line)=>{ const raw=1-sumWhereMatrix(matrix,(a,b)=>a+b>line), bl=TR?TR.blend('under:'+line,raw):null; return {label:`Moins de ${line} buts`, p:bl?bl.p:raw, cat:'buts', eval:{type:'goalsLine',op:'under',line}, ...(bl?{pModel:raw, trend:trOf(bl)}:{})}; };
+  const mkOver=(line)=>{ const raw=sumWhereMatrix(matrix,(a,b)=>a+b>line), bl=TR?TR.blend('over:'+line,raw):null; return {label:`Plus de ${line} buts`, p:bl?bl.p:raw, cat:'buts', eval:{type:'goalsLine',op:'over',line}, ...(bl?{pModel:raw, trend:trOf(bl)}:{})}; };
+  const fillersRaw=[
+    mkOver(1.5), mkOver(2.5), mkOver(3.5), mkOver(4.5), mkOver(5.5), mkUnder(1.5), mkUnder(2.5), mkUnder(3.5),
     trAnn({label:`${nameA} ou nul (double chance)`, p:pHome+pDraw, cat:'résultat', eval:{type:'resultDC',outcomes:['A','draw']}}),
     trAnn({label:`${nameB} ou nul (double chance)`, p:pAway+pDraw, cat:'résultat', eval:{type:'resultDC',outcomes:['B','draw']}}),
     ...(TR ? [trAnn({label:'Match nul', p:pDraw, cat:'résultat', eval:{type:'result1x2',outcome:'draw'}})] : []),
-  ].sort((a,b)=>b.p-a.p);
+  ];
+  // Remplissages : classés selon le PROFIL choisi (avant : toujours par probabilité décroissante → « plus de 1,5 » et doubles chances à cote ≈ 1,2).
+  // Cohérence : un match ouvert ne reçoit pas de « moins de », un match fermé pas de « plus de » ; aucun remplissage sous 25 % de probabilité.
+  const fillDir = window.EAP ? EAP.direction(lambdaA+lambdaB) : null;
+  let fillersOk = fillersRaw.filter(f=> f.p>=0.25 && !(fillDir && f.eval.type==='goalsLine' && f.eval.op!==fillDir));
+  if(!fillersOk.length) fillersOk = fillersRaw;
+  const fillers = window.EAP ? EAP.rank(fillersOk, RISK_PROFILE) : fillersOk.sort((a,b)=>b.p-a.p);
   for(const f of fillers){ if(chosen.length>=5) break; if(!chosen.some(c=>c.label===f.label || JSON.stringify(c.eval)===JSON.stringify(f.eval))) chosen.push(f); }
   const finalBets=applyMarketRecalibration('football', chosen.slice(0,5), matchFlags.league).map(b=>({...b, valueMeta:{dataQualityPct, modelAgreementPct, uncertaintyHalf:computeUncertainty({pModel:b.p,dataQualityPct,modelAgreement:modelAgreementPct}).half + (ctxInfo?ctxInfo.uncPts:0), valueEngine:VALUE_ENGINE_VERSION}}));
 
@@ -9793,7 +10035,16 @@ function runAnalysisGe(){
   try{
     if(window.EAR && marketsCatalog){
       const rd=EAR.read({markets:marketsCatalog.cat.markets, lamA:lambdaA, lamB:lambdaB, dataQualityPct, trend:(ev,p)=>{ try{ return TR?TR.describe(ev,p):null; }catch(e){ return null; } }});
-      readingRes={top:rd.top.map(x=>({id:x.id,family:x.family,label:x.label,p:+x.p.toFixed(4),pRobust:+x.pRobust.toFixed(4),grade:x.grade,fair:x.fair,minOdds:x.minOdds,trendTxt:x.trendTxt})), notes:rd.notes};
+      const slim=x=>({id:x.id,family:x.family,label:x.label,eval:x.eval,p:+x.p.toFixed(4),pRobust:+x.pRobust.toFixed(4),grade:x.grade,fair:x.fair,minOdds:x.minOdds,trendTxt:x.trendTxt,conflict:x.conflict,tooShort:x.tooShort});
+      const ladder=goalsLadder(matrix,TR).filter(c=>c.eval.op==='over').map(c=>({line:c.eval.line,pOver:+c.p.toFixed(4)}));
+      readingRes={top:rd.top.map(slim), all:rd.all.map(slim), notes:rd.notes, ladder, mu:+(lambdaA+lambdaB).toFixed(3)};
+      // Lignes hautes (5,5 à 7,5) : hors catalogue (qui s'arrête à 4,5) mais indispensables pour un match très ouvert. La somme de deux Poisson est un Poisson :
+      // le test de résistance se calcule exactement avec λ/2 par équipe.
+      const haveIds=new Set(readingRes.all.map(x=>x.id)), muHalf=(lambdaA+lambdaB)/2;
+      goalsLadder(matrix,TR).filter(c=>c.eval.line>4.5 && c.p>=0.25 && c.p<=0.97).forEach(c=>{
+        const id='tot:'+c.eval.op+':'+c.eval.line; if(haveIds.has(id)) return;
+        const wst=EAR.stress(c.eval,muHalf,muHalf,0.15), pr=Math.max(0,Math.min(1,c.p+(wst==null?0:wst)));
+        readingRes.all.push({id,family:'TOTAL',label:c.label,eval:c.eval,p:+c.p.toFixed(4),pRobust:+pr.toFixed(4),grade:'',fair:Math.round(100/c.p)/100,minOdds:pr>0?Math.round(1.05/pr*100)/100:null,trendTxt:'pas de tendance saisie sur ce marché',conflict:false,tooShort:c.p>0.93}); });
     }
   }catch(e){ console.error('EA lecture', e); readingRes=null; }
 
@@ -11066,7 +11317,7 @@ function renderBets(sport){
       : `<div class="glass empty-state"><div class="glyph">Ø</div><p>Aucun combiné reconstitué pour ce jour (pas assez de paris vérifiés ce jour-là pour ce sport).</p></div>`;
     const comboIntro = `<div class="glass" style="padding:12px 14px; margin-bottom:12px; font-size:11.5px; color:var(--text-dim); line-height:1.5;"><b>Combinés générés depuis les marchés calculés par Genèse</b> (1X2, double chance, total de buts, buts par équipe, BTTS…), sans ressaisie. Une seule sélection par match, au moins 2 matchs distincts. <b>La probabilité d'un combiné est le produit des probabilités de chaque sélection</b> : approximation qui suppose les matchs indépendants. Ce n'est ni un gain garanti ni un moyen sûr de gagner. Le combiné « rentable » (basé sur l'EV et les cotes saisies) reste dans <b>Pro 3.0 › DÉCISION</b>.</div>`;
     const noticeHtml = (combos.notices && combos.notices.length) ? `<div class="glass" style="padding:12px 14px; margin-bottom:12px; font-size:11.5px; color:#ffb454;">${combos.notices.map(trEsc).join('<br>')}</div>` : '';
-    panel.innerHTML = comboIntro + scrollerHtml + (combos.length ? combos.map(renderPrivateComboCard).join('') + noticeHtml : (comboSelectedDay==='today' ? (noticeHtml || emptyMsg) : emptyMsg));
+    panel.innerHTML = comboIntro + scrollerHtml + (comboSelectedDay==='today' ? renderTargetCombosHtml(sport) : '') + (combos.length ? combos.map(renderPrivateComboCard).join('') + noticeHtml : (comboSelectedDay==='today' ? (noticeHtml || emptyMsg) : emptyMsg));
     return;
   }
 
@@ -11225,47 +11476,43 @@ function computeCalibrationCoverage(){
 // et tendance récente du taux de réussite réel — pour voir si le moteur progresse plus vite
 // qu'attendu, ou stagne.
 function computeMaturiteAnalyse(){
+  // EA MATURITÉ : l'ancienne tendance mesurait le TAUX DE RÉUSSITE, qui monte tout seul quand on joue des paris très probables à cote 1,18
+  // (sans rapporter d'argent). On mesure maintenant la QUALITÉ DES PROBABILITÉS (Brier contre le hasard, js/ea-maturity.js) : les % annoncés
+  // étaient-ils honnêtes ? Aucun profil de risque ne peut gonfler cette mesure.
   const totalVerified = (TRACK.football||[]).length + (TRACK.basketball||[]).length;
   const volumeScore = clamp((totalVerified/150)*100, 0, 100);
   const {scopesWithData, scopesCalibrated} = computeCalibrationCoverage();
   const calibrationScore = scopesWithData>0 ? clamp((scopesCalibrated/scopesWithData)*100,0,100) : 0;
   const verifiable = ['football','basketball'].flatMap(sport=>(TRACK[sport]||[]))
     .sort((a,b)=>a.timestamp-b.timestamp)
-    .flatMap(e=>(e.evaluations||[]).filter(x=>x.hit!==null));
-  let trendScore = 50, trendLabel = 'pas encore assez de recul';
-  if(verifiable.length>=20){
-    const mid = Math.floor(verifiable.length/2);
-    const rate = arr => arr.filter(x=>x.hit).length/arr.length;
-    const delta = rate(verifiable.slice(mid)) - rate(verifiable.slice(0,mid));
-    trendScore = clamp(50 + delta*150, 0, 100);
-    trendLabel = delta>0.03 ? 'progresse plus vite que la moyenne' : delta<-0.03 ? 'ralentit, à surveiller' : 'stable';
-  }
-  const score = clamp(volumeScore*0.35 + calibrationScore*0.35 + trendScore*0.30, 0, 100);
-  return {score, volumeScore, calibrationScore, trendScore, trendLabel, totalVerified, scopesWithData, scopesCalibrated};
+    .flatMap(e=>(e.evaluations||[]).filter(x=>x.hit!==null && typeof x.p==='number'));
+  const bs = EAMAT.brierSkill(verifiable), tr = EAMAT.skillTrend(verifiable);
+  const qualityScore = EAMAT.skillScore(bs.skill);
+  const trendScore = tr.score, trendLabel = tr.label;
+  const score = clamp(volumeScore*0.25 + calibrationScore*0.20 + qualityScore*0.35 + trendScore*0.20, 0, 100);
+  return {score, volumeScore, calibrationScore, trendScore, trendLabel, qualityScore, skill:bs.skill, brierN:bs.n, totalVerified, scopesWithData, scopesCalibrated};
 }
 // Jauge 2 — maturité des combinés : volume de combinés déjà tranchés, tendance récente de
 // leur taux de réussite, et part des jambes qui s'appuient sur des marchés PROUVÉS fiables
 // (calibration réelle sur ≥20 vérifications, bien calibrés — voir marketReliabilityBonus)
 // plutôt que sur la seule probabilité affichée : le raffinement demandé, mesuré, pas affirmé.
 function computeMaturiteCombines(){
+  // EA MATURITÉ : volume + CALIBRATION des combinés (probabilité annoncée contre réussite réelle) + RENDEMENT RÉEL du journal « Mon suivi »
+  // (cotes et mises réelles) + part de jambes sur marchés prouvés fiables. L'ancienne mesure (taux de réussite brut) récompensait la prudence.
   const stats = computeSimplesVsCombosStats();
   const volumeScore = clamp((stats.combo.total/40)*100, 0, 100);
   const timed = [];
   ['football','basketball'].forEach(sport=>{
     getArchiveDayKeys().forEach(day=>{
       buildArchivedCombos(sport, day).forEach(c=>{
-        if(c.status==='gagne') timed.push({day, won:true});
-        else if(c.status==='perdu') timed.push({day, won:false});
+        if(c.status==='gagne') timed.push({day, p:c.combinedP, won:true});
+        else if(c.status==='perdu') timed.push({day, p:c.combinedP, won:false});
       });
     });
   });
   timed.sort((a,b)=>a.day.localeCompare(b.day));
-  let trendScore = 50;
-  if(timed.length>=10){
-    const mid = Math.floor(timed.length/2);
-    const rate = arr => arr.filter(x=>x.won).length/arr.length;
-    trendScore = clamp(50 + (rate(timed.slice(mid))-rate(timed.slice(0,mid)))*150, 0, 100);
-  }
+  const cal = EAMAT.comboCalibration(timed);
+  const roi = EAMAT.realRoi(typeof MYBETS!=='undefined' ? MYBETS : []);
   let reliableLegs=0, totalLegs=0;
   ['football','basketball'].forEach(sport=>{
     buildPrivateCombos(sport).forEach(c=> c.legs.forEach(l=>{
@@ -11274,8 +11521,8 @@ function computeMaturiteCombines(){
     }));
   });
   const refinementScore = totalLegs>0 ? clamp((reliableLegs/totalLegs)*100,0,100) : 0;
-  const score = clamp(volumeScore*0.30 + trendScore*0.35 + refinementScore*0.35, 0, 100);
-  return {score, volumeScore, trendScore, refinementScore, comboTotal:stats.combo.total, comboRate:stats.combo.rate};
+  const score = clamp(volumeScore*0.25 + cal.score*0.30 + roi.score*0.30 + refinementScore*0.15, 0, 100);
+  return {score, volumeScore, trendScore:cal.score, refinementScore, comboTotal:stats.combo.total, comboRate:stats.combo.rate, calibration:cal, roi};
 }
 // Jauge 3 — maturité "qualité des données" (diagramme d'Ishikawa) : la plus stricte des
 // trois. Ne compte comme "analyse à 100%" QUE les vérifications dont les 6 branches sont
@@ -11330,10 +11577,13 @@ function renderBDEEA(){
   html += block('🧠 Maturité du moteur d\'analyse', svgMaturityRing(gAnalyse.score,'var(--teal)',96), [
     `${gAnalyse.totalVerified} match${gAnalyse.totalVerified>1?'s':''} vérifié${gAnalyse.totalVerified>1?'s':''} depuis le début`,
     `${gAnalyse.scopesCalibrated}/${gAnalyse.scopesWithData} ligue${gAnalyse.scopesWithData>1?'s':''}/sport${gAnalyse.scopesWithData>1?'s':''} déjà auto-calibré${gAnalyse.scopesCalibrated>1?'s':''}`,
+    gAnalyse.skill==null ? `Qualité des probabilités : pas encore mesurable (${gAnalyse.brierN} évaluation${gAnalyse.brierN>1?'s':''}, il en faut 10)` : `Qualité des probabilités : ${gAnalyse.skill>=0?'+':''}${(gAnalyse.skill*100).toFixed(0)} % par rapport au hasard (${gAnalyse.brierN} évaluations)`,
     `Tendance récente : ${gAnalyse.trendLabel}`,
   ]);
   html += block('🎯 Maturité des combinés', svgMaturityRing(gCombines.score,'var(--gold)',96), [
     `${gCombines.comboTotal} combiné${gCombines.comboTotal>1?'s':''} tranché${gCombines.comboTotal>1?'s':''}${gCombines.comboRate!=null?` · ${fmtPct(gCombines.comboRate)} de réussite`:''}`,
+    gCombines.calibration.gap==null ? `Calibration : pas encore mesurable (${gCombines.calibration.n} combiné${gCombines.calibration.n>1?'s':''} tranché${gCombines.calibration.n>1?'s':''}, il en faut 10)` : `Calibration : annoncé ${fmtPct(gCombines.calibration.predicted)} · réel ${fmtPct(gCombines.calibration.real)}`,
+    gCombines.roi.roi==null ? `Rendement réel : pas assez de paris notés dans « Mon suivi » (${gCombines.roi.n}/30)` : `Rendement réel (Mon suivi) : ${gCombines.roi.roi>=0?'+':''}${(gCombines.roi.roi*100).toFixed(1)} % sur ${gCombines.roi.n} paris`,
     `${Math.round(gCombines.refinementScore)}% des jambes actuelles s'appuient sur un marché prouvé fiable`,
   ]);
   const qLines = gQualite.insufficientData

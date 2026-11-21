@@ -27,7 +27,7 @@ PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-mobile.js   # navigateur, 360/
 ```
 
 ## Déploiement
-Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v44`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
+Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v45`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
 
 ## Basketball V2
 Basket Analyse affiche maintenant le panneau « Analyse V2 — distribution unique » (voir CHANGELOG, EA-BK2). Tests : `node tests/run-bk2.js` ; navigateur : `PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-bk2.js`.
@@ -61,3 +61,6 @@ Dans le bloc « Compétition européenne », indiquez le niveau du championnat d
 
 ## Basket : projection de la marge corrigée
 Le moteur basket projette désormais une marge en points, rétrécie quand il y a peu de matchs, avec plafond. Fini les scores démesurés (149-80) et les 99 % : voir CHANGELOG.md. Tests : `node tests/run-basket.js`.
+
+## Profil de risque (🛡️ ⚖️ 🔥 🚀) et coupons par cote cible
+Choisissez votre profil avant « Générer le verdict » (ou dans la Lecture du match) : EA donne alors, pour chaque marché, la ligne qui correspond à votre profil, toujours dans le sens de ce que le match annonce. Dans Bets › Combinés, les « coupons par cote cible » proposent le coupon le plus probable pour une cote visée de 2, 3, 5 ou 10. Les jauges de maturité mesurent désormais l'honnêteté des probabilités, la calibration des combinés et votre rendement réel.
