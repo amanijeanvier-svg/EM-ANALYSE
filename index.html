@@ -527,6 +527,78 @@ input{font-family:inherit;}
 .fragility-note b{color:var(--violet);}
 .interp::first-letter{font-size:36px; float:left; line-height:.8; padding:5px 7px 0 0; color:var(--gold); font-weight:600;}
 .footnote{padding:14px 20px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--text-faint); border-top:1px solid var(--line);}
+
+/* ================================================================
+   EA FX — style « jeu vidéo » : cadres HUD à coins, lumières luisantes, éclair, chiffres carrés (d'après vos croquis).
+   Trois niveaux : html[data-fx="light"] (défaut, lumières fixes, économe) · "max" (animations + scanlines) · "off" (aucun effet ajouté).
+================================================================= */
+:root{ --neon:#4FD9C9; --neon-gold:#D4AF37; --neon-violet:#9B5DE5; }
+/* --- cadres HUD : 4 coins lumineux, sans pseudo-éléments (déjà utilisés par les saisons) --- */
+html:not([data-fx="off"]) .glass, html:not([data-fx="off"]) .record-card, html:not([data-fx="off"]) .fiche{
+  background-image:
+    linear-gradient(var(--neon-gold),var(--neon-gold)), linear-gradient(var(--neon-gold),var(--neon-gold)),
+    linear-gradient(var(--neon-gold),var(--neon-gold)), linear-gradient(var(--neon-gold),var(--neon-gold)),
+    linear-gradient(var(--neon-gold),var(--neon-gold)), linear-gradient(var(--neon-gold),var(--neon-gold)),
+    linear-gradient(var(--neon-gold),var(--neon-gold)), linear-gradient(var(--neon-gold),var(--neon-gold));
+  background-repeat:no-repeat;
+  background-size:16px 2px, 2px 16px, 16px 2px, 2px 16px, 16px 2px, 2px 16px, 16px 2px, 2px 16px;
+  background-position: left 5px top 5px, left 5px top 5px, right 5px top 5px, right 5px top 5px, left 5px bottom 5px, left 5px bottom 5px, right 5px bottom 5px, right 5px bottom 5px;
+  box-shadow: 0 0 0 1px rgba(212,175,55,.10), 0 0 24px rgba(212,175,55,.10), inset 0 0 30px rgba(79,217,201,.035);
+}
+/* --- boutons : relief, lueur, effet « touche » --- */
+html:not([data-fx="off"]) .btn-primary, html:not([data-fx="off"]) .rc-validate-btn{
+  border-radius:6px; box-shadow:0 0 0 1px rgba(255,243,196,.35), 0 6px 22px rgba(212,175,55,.35), 0 0 38px rgba(212,175,55,.22), inset 0 1px 0 rgba(255,255,255,.45), inset 0 -3px 0 rgba(0,0,0,.28);
+  transition:transform .08s ease, filter .12s ease, box-shadow .15s ease; letter-spacing:.07em;
+}
+html:not([data-fx="off"]) .btn-primary:active, html:not([data-fx="off"]) .rc-validate-btn:active, html:not([data-fx="off"]) .tab:active{
+  transform:translateY(2px) scale(.985); filter:brightness(1.18); box-shadow:0 0 0 1px rgba(255,243,196,.5), 0 2px 10px rgba(212,175,55,.4), inset 0 2px 0 rgba(0,0,0,.25);
+}
+/* --- onglets, champs, titres --- */
+html:not([data-fx="off"]) .tab.active{ box-shadow:0 0 16px rgba(212,175,55,.38), inset 0 -2px 0 var(--neon-gold); }
+html:not([data-fx="off"]) input:focus, html:not([data-fx="off"]) select:focus, html:not([data-fx="off"]) textarea:focus{ outline:none; border-color:var(--neon)!important; box-shadow:0 0 0 1px var(--neon), 0 0 14px rgba(79,217,201,.45)!important; }
+html:not([data-fx="off"]) .section-label::before{ content:""; display:inline-block; width:9px; height:15px; margin-right:7px; vertical-align:-3px;
+  background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 60'><path d='M30 2 L14 24 L27 26 L3 58 L18 30 L6 28 Z' fill='%23D4AF37'/></svg>") center/contain no-repeat; filter:drop-shadow(0 0 4px rgba(212,175,55,.85)); }
+html:not([data-fx="off"]) .shimmer-title{ filter:drop-shadow(0 0 10px rgba(212,175,55,.30)); }
+html:not([data-fx="off"]) .eval-chip.hit{ box-shadow:0 0 8px rgba(79,217,201,.45); }
+/* --- fiche de match --- */
+.fiche{ background-color:var(--panel); border:1px solid rgba(212,175,55,.22); border-radius:14px; padding:16px 14px 14px; margin-bottom:16px; position:relative; overflow:hidden; }
+.fiche-head{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+.fchip{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; padding:3px 8px; border-radius:4px; border:1px solid var(--line); color:var(--text-dim); display:inline-flex; align-items:center; gap:4px; }
+.fchip.live{ color:var(--neon); border-color:rgba(79,217,201,.5); } .fchip.done{ color:var(--neon-gold); border-color:rgba(212,175,55,.6); }
+.ea-bolt{ color:var(--neon-gold); filter:drop-shadow(0 0 4px rgba(212,175,55,.8)); height:auto; }
+.fiche-teams{ display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; margin:4px 0 12px; text-align:center; }
+.ft{ font-family:'Fraunces',serif; font-weight:800; font-style:italic; text-transform:uppercase; letter-spacing:.06em; font-size:18px; transform:skewX(-8deg); display:inline-block;
+  background:linear-gradient(180deg,#fff 0%,#fff3c4 45%,#D4AF37 100%); -webkit-background-clip:text; background-clip:text; color:transparent; filter:drop-shadow(0 0 8px rgba(212,175,55,.45)); }
+.fvs{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--neon); letter-spacing:.2em; border:1px solid rgba(79,217,201,.5); padding:2px 6px; border-radius:3px; text-shadow:0 0 8px var(--neon); }
+.fiche-scores{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+.fs-box{ border:1px solid rgba(212,175,55,.28); border-radius:10px; padding:8px 6px 10px; text-align:center; background:rgba(5,6,10,.55); }
+.fs-lbl{ font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--text-faint); margin-bottom:6px; }
+.fs-digits{ display:flex; align-items:center; justify-content:center; gap:4px; }
+.ea-digit{ width:auto; filter:drop-shadow(0 0 6px rgba(212,175,55,.65)); } .fs-dash{ display:inline-flex; margin:0 6px; }
+.fiche-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 0; border-top:1px dashed var(--line); font-size:13px; }
+.fk-l{ color:var(--text-dim); } .fk-v{ text-align:right; color:var(--text); } .fk-v b{ font-size:15px; } .fv-none{ color:var(--text-faint); font-size:12px; }
+.vb{ display:inline-block; min-width:42px; text-align:center; padding:2px 8px; border-radius:5px; letter-spacing:.08em; border:1px solid var(--line); }
+.vb.oui{ color:var(--neon); border-color:var(--neon); box-shadow:0 0 10px rgba(79,217,201,.45); } .vb.non{ color:#ff8a80; border-color:#ff8a80; box-shadow:0 0 10px rgba(255,138,128,.35); } .vb.nul{ color:var(--text-faint); }
+.lvl{ font-style:normal; font-size:10.5px; color:var(--text-dim); } .lvl-confirme{ color:var(--neon); } .lvl-probable{ color:var(--amber); } .lvl-indecis,.lvl-none{ color:var(--text-faint); }
+.fk{ font-weight:800; margin-left:4px; } .fk.ok{ color:var(--neon); text-shadow:0 0 8px var(--neon); } .fk.ko{ color:#ff8a80; }
+.fiche-proof{ margin:0 0 6px; font-size:11.5px; color:var(--text-dim); } .fiche-proof summary{ cursor:pointer; color:var(--neon-gold); padding:4px 0; }
+.fiche-proof ul{ margin:4px 0 6px 16px; padding:0; } .fiche-proof li{ margin:4px 0; line-height:1.45; } .fp-note{ color:#ffb454; font-size:11px; }
+.pf{ font-size:10px; padding:1px 6px; border-radius:3px; border:1px solid var(--line); white-space:nowrap; } .pf.y{ color:var(--neon); border-color:var(--neon); } .pf.nn{ color:#ff8a80; border-color:#ff8a80; } .pf.n{ color:var(--text-faint); }
+.fiche-1x2{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; padding-top:12px; border-top:1px solid rgba(212,175,55,.25); text-align:center; }
+.f1-k{ display:flex; align-items:center; justify-content:center; gap:4px; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.14em; color:var(--text-dim); } .fiche-1x2 b{ display:block; font-size:20px; margin:3px 0 5px; font-family:'Fraunces',serif; }
+.ea-curvy2{ color:var(--neon-violet); width:auto; }
+.f1-bar{ height:6px; border-radius:3px; background:rgba(255,255,255,.07); overflow:hidden; } .f1-bar i{ display:block; height:100%; border-radius:3px; }
+.f1-bar.h i{ background:linear-gradient(90deg,#8A733A,#fff3c4); box-shadow:0 0 10px rgba(212,175,55,.7); } .f1-bar.d i{ background:linear-gradient(90deg,#2C7A70,#4FD9C9); box-shadow:0 0 10px rgba(79,217,201,.6); } .f1-bar.a i{ background:linear-gradient(90deg,#5B3FA0,#c9a6ff); box-shadow:0 0 10px rgba(155,93,229,.6); }
+.fiche-foot{ margin-top:12px; font-size:10px; line-height:1.5; color:var(--text-faint); }
+/* --- niveau MAX : animations et scanlines (jamais en « léger » ni « off ») --- */
+@keyframes eaShine{ 0%{ background-position:-140% 0, 0 0; } 60%,100%{ background-position:240% 0, 0 0; } }
+@keyframes eaPulse{ 0%,100%{ box-shadow:0 0 0 1px rgba(212,175,55,.12), 0 0 18px rgba(212,175,55,.10); } 50%{ box-shadow:0 0 0 1px rgba(212,175,55,.35), 0 0 34px rgba(212,175,55,.30); } }
+/* le reflet est SUPERPOSÉ au dégradé d'origine du bouton (doré ; turquoise pour « Rechercher »), il ne le remplace pas */
+html[data-fx="max"] .btn-primary{ background-image:linear-gradient(105deg, transparent 35%, rgba(255,255,255,.55) 50%, transparent 65%), linear-gradient(135deg, var(--gold), var(--gold-dim)); background-size:60% 100%, 100% 100%; background-repeat:no-repeat, no-repeat; animation:eaShine 3.8s ease-in-out infinite; }
+html[data-fx="max"] .rc-validate-btn{ background-image:linear-gradient(105deg, transparent 35%, rgba(255,255,255,.55) 50%, transparent 65%), linear-gradient(135deg, var(--teal), var(--teal-dim)); background-size:60% 100%, 100% 100%; background-repeat:no-repeat, no-repeat; animation:eaShine 3.8s ease-in-out infinite; }
+html[data-fx="max"] .fiche{ animation:eaPulse 3.2s ease-in-out infinite; }
+html[data-fx="max"] body::after{ content:""; position:fixed; inset:0; pointer-events:none; z-index:9998; background:repeating-linear-gradient(0deg, rgba(255,255,255,.028) 0 1px, transparent 1px 3px); }
+@media (prefers-reduced-motion: reduce){ html[data-fx="max"] .btn-primary, html[data-fx="max"] .rc-validate-btn, html[data-fx="max"] .fiche{ animation:none !important; } html[data-fx="max"] body::after{ display:none; } }
 </style>
 </head>
 <body>
@@ -660,7 +732,8 @@ input{font-family:inherit;}
     <div style="display:flex; align-items:center; gap:14px;">
       <div class="brand-mini"><span class="e">E</span><span class="a">A</span></div>
       <span class="live-clock" id="liveClock">🌙 Nuit · --:--</span>
-      <button id="musicToggleBtn" title="Musique d'ambiance" style="margin-left:auto; background:transparent; border:1px solid var(--line); color:var(--text-dim); width:32px; height:32px; border-radius:50%; font-size:14px; cursor:pointer; flex-shrink:0;">🔈</button>
+      <button id="fxBtn" title="Effets visuels : Max / Léger / Off" style="margin-left:auto; background:transparent; border:1px solid var(--line); color:var(--gold); width:32px; height:32px; border-radius:50%; font-size:14px; cursor:pointer; flex-shrink:0;">✨</button>
+       <button id="musicToggleBtn" title="Musique d'ambiance" style="background:transparent; border:1px solid var(--line); color:var(--text-dim); width:32px; height:32px; border-radius:50%; font-size:14px; cursor:pointer; flex-shrink:0;">🔈</button>
     </div>
     <div class="tabs">
       <button class="tab active sfx-tab" data-tab="ge"><span class="ic">⚽</span>Genèse</button>
@@ -5249,6 +5322,195 @@ try {
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
+<script id="ea-fiche">
+/* ===== js/ea-fiche.js — EA FICHE DE MATCH =====
+   Met en forme un match analysé comme une fiche : deux scores prédits, fourchette de corners, « les deux marquent » VALIDÉ par l'historique,
+   vainqueur, fourchette de tirs cadrés, et les SEULES probabilités V1 / X / V2.
+   - Fourchettes corners / tirs cadrés : l'estimation de l'application est retrouvée à partir de sa propre ligne (ex. « moins de 11,5 corners » à telle
+     probabilité) ; la fourchette est la zone de 3 valeurs la plus probable. Aucun chiffre n'est inventé : sans donnée, « non analysé ».
+   - BTTS : le pourcentage du modèle ne suffit pas. Le verdict croise le modèle avec les tendances du dossier, l'historique des deux équipes et du
+     championnat dans TOUS les matchs déjà réglés du système, les confrontations directes et la fiabilité passée de l'application à ce niveau de probabilité.
+   Module pur (aucun DOM, aucun stockage) : testable avec Node. */
+(function (root) {
+  'use strict';
+  var VERSION = 'EA-FICHE-1.0';
+  function isNum(x) { return typeof x === 'number' && isFinite(x); }
+  function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+  function norm(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* ---------- Poisson : retrouver l'estimation de l'application à partir de sa ligne ---------- */
+  function pmf(mean, k) { var p = Math.exp(-mean), i; for (i = 1; i <= k; i++) p *= mean / i; return p; }
+  function pOver(mean, line) { var s = 0, k, kmax = Math.floor(line); for (k = 0; k <= kmax; k++) s += pmf(mean, k); return clamp(1 - s, 0, 1); }
+  // P(X > ligne) = pOverTarget  →  moyenne (bissection). Null si la probabilité est trop extrême pour être informative.
+  function meanFromLine(line, pOverTarget) {
+    if (!isNum(line) || !isNum(pOverTarget) || pOverTarget < 0.03 || pOverTarget > 0.97) return null;
+    var lo = 0.2, hi = 80, i, mid;
+    for (i = 0; i < 60; i++) { mid = (lo + hi) / 2; if (pOver(mid, line) < pOverTarget) lo = mid; else hi = mid; }
+    return (lo + hi) / 2;
+  }
+  // Zone de `width` valeurs consécutives la plus probable (ex. 8–10 pour une moyenne de 9).
+  function modalWindow(mean, width) {
+    width = width || 3; var best = null, k, j, m;
+    for (k = 0; k <= Math.ceil(mean * 2 + 5); k++) { m = 0; for (j = 0; j < width; j++) m += pmf(mean, k + j); if (!best || m > best.mass) best = { lo: k, hi: k + width - 1, mass: m }; }
+    return best;
+  }
+  function statFromBets(bets, stat) {
+    var b = (bets || []).filter(function (x) { return x && x.eval && x.eval.type === 'statLine' && x.eval.stat === stat && isNum(x.p); })[0];
+    if (!b) return null;
+    var po = b.eval.op === 'over' ? b.p : 1 - b.p, mean = meanFromLine(b.eval.line, po);
+    return mean == null ? null : { mean: mean, fromLine: b.eval.line };
+  }
+  function statBlock(mean, fromLine) {
+    if (!isNum(mean) || mean <= 0) return null;
+    var w = modalWindow(mean, 3); return { mean: Math.round(mean * 10) / 10, lo: w.lo, hi: w.hi, fromLine: fromLine == null ? null : fromLine };
+  }
+
+  /* ---------- scores et 1X2 à partir des buts attendus (reconstruction des anciens matchs) ---------- */
+  function scoreBoard(lamA, lamB) {
+    var rho = -0.06, rows = [], a, b, s = 0, h = 0, d = 0, w = 0;
+    for (a = 0; a < 10; a++) for (b = 0; b < 10; b++) {
+      var p = pmf(lamA, a) * pmf(lamB, b);
+      if (a === 0 && b === 0) p *= 1 - lamA * lamB * rho; else if (a === 0 && b === 1) p *= 1 + lamA * rho; else if (a === 1 && b === 0) p *= 1 + lamB * rho; else if (a === 1 && b === 1) p *= 1 - rho;
+      rows.push({ a: a, b: b, p: p }); s += p;
+    }
+    rows.forEach(function (r) { r.p /= s; if (r.a > r.b) h += r.p; else if (r.a === r.b) d += r.p; else w += r.p; });
+    rows.sort(function (x, y) { return y.p - x.p; });
+    return { top: rows.slice(0, 2).map(function (r) { return { a: r.a, b: r.b }; }), probs: { h: h, d: d, a: w } };
+  }
+
+  /* ---------- fiche ---------- */
+  function winnerOf(probs, nameA, nameB) {
+    var m = Math.max(probs.h, probs.d, probs.a), side = m === probs.h ? 'A' : m === probs.a ? 'B' : 'draw';
+    return { side: side, name: side === 'A' ? nameA : side === 'B' ? nameB : 'Match nul', net: m >= 0.5 ? 'net' : m >= 0.4 ? 'léger' : 'incertain' };
+  }
+  function pOf(markets, id) { var m = (markets || []).filter(function (x) { return x.id === id; })[0]; return m ? m.p : null; }
+  // rec : enregistrement Genèse ; extra : { bttsTrend, stats:{corners,shots,cards (moyennes de total)} }
+  function buildFiche(rec, extra) {
+    extra = extra || rec.ficheExtra || {};
+    var markets = rec.markets || [], h = pOf(markets, '1x2:home'), d = pOf(markets, '1x2:draw'), a = pOf(markets, '1x2:away'), sb = null;
+    if (!isNum(h) || !isNum(d) || !isNum(a)) { sb = scoreBoard(rec.lambdaA, rec.lambdaB); h = sb.probs.h; d = sb.probs.d; a = sb.probs.a; }
+    var scores = (rec.topScores || []).slice(0, 2).map(function (t) { return t.eval ? { a: t.eval.a, b: t.eval.b } : null; }).filter(Boolean);
+    if (scores.length < 2) { sb = sb || scoreBoard(rec.lambdaA, rec.lambdaB); scores = sb.top; }
+    var st = extra.stats || {}, cb = isNum(st.corners) ? { mean: st.corners, fromLine: null } : statFromBets(rec.bets, 'corners'), sh = isNum(st.shots) ? { mean: st.shots, fromLine: null } : statFromBets(rec.bets, 'shots');
+    var pYes = pOf(markets, 'btts:yes');
+    if (!isNum(pYes)) { var bb = (rec.bets || []).filter(function (x) { return x.eval && x.eval.type === 'btts'; })[0]; if (bb) pYes = bb.eval.side === 'yes' ? bb.p : 1 - bb.p; }
+    return {
+      id: rec.id, ts: rec.timestamp, sport: 'football', nameA: rec.nameA, nameB: rec.nameB, league: rec.league || '',
+      scores: scores, probs: { h: h, d: d, a: a }, winner: winnerOf({ h: h, d: d, a: a }, rec.nameA, rec.nameB),
+      corners: cb ? statBlock(cb.mean, cb.fromLine) : null, shots: sh ? statBlock(sh.mean, sh.fromLine) : null,
+      btts: { pYes: isNum(pYes) ? pYes : null, trend: extra.bttsTrend || null }, lamA: rec.lambdaA, lamB: rec.lambdaB,
+      final: rec.finalScore ? { a: rec.finalScore.a, b: rec.finalScore.b, stats: rec.finalStats || null } : null, approx: false
+    };
+  }
+  // Ancien match réglé (TRACK) sans fiche enregistrée : reconstruit à partir de ses buts attendus et de ses évaluations — signalé « reconstruit ».
+  function fromTrack(e) {
+    var sb = scoreBoard(e.lambdaA, e.lambdaB), ev = e.evaluations || [], parse = function (re, stat) {
+      var x = ev.filter(function (q) { return re.test(q.label || ''); })[0]; if (!x || !isNum(x.p)) return null;
+      var m = /(plus|moins) de ([\d.]+)/i.exec(x.label); if (!m) return null; var po = /plus/i.test(m[1]) ? x.p : 1 - x.p, mean = meanFromLine(parseFloat(m[2]), po);
+      return mean == null ? null : { mean: mean };
+    };
+    var cb = parse(/corners/i), sh = parse(/tirs cadr/i), btt = ev.filter(function (q) { return /deux .quipes marquent|muette/i.test(q.label || ''); })[0], pYes = null;
+    if (btt && isNum(btt.p)) pYes = /muette/i.test(btt.label) ? 1 - btt.p : btt.p;
+    return {
+      id: 'trk_' + e.timestamp, ts: e.timestamp, sport: 'football', nameA: e.nameA, nameB: e.nameB, league: e.league || '',
+      scores: sb.top, probs: sb.probs, winner: winnerOf(sb.probs, e.nameA, e.nameB), corners: cb ? statBlock(cb.mean) : null, shots: sh ? statBlock(sh.mean) : null,
+      btts: { pYes: pYes, trend: null }, lamA: e.lambdaA, lamB: e.lambdaB, final: e.finalScore ? { a: e.finalScore.a, b: e.finalScore.b, stats: e.finalStats || null } : null, approx: true
+    };
+  }
+
+  /* ---------- BTTS : validation par tout le système ---------- */
+  function bttsYes(fs) { return fs && isNum(fs.a) && isNum(fs.b) && fs.a > 0 && fs.b > 0; }
+  var BTTS_W = { model: 1.0, trend: 0.7, team: 0.6, league: 0.5, h2h: 0.5, calib: 0.8 };
+  /* o : { nameA, nameB, league, pYes, lamA, lamB, trend (TR.describe), history:[{nameA,nameB,league,finalScore,ts}], calib:[{pYes,yes}], excludeTs } */
+  function bttsEvidence(o) {
+    var items = [], A = norm(o.nameA), B = norm(o.nameB), L = norm(o.league || '');
+    var hist = (o.history || []).filter(function (h) { return h && h.finalScore && isNum(h.finalScore.a) && isNum(h.finalScore.b) && !(isNum(o.excludeTs) && h.ts === o.excludeTs && norm(h.nameA) === A && norm(h.nameB) === B); });
+    function rate(list) { var y = list.filter(function (h) { return bttsYes(h.finalScore); }).length; return { n: list.length, y: y, r: list.length ? y / list.length : null }; }
+    function add(kind, label, text, y, n, w, minN) {
+      var r = n ? y / n : null; items.push({ kind: kind, label: label, text: text, y: y, n: n, lean: r == null ? 0 : (r - 0.5) * 2 * Math.min(1, n / minN), weight: w });
+    }
+    // 1. modèle
+    if (isNum(o.pYes)) { var lm = (o.pYes - 0.5) * 2; items.push({ kind: 'model', label: 'Modèle EA', text: 'penche vers ' + (lm >= 0 ? 'OUI' : 'NON') + (Math.abs(lm) >= 0.3 ? ' (net)' : ' (léger)'), lean: lm, weight: BTTS_W.model, n: null }); }
+    // 2. tendances du dossier (séries saisies pour ce match)
+    var tr = o.trend;
+    if (tr && isNum(tr.pTrend) && tr.W > 0 && (tr.parts || []).length) {
+      var tn = tr.parts.reduce(function (s, p) { return s + (p.n || 0); }, 0), names = { form: 'Forme', venue: 'Dom./Ext.', h2h: 'Face-à-face', euro: 'Coupe d\'Europe' };
+      var txt = tr.parts.map(function (p) { return (names[p.id] || p.id) + ' ' + Math.round((p.r || 0) * (p.n || 0)) + '/' + p.n; }).join(' · ');
+      items.push({ kind: 'trend', label: 'Séries saisies pour ce match', text: txt + ' avec les deux équipes qui marquent', y: null, n: tn, lean: (tr.pTrend - 0.5) * 2 * Math.min(1, tn / 10), weight: BTTS_W.trend });
+    }
+    // 3. historique de chaque équipe dans les matchs déjà réglés du système
+    [[A, o.nameA], [B, o.nameB]].forEach(function (t) {
+      var list = hist.filter(function (h) { return norm(h.nameA) === t[0] || norm(h.nameB) === t[0]; }), r = rate(list);
+      if (r.n >= 3) add('team', 'Historique ' + t[1], r.y + ' match' + (r.y > 1 ? 's' : '') + ' sur ' + r.n + ' avec les deux équipes qui marquent (matchs déjà analysés et réglés)', r.y, r.n, BTTS_W.team, 8);
+    });
+    // 4. confrontations directes déjà analysées
+    var direct = hist.filter(function (h) { var a = norm(h.nameA), b = norm(h.nameB); return (a === A && b === B) || (a === B && b === A); }), dr = rate(direct);
+    if (dr.n >= 1) add('h2h', 'Confrontations directes dans le système', dr.y + ' sur ' + dr.n + ' avec les deux équipes qui marquent', dr.y, dr.n, BTTS_W.h2h, 3);
+    // 5. même championnat
+    if (L) { var ll = hist.filter(function (h) { return norm(h.league) === L; }), lr = rate(ll); if (lr.n >= 8) add('league', 'Championnat (' + o.league + ')', lr.y + ' matchs sur ' + lr.n + ' avec les deux équipes qui marquent', lr.y, lr.n, BTTS_W.league, 20); }
+    // 6. fiabilité passée de l'application à ce niveau de probabilité
+    if (isNum(o.pYes)) {
+      var near = (o.calib || []).filter(function (c) { return isNum(c.pYes) && Math.abs(c.pYes - o.pYes) <= 0.08; }), cy = near.filter(function (c) { return c.yes; }).length;
+      if (near.length >= 8) add('calib', 'Fiabilité passée d\'EA à ce niveau', 'quand EA annonçait un niveau comparable, les deux équipes ont marqué ' + cy + ' fois sur ' + near.length, cy, near.length, BTTS_W.calib, 20);
+    }
+    // 7. repère : moyenne de tout le système (information, sans vote)
+    var all = rate(hist); var base = all.n >= 20 ? { kind: 'base', label: 'Moyenne de tout le système', text: all.y + ' matchs sur ' + all.n + ' avec les deux équipes qui marquent', n: all.n, lean: 0, weight: 0 } : null;
+    if (base) items.push(base);
+    // verdict
+    var voters = items.filter(function (i) { return i.weight > 0 && i.lean != null; }), sw = voters.reduce(function (s, i) { return s + i.weight; }, 0);
+    var score = sw ? voters.reduce(function (s, i) { return s + i.weight * i.lean; }, 0) / sw : 0;
+    var others = voters.filter(function (i) { return i.kind !== 'model' && Math.abs(i.lean) >= 0.15; }), sign = score >= 0 ? 1 : -1, agree = others.filter(function (i) { return (i.lean >= 0 ? 1 : -1) === sign; }).length;
+    var pick, level, label;
+    if (!voters.length) { pick = null; level = 'none'; label = 'Indécis'; }
+    else if (Math.abs(score) >= 0.28 && agree >= 2) { pick = score > 0 ? 'oui' : 'non'; level = 'confirme'; label = (score > 0 ? 'OUI' : 'NON') + ' confirmé'; }
+    else if (Math.abs(score) >= 0.14 && agree >= 1) { pick = score > 0 ? 'oui' : 'non'; level = 'probable'; label = 'Plutôt ' + (score > 0 ? 'OUI' : 'NON'); }
+    else { pick = null; level = 'indecis'; label = 'Indécis'; }
+    var onlyModel = voters.length <= 1;
+    return { items: items, score: score, pick: pick, level: level, label: label, onlyModel: onlyModel, agree: agree, note: onlyModel ? 'Aucune validation trouvée dans le système (pas encore assez de matchs réglés) : verdict fondé sur le modèle seul.' : (level === 'indecis' ? 'Les validations se contredisent ou sont trop faibles : ne pas parier le BTTS sur ce match.' : '') };
+  }
+  // Vérification après le match : chaque ligne de la fiche est-elle tombée ?
+  function checkFiche(f, verdict) {
+    if (!f || !f.final) return null;
+    var fa = f.final.a, fb = f.final.b, st = f.final.stats || {}, within = function (blk, v) { return blk && isNum(v) ? (v >= blk.lo && v <= blk.hi) : null; };
+    var res = fa > fb ? 'A' : fa < fb ? 'B' : 'draw';
+    return {
+      score: f.scores.map(function (s) { return s.a === fa && s.b === fb; }),
+      winner: f.winner.side === res,
+      btts: verdict && verdict.pick ? ((verdict.pick === 'oui') === !!bttsYes(f.final)) : null,
+      corners: within(f.corners, st.corners), shots: within(f.shots, st.shots)
+    };
+  }
+
+  /* ---------- glyphes « jeu vidéo » modélisés d'après les croquis ---------- */
+  // Chiffres carrés à 7 segments biseautés (croquis du « 2 » carré), avec hachures en diagonale.
+  var SEGS = { 0: 'abcdef', 1: 'bc', 2: 'abged', 3: 'abgcd', 4: 'fgbc', 5: 'afgcd', 6: 'afgedc', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg' };
+  function digitSvg(d, h, uid) {
+    var W = 56, H = 96, t = 11, g = 2, hh = H / 2;
+    function hs(x0, y0, len) { return [[x0, y0 + t / 2], [x0 + t / 2, y0], [x0 + len - t / 2, y0], [x0 + len, y0 + t / 2], [x0 + len - t / 2, y0 + t], [x0 + t / 2, y0 + t]]; }
+    function vs(x0, y0, len) { return [[x0 + t / 2, y0], [x0 + t, y0 + t / 2], [x0 + t, y0 + len - t / 2], [x0 + t / 2, y0 + len], [x0, y0 + len - t / 2], [x0, y0 + t / 2]]; }
+    var seg = { a: hs(3, 0, W - 6), g: hs(3, hh - t / 2, W - 6), d: hs(3, H - t, W - 6), f: vs(0, g + 2, hh - t / 2 - g * 2), b: vs(W - t, g + 2, hh - t / 2 - g * 2), e: vs(0, hh + t / 2 - 2, hh - t / 2 - g * 2 + 2), c: vs(W - t, hh + t / 2 - 2, hh - t / 2 - g * 2 + 2) };
+    var on = SEGS[d] || '', polys = on.split('').map(function (k) { return '<polygon points="' + seg[k].map(function (p) { return p[0] + ',' + p[1]; }).join(' ') + '" />'; }).join('');
+    var id = 'eaDg' + (uid || '') + d;
+    return '<svg class="ea-digit" viewBox="-2 -2 ' + (W + 4) + ' ' + (H + 4) + '" height="' + (h || 54) + '" aria-hidden="true"><defs>' +
+      '<linearGradient id="' + id + 'g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset=".55" stop-color="#D4AF37"/><stop offset="1" stop-color="#8A733A"/></linearGradient>' +
+      '<pattern id="' + id + 'h" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="rgba(5,6,10,.35)" stroke-width="1.2"/></pattern></defs>' +
+      '<g fill="url(#' + id + 'g)" stroke="#fff3c4" stroke-width="1" stroke-linejoin="round">' + polys + '</g><g fill="url(#' + id + 'h)">' + polys + '</g></svg>';
+  }
+  function boltSvg(w, cls) {
+    return '<svg class="ea-bolt ' + (cls || '') + '" viewBox="0 0 40 60" width="' + (w || 14) + '" aria-hidden="true"><path d="M30 2 L14 24 L27 26 L3 58 L18 30 L6 28 Z" fill="currentColor" /></svg>';
+  }
+  function curvy2Svg(h) {
+    return '<svg class="ea-curvy2" viewBox="0 0 60 80" height="' + (h || 16) + '" aria-hidden="true"><path d="M8 24 C8 4 44 -2 50 20 C54 36 30 52 14 68 L14 74 L56 74 C60 66 56 58 48 60 L30 60 L48 44 C60 32 58 8 40 6" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+
+  var api = { VERSION: VERSION, norm: norm, esc: esc, meanFromLine: meanFromLine, modalWindow: modalWindow, pOver: pOver, statFromBets: statFromBets, statBlock: statBlock, scoreBoard: scoreBoard,
+    buildFiche: buildFiche, fromTrack: fromTrack, bttsEvidence: bttsEvidence, checkFiche: checkFiche, bttsYes: bttsYes, winnerOf: winnerOf, digitSvg: digitSvg, boltSvg: boltSvg, curvy2Svg: curvy2Svg };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.EAF = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
 <script>
 /* ================================================================
    0. UTILS PARTAGÉS
@@ -8077,6 +8339,7 @@ function markResult(sport, recordId, finalA, finalB, finalStats){
   rec.finalScore = {a:finalA, b:finalB};
   rec.finalStats = finalStats;
   rec.evaluations = evaluations;
+  try{ ficheSetFinal(rec.id, finalA, finalB, finalStats); }catch(e){ console.error('EA fiche (règlement)', e); }
   // EA GENESE MARKETS : règle aussi le catalogue complet (stocké à part, il ne touche ni la calibration ni le TRACK).
   try{ if(window.EAM && Array.isArray(rec.markets) && rec.markets.length) rec.marketHits = EAM.settle(rec.markets, finalA, finalB, finalStats); }catch(e){ console.error('EA marchés (règlement)', e); }
   // Archivage du journal EN PREMIER : si l'une des mises à jour annexes plante, le pari vérifié
@@ -10201,9 +10464,11 @@ function runAnalysisGe(){
     bets: finalBets.map(b=>({label:b.label, p:b.p, cat:b.cat, eval:b.eval, valueMeta:b.valueMeta})),
     markets: marketsCatalog ? marketsCatalog.cat.markets.map(m=>({id:m.id, family:m.family, label:m.label, p:m.p, eval:m.eval, marketType:m.marketType, reliability:m.reliability, extreme:m.extreme, note:m.note, bookOdds:m.bookOdds, oddsSource:m.oddsSource})) : undefined,
     reading: readingRes || undefined,
+    ficheExtra: { bttsTrend: (()=>{ try{ return TR ? TR.describe({type:'btts',side:'yes'}, pBY) : null; }catch(e){ return null; } })(), stats:{ corners:(advStats.cornersA!=null&&advStats.cornersB!=null)?advStats.cornersA+advStats.cornersB:null, shots:(advStats.shotsA!=null&&advStats.shotsB!=null)?advStats.shotsA+advStats.shotsB:null } },
     marketsMeta: marketsCatalog ? {engine:EAM.VERSION, maxFitErr:+marketsCatalog.cat.fit.maxErr.toFixed(6), recalDropped:marketsCatalog.cat.fit.recalDropped, auditOk:marketsCatalog.audit.ok, auditIssues:marketsCatalog.audit.issues, unavailable:marketsCatalog.cat.unavailable} : undefined,
   });
   lastRecordGe = DB.football[0];
+  try{ saveFiche(EAF.buildFiche(lastRecordGe)); }catch(e){ console.error('EA fiche', e); }
   try{ renderContextNoteGe(ctxInfo, nameA, nameB, oppInfo); renderCatalogGe(lastRecordGe); renderReadingGe(lastRecordGe); renderValueGateGe(lastRecordGe); }catch(e){ console.error('EA catalogue', e); }
   const cpBtnGe = document.getElementById('communityPublishBtnGe');
   if(cpBtnGe){ cpBtnGe.disabled = false; document.getElementById('communityPublishStatusGe').textContent = ''; }
@@ -11046,6 +11311,60 @@ function matchesPair(rNameA, rNameB, qA, qB){
   const a = normalizeSearchText(rNameA), b = normalizeSearchText(rNameB);
   return (a.includes(qA) && b.includes(qB)) || (a.includes(qB) && b.includes(qA));
 }
+/* ================================================================
+   EA FICHES DE MATCH — format fiche (js/ea-fiche.js) : deux scores prédits, corners, « les deux marquent » VALIDÉ par le système, vainqueur,
+   tirs cadrés, V1 / X / V2. Une fiche est enregistrée à chaque analyse (appareil local, 400 max) et complétée au règlement.
+================================================================= */
+const FICHES_KEY='ea_fiches_v1'; let FICHES=[];
+function loadFiches(){ try{ const a=JSON.parse(localStorage.getItem(FICHES_KEY)||'[]'); FICHES=Array.isArray(a)?a:[]; }catch(e){ FICHES=[]; } }
+function persistFiches(){ try{ localStorage.setItem(FICHES_KEY, JSON.stringify(FICHES.slice(0,400))); }catch(e){} }
+function saveFiche(f){ if(!f) return; const i=FICHES.findIndex(x=>x.id===f.id); if(i>=0) FICHES[i]=f; else FICHES.unshift(f); FICHES=FICHES.slice(0,400); persistFiches(); }
+function ficheSetFinal(id,a,b,stats){ const f=FICHES.find(x=>x.id===id); if(f){ f.final={a,b,stats:stats||null}; persistFiches(); } }
+loadFiches();
+// Historique de tout le système : tous les matchs déjà analysés ET réglés (TRACK permanent).
+function ficheHistory(){ return (TRACK.football||[]).filter(e=>e.finalScore).map(e=>({nameA:e.nameA, nameB:e.nameB, league:e.league, finalScore:e.finalScore, ts:e.timestamp})); }
+function ficheCalib(){ const out=[]; (TRACK.football||[]).forEach(e=>(e.evaluations||[]).forEach(x=>{ if(x.marketType==='btts' && typeof x.p==='number' && (x.hit===true||x.hit===false)){ const yesL=!/muette/i.test(x.label||''); out.push({pYes: yesL?x.p:1-x.p, yes: yesL ? x.hit===true : x.hit===false}); } })); return out; }
+let FICHE_UID=0;
+function ficheNum(n, uid){ return String(n).split('').map((ch,i)=>EAF.digitSvg(+ch, 46, uid+'_'+i)).join(''); }
+function renderFicheHtml(f){
+  FICHE_UID++; const uid='f'+FICHE_UID;
+  const ev=EAF.bttsEvidence({nameA:f.nameA, nameB:f.nameB, league:f.league, pYes:f.btts&&f.btts.pYes, lamA:f.lamA, lamB:f.lamB, trend:f.btts&&f.btts.trend, history:ficheHistory(), calib:ficheCalib(), excludeTs:f.ts});
+  const chk=EAF.checkFiche(f, ev);
+  const mk=v=> v===true?'<span class="fk ok" title="tombé">✓</span>':v===false?'<span class="fk ko" title="raté">✗</span>':'';
+  const pct=x=> Math.round(x*100)+' %';
+  const range=(b,none)=> b ? `<b>${b.lo} – ${b.hi}</b>` : `<span class="fv-none">${none}</span>`;
+  const scoreBox=(s,i)=>`<div class="fs-box"><div class="fs-lbl">Score ${i+1} ${chk?mk(chk.score[i]):''}</div><div class="fs-digits">${ficheNum(s.a,uid+'a'+i)}<span class="fs-dash">${EAF.boltSvg(12)}</span>${ficheNum(s.b,uid+'b'+i)}</div></div>`;
+  const pick=ev.pick, lvl=ev.level;
+  const lean=i=> i.weight===0 ? '<span class="pf n">repère</span>' : i.lean>=0.15 ? '<span class="pf y">→ OUI</span>' : i.lean<=-0.15 ? '<span class="pf nn">→ NON</span>' : '<span class="pf n">neutre</span>';
+  const proofs=ev.items.map(i=>`<li><b>${EAF.esc(i.label)}</b> — ${EAF.esc(i.text)} ${lean(i)}</li>`).join('');
+  const bar=(v,cls)=>`<div class="f1-bar ${cls}"><i style="width:${Math.max(3,Math.round(v*100))}%"></i></div>`;
+  const win=f.winner, winTxt=win.side==='draw' ? 'Match nul' : win.name;
+  const date=new Date(f.ts).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
+  return `<div class="fiche">
+    <div class="fiche-head"><span class="fchip">${EAF.boltSvg(10)} ${EAF.esc(f.league||'Football')} · ${date}</span>${f.final?`<span class="fchip done">RÉSULTAT ${f.final.a}-${f.final.b}</span>`:'<span class="fchip live">ANALYSÉ</span>'}${f.approx?'<span class="fchip">reconstruit</span>':''}</div>
+    <div class="fiche-teams"><span class="ft">${EAF.esc(f.nameA)}</span><span class="fvs">VS</span><span class="ft">${EAF.esc(f.nameB)}</span></div>
+    <div class="fiche-scores">${f.scores.map(scoreBox).join('')}</div>
+    <div class="fiche-row"><span class="fk-l">🚩 Total de corners</span><span class="fk-v">${range(f.corners,'non analysé')} ${chk?mk(chk.corners):''}</span></div>
+    <div class="fiche-row"><span class="fk-l">⚽ Les deux marquent</span><span class="fk-v"><b class="vb ${pick||'nul'}">${pick==='oui'?'OUI':pick==='non'?'NON':'—'}</b> <em class="lvl lvl-${lvl}">${ev.label}</em> ${chk?mk(chk.btts):''}</span></div>
+    <details class="fiche-proof"><summary>Preuves du système pour « les deux marquent »</summary><ul>${proofs||'<li>Aucune preuve disponible.</li>'}</ul>${ev.note?`<div class="fp-note">${EAF.esc(ev.note)}</div>`:''}</details>
+    <div class="fiche-row"><span class="fk-l">🏆 Vainqueur final</span><span class="fk-v"><b>${EAF.esc(winTxt)}</b> <em class="lvl">${win.net==='net'?'net':win.net==='léger'?'léger':'incertain'}</em> ${chk?mk(chk.winner):''}</span></div>
+    <div class="fiche-row"><span class="fk-l">🎯 Total tirs cadrés</span><span class="fk-v">${range(f.shots,'non analysé')} ${chk?mk(chk.shots):''}</span></div>
+    <div class="fiche-1x2">
+      <div><span class="f1-k">V1</span><b>${pct(f.probs.h)}</b>${bar(f.probs.h,'h')}</div>
+      <div><span class="f1-k">X</span><b>${pct(f.probs.d)}</b>${bar(f.probs.d,'d')}</div>
+      <div><span class="f1-k">V2 ${EAF.curvy2Svg(12)}</span><b>${pct(f.probs.a)}</b>${bar(f.probs.a,'a')}</div>
+    </div>
+    <div class="fiche-foot">Les fourchettes de corners et de tirs cadrés sont la zone de 3 valeurs la plus probable, tirée de l'estimation d'EA : elles tombent environ 4 fois sur 10, pas à chaque match. Les deux scores sont les plus probables, pas des certitudes. Aucun pari n'est garanti.${f.approx?' Fiche reconstruite à partir de l’analyse enregistrée : approximative.':''}</div>
+  </div>`;
+}
+
+/* ================================================================
+   EA FX — niveau d'effets visuels « jeu vidéo » : Max (animations, scanlines) · Léger (lumières fixes, par défaut, économe sur téléphone modeste) · Off.
+================================================================= */
+const FX_KEY='ea_fx_v1', FX_MODES=['light','max','off'], FX_LABEL={light:'Effets : léger',max:'Effets : MAX',off:'Effets : désactivés'};
+function applyFx(mode){ const m=FX_MODES.includes(mode)?mode:'light'; document.documentElement.setAttribute('data-fx',m); try{ localStorage.setItem(FX_KEY,m); }catch(e){} const b=document.getElementById('fxBtn'); if(b){ b.title=FX_LABEL[m]; b.style.opacity = m==='off'?.45:1; b.style.boxShadow = m==='max'?'0 0 12px rgba(212,175,55,.55)':'none'; } return m; }
+applyFx((()=>{ try{ return localStorage.getItem(FX_KEY)||'light'; }catch(e){ return 'light'; } })());
+document.getElementById('fxBtn').addEventListener('click',()=>{ const cur=document.documentElement.getAttribute('data-fx')||'light'; const nxt=FX_MODES[(FX_MODES.indexOf(cur)+1)%FX_MODES.length]; applyFx(nxt); showToast(FX_LABEL[nxt]); });
 async function performTeamSearch(){
   const panel = document.getElementById('searchResultsPanel');
   const rawA = document.getElementById('searchTeamInputA').value;
@@ -11083,6 +11402,16 @@ async function performTeamSearch(){
   });
   const archiveMatches = Object.values(archiveGroups).sort((a,b)=>b.dayKey.localeCompare(a.dayKey));
 
+  // Fiches de match (football) : enregistrées à chaque analyse ; analyses du jour sans fiche et anciens matchs réglés reconstruits.
+  const ficheHits=[], ficheIds=new Set();
+  FICHES.filter(f=>matchesPair(f.nameA, f.nameB, qA, qB)).forEach(f=>{ ficheHits.push(f); ficheIds.add(f.id); });
+  todayMatches.filter(x=>x.sport==='football' && !ficheIds.has(x.r.id)).forEach(({r})=>{ try{ const f=EAF.buildFiche(r); ficheHits.push(f); ficheIds.add(f.id); }catch(e){} });
+  (TRACK.football||[]).filter(e=>e.finalScore && matchesPair(e.nameA, e.nameB, qA, qB)).forEach(e=>{
+    if(ficheHits.some(f=>f.nameA===e.nameA && f.nameB===e.nameB && Math.abs(f.ts-e.timestamp)<300000)) return;
+    try{ ficheHits.push(EAF.fromTrack(e)); }catch(err){}
+  });
+  ficheHits.sort((a,b)=>b.ts-a.ts);
+
   // 3) Communauté — les autres utilisateurs qui ont analysé précisément ce même match.
   let communityMatches = [];
   if(SERVER_URL && apiAuthed()){
@@ -11094,19 +11423,24 @@ async function performTeamSearch(){
     }
   }
 
-  if(todayMatches.length===0 && archiveMatches.length===0 && communityMatches.length===0){
+  if(ficheHits.length===0 && todayMatches.length===0 && archiveMatches.length===0 && communityMatches.length===0){
     panel.innerHTML = `<div class="glass empty-state"><div class="glyph">Ø</div><p>Aucun match trouvé pour « ${rawA.trim()} vs ${rawB.trim()} ». Vérifiez l'orthographe, ou générez d'abord une analyse dans Genèse / Basket Analyse.</p></div>`;
     return;
   }
 
   let html = '';
+  if(ficheHits.length){
+    html += `<div class="section-label">🧾 Fiche de match</div>`;
+    html += ficheHits.map(renderFicheHtml).join('');
+  }
   if(communityMatches.length){
     html += `<div class="section-label">🌐 Communauté</div>`;
     html += communityMatches.map(r=>renderCommCard(r, {showCopy:true})).join('');
   }
-  if(todayMatches.length){
-    html += `<div class="section-label" style="margin-top:${communityMatches.length?'18px':'0'};">Aujourd'hui — Histoire</div>`;
-    html += todayMatches.map(({r, sport})=>{
+  const todayRest = todayMatches.filter(x=>x.sport!=='football');   // le football s'affiche en fiche ci-dessus
+  if(todayRest.length){
+    html += `<div class="section-label" style="margin-top:${(communityMatches.length||ficheHits.length)?'18px':'0'};">Aujourd'hui — Histoire</div>`;
+    html += todayRest.map(({r, sport})=>{
       const resultDone = r.resultMarked ? `
         <div class="rc-result-done">
           <span>✓ Résultat enregistré : <b>${r.finalScore.a}-${r.finalScore.b}</b></span>
@@ -11122,8 +11456,9 @@ async function performTeamSearch(){
     }).join('');
   }
   if(archiveMatches.length){
-    html += `<div class="section-label" style="margin-top:${(communityMatches.length||todayMatches.length)?'18px':'0'};">Journal — matchs plus anciens</div>`;
-    html += archiveMatches.map(g=>{
+    const archRest = archiveMatches.filter(g=>g.sport!=='football' || !ficheHits.some(f=>f.nameA===g.nameA && f.nameB===g.nameB));
+    html += archRest.length ? `<div class="section-label" style="margin-top:${(communityMatches.length||todayMatches.length||ficheHits.length)?'18px':'0'};">Journal — matchs plus anciens</div>` : '';
+    html += archRest.map(g=>{
       const d = new Date(g.dayKey+'T12:00:00');
       const dateLabel = d.toLocaleDateString('fr-FR',{day:'2-digit', month:'short', year:'numeric'});
       return `

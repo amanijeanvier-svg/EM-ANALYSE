@@ -27,7 +27,7 @@ PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-mobile.js   # navigateur, 360/
 ```
 
 ## Déploiement
-Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v45`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
+Incrémenter `CACHE_NAME` du service worker à chaque publication (actuellement `ea-cabinet-cache-v46`). Documentation : `MODEL_DOCUMENTATION.md`, `AUDIT_REPORT.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
 
 ## Basketball V2
 Basket Analyse affiche maintenant le panneau « Analyse V2 — distribution unique » (voir CHANGELOG, EA-BK2). Tests : `node tests/run-bk2.js` ; navigateur : `PLAYWRIGHT_PATH=<chemin>/playwright node tests/ui-bk2.js`.
@@ -64,3 +64,6 @@ Le moteur basket projette désormais une marge en points, rétrécie quand il y 
 
 ## Profil de risque (🛡️ ⚖️ 🔥 🚀) et coupons par cote cible
 Choisissez votre profil avant « Générer le verdict » (ou dans la Lecture du match) : EA donne alors, pour chaque marché, la ligne qui correspond à votre profil, toujours dans le sens de ce que le match annonce. Dans Bets › Combinés, les « coupons par cote cible » proposent le coupon le plus probable pour une cote visée de 2, 3, 5 ou 10. Les jauges de maturité mesurent désormais l'honnêteté des probabilités, la calibration des combinés et votre rendement réel.
+
+## Fiche de match (Recherche) et effets visuels
+Dans Recherche, tapez les deux équipes (dans n'importe quel ordre) : le match analysé s'affiche en fiche (deux scores, corners, les deux marquent validé par l'historique, vainqueur, tirs cadrés, V1 / X / V2). Le bouton ✨ en haut règle les effets visuels : léger (défaut), MAX ou off.
